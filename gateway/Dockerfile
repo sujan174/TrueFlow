@@ -1,47 +1,50 @@
-# Build Stage
-FROM rust:1.83-bookworm AS builder
+# ── Build Stage ───────────────────────────────────────────────────────────────
+FROM rust:1.88-bookworm AS builder
 
 WORKDIR /usr/src/ailink
 
-# Install build dependencies first (cached layer)
+# Install build deps (cached layer)
 RUN apt-get update && apt-get install -y pkg-config libssl-dev && rm -rf /var/lib/apt/lists/*
 
-# Cache dependencies: copy manifests, build a dummy, then replace with real source
+# Cache dependencies — copy manifests only, build a dummy crate
 COPY Cargo.toml Cargo.lock ./
 RUN mkdir src && echo "fn main() {}" > src/main.rs
+
+# Build deps with docker-friendly settings: disable LTO and use more codegen
+# units so the linker doesn't OOM inside Docker's constrained VM.
+# CARGO_PROFILE_RELEASE_LTO=off overrides Cargo.toml [profile.release] lto=true
+# CARGO_PROFILE_RELEASE_CODEGEN_UNITS=8 avoids the single-unit memory spike
+ENV CARGO_PROFILE_RELEASE_LTO=off \
+    CARGO_PROFILE_RELEASE_CODEGEN_UNITS=8
 RUN cargo build --release 2>/dev/null ; exit 0
 RUN rm -rf src
 
-# Now copy real source and rebuild (only app crate recompiles)
+# Copy real source and rebuild (only the app crate recompiles, deps are cached)
 COPY . .
 ENV SQLX_OFFLINE=true
 RUN touch src/main.rs && cargo build --release --bin ailink
 
-# Runtime Stage
+# ── Runtime Stage ─────────────────────────────────────────────────────────────
 FROM debian:bookworm-slim
 
-# Install minimal runtime dependencies (libssl3 for TLS, ca-certificates for HTTPS)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     libssl3 \
+    curl \
     && rm -rf /var/lib/apt/lists/*
-
 
 WORKDIR /app
 
-# Copy binary from builder
+# Copy binary + migrations from builder
 COPY --from=builder /usr/src/ailink/target/release/ailink /app/ailink
+COPY --from=builder /usr/src/ailink/migrations /app/migrations
 
-# Create non-root user
+# Non-root user
 RUN useradd -m ailink
 USER ailink
 
-# Expose port
 EXPOSE 8443
 
-# Security: Disable core dumps to prevent key leakage on crash
-# The RLIMIT is inherited by the process, preventing memory dumps
+# Disable core dumps to prevent key leakage
 ENV MALLOC_TRIM_THRESHOLD_=0
-
-# Set entrypoint with core dumps disabled
 CMD ["sh", "-c", "ulimit -c 0 && exec ./ailink serve"]

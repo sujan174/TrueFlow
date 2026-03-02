@@ -1,0 +1,19 @@
+# ── AILink Test Stack (overlay) ──────────────────────────────────────────────
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.test.yml up -d
+#
+# Adds the mock-upstream server used by the integration test suite.
+# Keep this separate from the shipping compose file.
+
+services:
+  mock-upstream:
+    build:
+      context: ./tests/mock-upstream
+      dockerfile: Dockerfile
+    ports:
+      - "9000:9000"
+    healthcheck:
+      test: [ "CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:9000/healthz')" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5

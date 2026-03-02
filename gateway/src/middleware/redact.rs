@@ -68,7 +68,7 @@ static MRN_RE: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"(?i)\b(MRN|MR)[-:]?\s*\d{5,12}\b").unwrap()
 });
 
-const BUILTIN_PATTERNS: &[BuiltinPattern] = &[
+static BUILTIN_PATTERNS: &[BuiltinPattern] = &[
     BuiltinPattern {
         name: "email",
         regex: &EMAIL_RE,

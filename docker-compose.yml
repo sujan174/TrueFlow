@@ -1,4 +1,45 @@
+# ── AILink Production Stack ──────────────────────────────────────────────────
+# This is the shipping compose file: gateway, dashboard, postgres, redis.
+# For testing, use: docker compose -f docker-compose.yml -f docker-compose.test.yml up
+
 services:
+  gateway:
+    build:
+      context: ./gateway
+      dockerfile: Dockerfile
+    image: ailink/gateway:latest
+    restart: unless-stopped
+    ports:
+      - "8443:8443"
+    environment:
+      - DATABASE_URL=postgres://postgres:password@postgres:5432/ailink
+      - REDIS_URL=redis://redis:6379
+      - RUST_LOG=info
+      - AILINK_MASTER_KEY=000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f
+      - AILINK_ADMIN_KEY=ailink-admin-test
+      - DASHBOARD_ORIGIN=http://localhost:3000
+      - AILINK_ENABLE_TEST_HOOKS=1
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "curl", "-sf", "http://localhost:8443/healthz" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    security_opt:
+      - no-new-privileges:true
+    ulimits:
+      core: 0
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: "2.0"
+
   dashboard:
     build:
       context: ./dashboard
@@ -8,13 +49,10 @@ services:
     ports:
       - "3000:3000"
     environment:
-      # Browser-side access to Gateway (must be public URL)
       NEXT_PUBLIC_API_URL: "http://localhost:8443/api/v1"
-      # Server-side access to Gateway (docker internal)
       API_URL: "http://gateway:8443/api/v1"
       GATEWAY_INTERNAL_URL: "http://gateway:8443"
       AILINK_ADMIN_KEY: "ailink-admin-test"
-      # SEC-01: Dashboard proxy auth secret
       DASHBOARD_SECRET: "ailink-dashboard-dev-secret"
     depends_on:
       gateway:
@@ -30,49 +68,6 @@ services:
         limits:
           memory: 512M
           cpus: "1.0"
-
-  gateway:
-    build:
-      context: ./gateway
-      dockerfile: Dockerfile
-    image: ailink/gateway:latest
-    restart: unless-stopped
-    ports:
-      - "8443:8443"
-    environment:
-      # Database and Redis
-      - DATABASE_URL=postgres://postgres:password@postgres:5432/ailink
-      - REDIS_URL=redis://redis:6379
-      # Monitoring — use RUST_LOG=debug only when troubleshooting
-      - RUST_LOG=info
-      - AILINK_MASTER_KEY=000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f
-      - AILINK_ADMIN_KEY=ailink-admin-test
-      # SEC-06: Restrict CORS to dashboard origin
-      - DASHBOARD_ORIGIN=http://localhost:3000
-      # Enable test hooks for integration testing (X-AILink-Test-Cost header)
-      - AILINK_ENABLE_TEST_HOOKS=1
-      # Notifications (Set real value here if needed)
-      # - AILINK_SLACK_WEBHOOK_URL=https://hooks.slack.com/services/...
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    healthcheck:
-      test: [ "CMD-SHELL", "cat < /dev/null > /dev/tcp/localhost/8443" ]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
-    security_opt:
-      - no-new-privileges:true
-    ulimits:
-      core: 0
-    deploy:
-      resources:
-        limits:
-          memory: 1G
-          cpus: "2.0"
 
   postgres:
     image: postgres:16-alpine
@@ -115,18 +110,6 @@ services:
       - "4318:4318" # OTLP HTTP
     environment:
       - COLLECTOR_OTLP_ENABLED=true
-
-  mock-upstream:
-    build:
-      context: ./tests/mock-upstream
-      dockerfile: Dockerfile
-    ports:
-      - "9000:9000"
-    healthcheck:
-      test: [ "CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:9000/healthz')" ]
-      interval: 10s
-      timeout: 5s
-      retries: 5
 
 volumes:
   pgdata:
