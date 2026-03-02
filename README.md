@@ -9,6 +9,7 @@
 <p align="center">
   <a href="docs/getting-started/quickstart.md"><strong>Quickstart</strong></a> ·
   <a href="docs/reference/api.md"><strong>API Reference</strong></a> ·
+  <a href="docs/FEATURES.md"><strong>All Features</strong></a> ·
   <a href="docs/sdks/python.md"><strong>Python SDK</strong></a> ·
   <a href="docs/sdks/typescript.md"><strong>TypeScript SDK</strong></a> ·
   <a href="docs/guides/policies.md"><strong>Policies</strong></a> ·
