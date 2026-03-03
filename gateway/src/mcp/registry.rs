@@ -238,6 +238,9 @@ impl McpRegistry {
     }
 
     /// Dry-run discovery: probe a URL, return auth requirements + server info without persisting.
+    ///
+    /// Returns `Err` if the server cannot be reached or is not an MCP-compatible server,
+    /// which the API handler maps to 502 Bad Gateway.
     pub async fn discover_dry_run(&self, endpoint: &str) -> Result<DiscoveryResult, String> {
         // Try OAuth discovery
         let discovery = self.oauth_manager.discover(endpoint).await;
@@ -252,16 +255,14 @@ impl McpRegistry {
             Err(_) => ("unknown".to_string(), None, None),
         };
 
-        // Try connecting without auth to get server info and tools
+        // Try connecting without auth to get server info and tools.
+        // If initialization fails, the endpoint is not an MCP server — propagate the error.
         let client = McpClient::new(endpoint, None::<String>);
-        let (server_info, tools) = match client.initialize().await {
-            Ok(init) => {
-                let tools = client.list_tools().await.unwrap_or_default();
-                (init.server_info, tools)
-            }
-            Err(_) => (None, vec![]),
-        };
+        let init = client.initialize().await.map_err(|e| {
+            format!("Endpoint is not an MCP-compatible server: {}", e)
+        })?;
 
+        let tools = client.list_tools().await.unwrap_or_default();
         let tool_count = tools.len();
 
         Ok(DiscoveryResult {
@@ -270,7 +271,7 @@ impl McpRegistry {
             auth_type,
             token_endpoint,
             scopes_supported: scopes,
-            server_info,
+            server_info: init.server_info,
             tools,
             tool_count,
         })
