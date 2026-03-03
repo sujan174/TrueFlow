@@ -32,6 +32,7 @@ import { MobileNav } from "@/components/mobile-nav";
 const CommandPalette = dynamic(() => import("@/components/command-palette").then(m => m.CommandPalette), { loading: () => null });
 const NotificationBell = dynamic(() => import("@/components/notification-bell").then(m => m.NotificationBell), { loading: () => null });
 const ProjectSwitcher = dynamic(() => import("@/components/project-switcher").then(m => m.ProjectSwitcher), { loading: () => null });
+const OnboardingModal = dynamic(() => import("@/components/onboarding-modal").then(m => m.OnboardingModal), { loading: () => null });
 
 export default function RootLayout({
   children,
@@ -65,6 +66,7 @@ export default function RootLayout({
             </div>
             <Toaster />
             <CommandPalette />
+            <OnboardingModal />
           </ProjectProvider>
         </ThemeProvider>
       </body>
