@@ -29,6 +29,8 @@ import {
     MessageSquareText,
     ScrollText,
     Eye,
+    LogOut,
+    User,
 } from "lucide-react";
 import { useEffect, useState, useCallback, useRef } from "react";
 
@@ -160,7 +162,6 @@ export function Sidebar({ className }: SidebarProps) {
                 { href: "/tools", label: "Tools & MCP", icon: Wrench },
                 { href: "/webhooks", label: "Webhooks", icon: Webhook },
                 { href: "/config", label: "Config Export", icon: FileCode2 },
-                { href: "/settings", label: "Settings", icon: Settings },
             ]
         }
     ];
@@ -318,14 +319,81 @@ export function Sidebar({ className }: SidebarProps) {
                 })}
             </div>
 
-            {/* Footer — health + version */}
+            {/* Footer — Settings, Account, Health */}
             <div className={cn(
-                "shrink-0 border-t border-[var(--sidebar-border)] py-2.5",
-                collapsed ? "px-2" : "px-4"
+                "shrink-0 border-t border-[var(--sidebar-border)] py-2",
+                collapsed ? "px-2" : "px-2"
             )}>
+                {/* Settings */}
+                <Link
+                    href="/settings"
+                    title={collapsed ? "Settings" : undefined}
+                    className={cn(
+                        "relative flex items-center gap-2 rounded-md py-1.5 text-[13px] font-medium",
+                        "transition-all duration-100 group",
+                        collapsed ? "justify-center px-2" : "px-2",
+                        pathname.startsWith("/settings")
+                            ? "text-foreground bg-[var(--primary)]/8 border border-[var(--primary)]/12"
+                            : "text-muted-foreground hover:text-foreground/80 hover:bg-[var(--card)] border border-transparent"
+                    )}
+                >
+                    {pathname.startsWith("/settings") && (
+                        <span className="absolute left-0 top-1/2 -translate-y-1/2 h-3.5 w-[2px] rounded-r-full bg-[var(--primary)]" />
+                    )}
+                    <Settings
+                        size={14}
+                        strokeWidth={pathname.startsWith("/settings") ? 2 : 1.5}
+                        className={cn(
+                            "shrink-0 transition-colors",
+                            pathname.startsWith("/settings") ? "text-[var(--primary)]" : "text-muted-foreground group-hover:text-foreground/60"
+                        )}
+                    />
+                    {!collapsed && (
+                        <span className="flex-1 whitespace-nowrap overflow-hidden text-ellipsis">
+                            Settings
+                        </span>
+                    )}
+                </Link>
+
+                {/* Account */}
+                {!collapsed ? (
+                    <div className="mt-1.5 rounded-md border border-border/40 bg-muted/20 px-2.5 py-2">
+                        <div className="flex items-center gap-2 mb-2">
+                            <div className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--primary)]/10">
+                                <User size={12} className="text-[var(--primary)]" />
+                            </div>
+                            <span className="text-[11px] font-medium text-foreground/70 truncate">Admin</span>
+                        </div>
+                        <button
+                            onClick={() => window.location.href = "/login"}
+                            className={cn(
+                                "w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-[12px] font-medium",
+                                "text-muted-foreground hover:text-rose-400 hover:bg-rose-500/8",
+                                "transition-colors"
+                            )}
+                        >
+                            <LogOut size={13} strokeWidth={1.5} />
+                            Log out
+                        </button>
+                    </div>
+                ) : (
+                    <button
+                        onClick={() => window.location.href = "/login"}
+                        title="Log out"
+                        className={cn(
+                            "flex w-full items-center justify-center rounded-md px-2 py-1.5 mt-1",
+                            "text-muted-foreground hover:text-rose-400 hover:bg-rose-500/8",
+                            "transition-colors"
+                        )}
+                    >
+                        <LogOut size={14} strokeWidth={1.5} />
+                    </button>
+                )}
+
+                {/* Health + Version */}
                 <div className={cn(
-                    "flex items-center text-[11px] text-muted-foreground",
-                    collapsed ? "justify-center" : "gap-2"
+                    "flex items-center text-[11px] text-muted-foreground mt-2",
+                    collapsed ? "justify-center" : "gap-2 px-2"
                 )}>
                     <div className={cn(
                         "h-1.5 w-1.5 rounded-full transition-colors duration-500",

@@ -30,6 +30,8 @@ import {
     ShieldCheck,
     MessageSquareText,
     ScrollText,
+    LogOut,
+    User,
 } from "lucide-react";
 import { ProjectSwitcher } from "@/components/project-switcher";
 import { Button } from "@/components/ui/button";
@@ -103,7 +105,6 @@ export function MobileNav() {
                 { href: "/tools", label: "Tools & MCP", icon: Wrench },
                 { href: "/webhooks", label: "Webhooks", icon: Webhook },
                 { href: "/config", label: "Config Export", icon: FileCode2 },
-                { href: "/settings", label: "Settings", icon: Settings },
             ]
         }
     ];
@@ -161,7 +162,36 @@ export function MobileNav() {
                     </nav>
 
                     {/* Footer */}
-                    <div className="mt-auto border-t pt-4">
+                    <div className="mt-auto border-t pt-4 space-y-2">
+                        <Link
+                            href="/settings"
+                            className={cn(
+                                "flex items-center gap-3 rounded-md px-2 py-2 text-sm font-medium transition-colors",
+                                pathname.startsWith("/settings")
+                                    ? "bg-primary/10 text-primary"
+                                    : "hover:bg-muted text-muted-foreground hover:text-foreground"
+                            )}
+                        >
+                            <Settings className={cn("h-4 w-4", pathname.startsWith("/settings") && "text-primary")} />
+                            Settings
+                        </Link>
+
+                        <div className="rounded-md border border-border/40 bg-muted/20 px-3 py-2.5">
+                            <div className="flex items-center gap-2 mb-2">
+                                <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10">
+                                    <User size={12} className="text-primary" />
+                                </div>
+                                <span className="text-xs font-medium text-foreground/70">Admin</span>
+                            </div>
+                            <button
+                                onClick={() => window.location.href = "/login"}
+                                className="w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-[13px] font-medium text-muted-foreground hover:text-rose-400 hover:bg-rose-500/8 transition-colors"
+                            >
+                                <LogOut size={14} strokeWidth={1.5} />
+                                Log out
+                            </button>
+                        </div>
+
                         {mounted && (
                             <button
                                 onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
@@ -171,7 +201,7 @@ export function MobileNav() {
                                 {theme === "dark" ? "Light Mode" : "Dark Mode"}
                             </button>
                         )}
-                        <div className="mt-4 px-3 text-xs text-muted-foreground">
+                        <div className="px-3 text-xs text-muted-foreground">
                             v0.8.0
                         </div>
                     </div>
