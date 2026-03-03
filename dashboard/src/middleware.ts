@@ -3,33 +3,111 @@ import { NextRequest, NextResponse } from "next/server";
 /**
  * Next.js middleware — runs on every request server-side.
  *
- * Sets the `dashboard_token` cookie automatically from the DASHBOARD_SECRET
- * env var so the browser includes it on every subsequent /api/proxy/* call.
+ * Two auth modes (determined by env vars):
  *
- * This means api.ts (client-side) never needs to know the secret — the cookie
- * is injected by the server and included automatically by the browser on
- * same-origin requests.
+ * 1. **Google SSO** (GOOGLE_CLIENT_ID is set):
+ *    Checks for a valid `ailink_session` cookie. If missing, redirects to /login.
+ *    The login page initiates the Google OAuth flow.
+ *
+ * 2. **Shared Secret** (DASHBOARD_SECRET is set, no GOOGLE_CLIENT_ID):
+ *    Sets the `dashboard_token` cookie automatically so the browser includes
+ *    it on every /api/proxy/* call. Legacy mode — no login page.
+ *
+ * Routes excluded from auth: /login, /api/auth/*, static assets.
  */
 export function middleware(request: NextRequest) {
+    const { pathname } = request.nextUrl;
     const response = NextResponse.next();
 
-    // Only act on non-API routes (page loads). The cookie must be set before
-    // the first API call, so we set it when the user loads any page.
+    const googleSsoEnabled = !!process.env.GOOGLE_CLIENT_ID;
+
+    // ── Google SSO Mode ──
+    if (googleSsoEnabled) {
+        // Skip auth for login page, auth API routes, and static assets
+        const isPublicRoute =
+            pathname === "/login" ||
+            pathname.startsWith("/api/auth/") ||
+            pathname.startsWith("/_next/") ||
+            pathname === "/favicon.ico";
+
+        if (isPublicRoute) return response;
+
+        // Check for session cookie
+        const session = request.cookies.get("ailink_session")?.value;
+        if (!session) {
+            const loginUrl = new URL("/login", request.url);
+            return NextResponse.redirect(loginUrl);
+        }
+
+        // Validate session expiry
+        try {
+            const payload = JSON.parse(
+                Buffer.from(session, "base64url").toString()
+            );
+            if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) {
+                const loginUrl = new URL("/login", request.url);
+                loginUrl.searchParams.set("error", "Session expired — please sign in again");
+                const redirect = NextResponse.redirect(loginUrl);
+                redirect.cookies.delete("ailink_session");
+                redirect.cookies.delete("ailink_user");
+                return redirect;
+            }
+
+            // Set a client-readable mirror cookie (non-httpOnly) with display info
+            const userInfo = JSON.stringify({
+                email: payload.email,
+                name: payload.name,
+                picture: payload.picture,
+            });
+            const existing_user = request.cookies.get("ailink_user")?.value;
+            if (!existing_user) {
+                response.cookies.set("ailink_user", btoa(userInfo), {
+                    httpOnly: false,
+                    sameSite: "lax",
+                    secure: process.env.NODE_ENV === "production",
+                    path: "/",
+                    maxAge: 60 * 60 * 24 * 7,
+                });
+            }
+        } catch {
+            // Malformed session — redirect to login
+            const loginUrl = new URL("/login", request.url);
+            const redirect = NextResponse.redirect(loginUrl);
+            redirect.cookies.delete("ailink_session");
+            redirect.cookies.delete("ailink_user");
+            return redirect;
+        }
+
+        // Also set the dashboard_token for gateway API auth if DASHBOARD_SECRET exists
+        const secret = process.env.DASHBOARD_SECRET;
+        if (secret) {
+            const existing = request.cookies.get("dashboard_token")?.value;
+            if (existing !== secret) {
+                response.cookies.set("dashboard_token", secret, {
+                    httpOnly: true,
+                    sameSite: "strict",
+                    secure: process.env.NODE_ENV === "production",
+                    path: "/",
+                    maxAge: 60 * 60 * 24,
+                });
+            }
+        }
+
+        return response;
+    }
+
+    // ── Legacy Shared Secret Mode ──
     const secret = process.env.DASHBOARD_SECRET;
     if (!secret) return response;
 
-    // If the cookie is not already set (or has changed), refresh it.
     const existing = request.cookies.get("dashboard_token")?.value;
     if (existing !== secret) {
         response.cookies.set("dashboard_token", secret, {
             httpOnly: true,
             sameSite: "strict",
-            // SEC-06: Never use client-controlled Host header to decide secure flag.
-            // In production, always require HTTPS. For local dev, NODE_ENV=development.
             secure: process.env.NODE_ENV === "production",
             path: "/",
-            // Session cookie — expires when tab closes. Re-set on next page load.
-            maxAge: 60 * 60 * 24, // 24h
+            maxAge: 60 * 60 * 24,
         });
     }
 
@@ -37,6 +115,5 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-    // Run on all routes EXCEPT the proxy API itself (to avoid loop)
     matcher: ["/((?!api/proxy|_next/static|_next/image|favicon.ico).*)"],
 };
