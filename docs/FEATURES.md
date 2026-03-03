@@ -275,7 +275,7 @@
 ### 11.3 Model Access Groups (Fine-Grained RBAC) ✅ TESTED
 
 ### 11.4 SSO / OIDC Providers ❌ CANNOT TEST
-- No `POST /oidc/providers` registration endpoint exists in the gateway API. OIDC is implemented via DB-level provider lookup only.
+- OIDC providers are configured at the database level. JWT tokens are validated against registered providers' JWKS endpoints during request authentication (Phase 21 tests OIDC JWT format). There is no Management API for provider CRUD — configuration is done via direct DB insertion.
 
 ---
 

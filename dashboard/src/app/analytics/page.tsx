@@ -64,15 +64,15 @@ export default function AnalyticsPage() {
     const statusChartData = useMemo(() => {
         if (!statusData) return [];
         const groups: Record<string, { count: number; color: string; label: string }> = {
-            "2xx": { count: 0, color: "#10b981", label: "Success (2xx)" }, // Emerald
-            "400/404": { count: 0, color: "#f59e0b", label: "User Error (400/404)" }, // Amber
-            "429": { count: 0, color: "#f97316", label: "Rate Limited (429)" }, // Orange
-            "5xx": { count: 0, color: "#ef4444", label: "Provider Down (5xx)" }, // Red
-            "Other": { count: 0, color: "#6b7280", label: "Other" },
+            "2xx": { count: 0, color: "#a9927d", label: "Success (2xx)" },
+            "400/404": { count: 0, color: "#d4a574", label: "User Error (400/404)" },
+            "429": { count: 0, color: "#c47a50", label: "Rate Limited (429)" },
+            "5xx": { count: 0, color: "#cf3453", label: "Provider Down (5xx)" },
+            "Other": { count: 0, color: "#5e503f", label: "Other" },
         };
 
         statusData.forEach((s) => {
-            const code = s.status_code;
+            const code = s.status_class || s.status_code || 0;
             if (code >= 200 && code < 300) groups["2xx"].count += s.count;
             else if (code === 400 || code === 404) groups["400/404"].count += s.count;
             else if (code === 429) groups["429"].count += s.count;
@@ -199,21 +199,21 @@ export default function AnalyticsPage() {
                         <div className="h-[350px] w-full">
                             {loadingTimeseries ? (
                                 <Skeleton className="h-full w-full" />
-                            ) : (
-                                <ResponsiveContainer width="100%" height="100%">
+                            ) : timeseries && timeseries.length > 0 ? (
+                                <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                                     <AreaChart data={timeseries} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                                         <defs>
                                             <linearGradient id="colorRequests" x1="0" y1="0" x2="0" y2="1">
-                                                <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
-                                                <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                                                <stop offset="5%" stopColor="#cf3453" stopOpacity={0.3} />
+                                                <stop offset="95%" stopColor="#cf3453" stopOpacity={0} />
                                             </linearGradient>
                                             <linearGradient id="colorErrors" x1="0" y1="0" x2="0" y2="1">
-                                                <stop offset="5%" stopColor="#ef4444" stopOpacity={0.3} />
-                                                <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
+                                                <stop offset="5%" stopColor="#e85d75" stopOpacity={0.3} />
+                                                <stop offset="95%" stopColor="#e85d75" stopOpacity={0} />
                                             </linearGradient>
                                         </defs>
 
-                                        <CartesianGrid stroke="#232330" strokeDasharray="3 3" vertical={false} />
+                                        <CartesianGrid stroke="#2d2520" strokeDasharray="3 3" vertical={false} />
                                         <XAxis
                                             dataKey="bucket"
                                             tickFormatter={formatDate}
@@ -231,25 +231,29 @@ export default function AnalyticsPage() {
                                         <Area
                                             type="monotone"
                                             dataKey="request_count"
-                                            stroke="#3b82f6"
+                                            stroke="#cf3453"
                                             strokeWidth={2}
                                             fillOpacity={1}
                                             fill="url(#colorRequests)"
                                             name="Requests"
-                                            activeDot={{ r: 4, strokeWidth: 0, fill: '#3b82f6' }}
+                                            activeDot={{ r: 4, strokeWidth: 0, fill: '#cf3453' }}
                                         />
                                         <Area
                                             type="monotone"
                                             dataKey="error_count"
-                                            stroke="#ef4444"
+                                            stroke="#e85d75"
                                             strokeWidth={2}
                                             fillOpacity={1}
                                             fill="url(#colorErrors)"
                                             name="Errors"
-                                            activeDot={{ r: 4, strokeWidth: 0, fill: '#ef4444' }}
+                                            activeDot={{ r: 4, strokeWidth: 0, fill: '#e85d75' }}
                                         />
                                     </AreaChart>
                                 </ResponsiveContainer>
+                            ) : (
+                                <div className="h-full w-full flex items-center justify-center text-[13px] text-muted-foreground border border-dashed border-border/60 rounded-md bg-card/30">
+                                    No data available for this range
+                                </div>
                             )}
                         </div>
                     </CardContent>
@@ -267,10 +271,10 @@ export default function AnalyticsPage() {
                         <div className="h-[350px] w-full">
                             {loadingTimeseries ? (
                                 <Skeleton className="h-full w-full" />
-                            ) : (
+                            ) : timeseries && timeseries.length > 0 ? (
                                 <ResponsiveContainer width="100%" height="100%">
                                     <LineChart data={timeseries} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                                        <CartesianGrid stroke="#232330" strokeDasharray="3 3" vertical={false} />
+                                        <CartesianGrid stroke="#2d2520" strokeDasharray="3 3" vertical={false} />
                                         <XAxis
                                             dataKey="bucket"
                                             tickFormatter={formatDate}
@@ -299,24 +303,28 @@ export default function AnalyticsPage() {
                                             yAxisId="left"
                                             type="monotone"
                                             dataKey="lat"
-                                            stroke="#10b981"
+                                            stroke="#cf3453"
                                             strokeWidth={2}
                                             dot={false}
                                             name="Latency (ms)"
-                                            activeDot={{ r: 4, strokeWidth: 0, fill: '#10b981' }}
+                                            activeDot={{ r: 4, strokeWidth: 0, fill: '#cf3453' }}
                                         />
                                         <Line
                                             yAxisId="right"
                                             type="monotone"
                                             dataKey="cost"
-                                            stroke="#eab308"
+                                            stroke="#e85d75"
                                             strokeWidth={2}
                                             dot={false}
                                             name="Cost ($)"
-                                            activeDot={{ r: 4, strokeWidth: 0, fill: '#eab308' }}
+                                            activeDot={{ r: 4, strokeWidth: 0, fill: '#e85d75' }}
                                         />
                                     </LineChart>
                                 </ResponsiveContainer>
+                            ) : (
+                                <div className="h-full w-full flex items-center justify-center text-[13px] text-muted-foreground border border-dashed border-border/60 rounded-md bg-card/30">
+                                    No data available for this range
+                                </div>
                             )}
                         </div>
                     </CardContent>
@@ -352,7 +360,7 @@ export default function AnalyticsPage() {
                                                 <Cell key={`cell-${index}`} fill={entry.fill} />
                                             ))}
                                         </Pie>
-                                        <Tooltip content={<CustomTooltip contentStyle={{ backgroundColor: "#1A1A1F", borderColor: "#2C2C35", color: "#F0F0F4" }} />} />
+                                        <Tooltip content={<CustomTooltip contentStyle={{ backgroundColor: "#161210", borderColor: "#2d2520", color: "#eee9e5" }} />} />
                                         <Legend verticalAlign="bottom" height={36} wrapperStyle={{ fontSize: '12px' }} />
                                     </PieChart>
                                 </ResponsiveContainer>
@@ -377,10 +385,10 @@ export default function AnalyticsPage() {
                         <div className="h-[280px] w-full">
                             {loadingTimeseries ? (
                                 <Skeleton className="h-full w-full" />
-                            ) : (
+                            ) : timeseries && timeseries.length > 0 ? (
                                 <ResponsiveContainer width="100%" height="100%">
                                     <BarChart data={timeseries} barCategoryGap="30%" margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                                        <CartesianGrid stroke="#232330" strokeDasharray="3 3" vertical={false} />
+                                        <CartesianGrid stroke="#2d2520" strokeDasharray="3 3" vertical={false} />
                                         <XAxis
                                             dataKey="bucket"
                                             tickFormatter={formatDate}
@@ -402,10 +410,14 @@ export default function AnalyticsPage() {
                                             wrapperStyle={{ fontSize: 12, paddingTop: 8 }}
                                             formatter={(v) => v === 'input_tokens' ? 'Prompt Tokens' : 'Completion Tokens'}
                                         />
-                                        <Bar dataKey="input_tokens" name="input_tokens" stackId="a" fill="#3b82f6" radius={[0, 0, 0, 0]} />
-                                        <Bar dataKey="output_tokens" name="output_tokens" stackId="a" fill="#10b981" radius={[4, 4, 0, 0]} />
+                                        <Bar dataKey="input_tokens" name="input_tokens" stackId="a" fill="#cf3453" radius={[0, 0, 0, 0]} />
+                                        <Bar dataKey="output_tokens" name="output_tokens" stackId="a" fill="#a9927d" radius={[4, 4, 0, 0]} />
                                     </BarChart>
                                 </ResponsiveContainer>
+                            ) : (
+                                <div className="h-full w-full flex items-center justify-center text-[13px] text-muted-foreground border border-dashed border-border/60 rounded-md bg-card/30">
+                                    No data available for this range
+                                </div>
                             )}
                         </div>
                     </CardContent>
@@ -423,8 +435,8 @@ export default function AnalyticsPage() {
                     <CardContent>
                         {loadingBreakdown ? (
                             <Skeleton className="h-[220px] w-full" />
-                        ) : breakdown && breakdown.by_model.length > 0 ? (
-                            <ResponsiveContainer width="100%" height={220}>
+                        ) : breakdown && breakdown.by_model && breakdown.by_model.length > 0 ? (
+                            <ResponsiveContainer width="100%" height={220} minWidth={0}>
                                 <BarChart
                                     data={breakdown.by_model.slice(0, 8).map(d => ({ ...d, costFmt: `$${d.cost_usd.toFixed(4)}` }))}
                                     layout="vertical"
@@ -436,7 +448,7 @@ export default function AnalyticsPage() {
                                         content={<CustomTooltip valueFormatter={(v: any) => typeof v === 'number' ? `$${v.toFixed(4)}` : v} />}
                                         cursor={{ fill: 'var(--border)', opacity: 0.1 }}
                                     />
-                                    <Bar dataKey="cost_usd" name="Cost ($)" fill="#8b5cf6" radius={[0, 4, 4, 0]}>
+                                    <Bar dataKey="cost_usd" name="Cost ($)" fill="#cf3453" radius={[0, 4, 4, 0]}>
                                         <LabelList dataKey="costFmt" position="right" style={{ fontSize: 10, fill: 'var(--muted-foreground)' }} />
                                     </Bar>
                                 </BarChart>
@@ -458,8 +470,8 @@ export default function AnalyticsPage() {
                     <CardContent>
                         {loadingBreakdown ? (
                             <Skeleton className="h-[220px] w-full" />
-                        ) : breakdown && breakdown.by_token.length > 0 ? (
-                            <ResponsiveContainer width="100%" height={220}>
+                        ) : breakdown && breakdown.by_token && breakdown.by_token.length > 0 ? (
+                            <ResponsiveContainer width="100%" height={220} minWidth={0}>
                                 <BarChart
                                     data={breakdown.by_token.slice(0, 8).map(d => ({ ...d, costFmt: `$${d.cost_usd.toFixed(4)}` }))}
                                     layout="vertical"
@@ -471,7 +483,7 @@ export default function AnalyticsPage() {
                                         content={<CustomTooltip valueFormatter={(v: any) => typeof v === 'number' ? `$${v.toFixed(4)}` : v} />}
                                         cursor={{ fill: 'var(--border)', opacity: 0.1 }}
                                     />
-                                    <Bar dataKey="cost_usd" name="Cost ($)" fill="#10b981" radius={[0, 4, 4, 0]}>
+                                    <Bar dataKey="cost_usd" name="Cost ($)" fill="#a9927d" radius={[0, 4, 4, 0]}>
                                         <LabelList dataKey="costFmt" position="right" style={{ fontSize: 10, fill: 'var(--muted-foreground)' }} />
                                     </Bar>
                                 </BarChart>

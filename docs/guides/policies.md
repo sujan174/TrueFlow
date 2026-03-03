@@ -426,6 +426,26 @@ Validates that the LLM response body (or extracted JSON from markdown blocks) co
 }
 ```
 
+### `dynamic_route`
+
+Selects an upstream based on a routing strategy. Evaluates at request time — useful for load balancing or cost-optimized routing across multiple providers.
+
+```json
+{
+  "action": "dynamic_route",
+  "strategy": "round_robin",
+  "targets": [
+    {"model": "gpt-4o", "upstream_url": "https://api.openai.com"},
+    {"model": "claude-3-5-sonnet-20241022", "upstream_url": "https://api.anthropic.com"}
+  ]
+}
+```
+
+| Param | Options | Description |
+|---|---|---|
+| `strategy` | `"round_robin"`, `"lowest_cost"`, `"latency"`, `"random"` | Routing algorithm |
+| `targets` | array of `{model, upstream_url}` | Available upstream targets |
+
 ### `conditional_route`
 
 Selects an upstream target based on request properties. The first branch whose condition evaluates to true wins. Can replace `dynamic_route` when hardcoded conditional fallback paths are needed.

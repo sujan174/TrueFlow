@@ -778,27 +778,6 @@ export const flushCache = () =>
     method: "POST",
   });
 
-// ── Model Aliases ─────────────────────────────────────────────
-
-export interface ModelAlias {
-  id: string;
-  alias: string;
-  model: string;
-  project_id: string | null;
-  created_at: string;
-}
-
-export const listModelAliases = () => api<ModelAlias[]>("/model-aliases");
-
-export const createModelAlias = (alias: string, model: string) =>
-  api<ModelAlias>("/model-aliases", {
-    method: "POST",
-    body: JSON.stringify({ alias, model }),
-  });
-
-export const deleteModelAlias = (alias: string) =>
-  api<void>(`/model-aliases/${alias}`, { method: "DELETE" });
-
 // ── Model Pricing ─────────────────────────────────────────────
 
 export interface ModelPricing {
@@ -1245,8 +1224,41 @@ export interface SpendBreakdown {
   by_token: SpendBreakdownItem[];
 }
 
-export const getSpendBreakdown = (range = "24") =>
-  api<SpendBreakdown>(`/analytics/spend/breakdown?range=${range}`);
+export const getSpendBreakdown = async (range = "24"): Promise<SpendBreakdown> => {
+  // Gateway returns {breakdown: [{dimension, total_cost_usd, ...}]} per group_by.
+  // We need to fetch both model and token breakdowns and transform them.
+  interface GatewayBreakdownItem {
+    dimension: string;
+    total_cost_usd: number;
+    request_count: number;
+    total_prompt_tokens?: number;
+    total_completion_tokens?: number;
+  }
+  interface GatewayBreakdownResponse {
+    breakdown?: GatewayBreakdownItem[];
+  }
+
+  const transform = (items: GatewayBreakdownItem[] | undefined): SpendBreakdownItem[] =>
+    (items || []).map(item => ({
+      label: item.dimension,
+      cost_usd: item.total_cost_usd,
+      request_count: item.request_count,
+      token_count: (item.total_prompt_tokens || 0) + (item.total_completion_tokens || 0),
+    }));
+
+  try {
+    const [byModel, byToken] = await Promise.all([
+      api<GatewayBreakdownResponse>(`/analytics/spend/breakdown?range=${range}&group_by=model`),
+      api<GatewayBreakdownResponse>(`/analytics/spend/breakdown?range=${range}&group_by=token`),
+    ]);
+    return {
+      by_model: transform(byModel?.breakdown),
+      by_token: transform(byToken?.breakdown),
+    };
+  } catch {
+    return { by_model: [], by_token: [] };
+  }
+};
 
 // ── PII Vault Rehydration ─────────────────────────────────────
 

@@ -459,12 +459,6 @@ class AIlinkClient:
         return WebhooksResource(self)
 
     @cached_property
-    def model_aliases(self):
-        """Model alias management — map short names to real model identifiers."""
-        from .resources.model_aliases import ModelAliasesResource
-        return ModelAliasesResource(self)
-
-    @cached_property
     def experiments(self):
         """Experiment tracking (A/B testing) — stub until P4.2 API ships."""
         from .resources.experiments import ExperimentsResource

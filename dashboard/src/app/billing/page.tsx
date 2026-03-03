@@ -147,11 +147,11 @@ export default function BillingPage() {
                                 <AreaChart data={spendHistory} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
                                     <defs>
                                         <linearGradient id="spendGrad" x1="0" y1="0" x2="0" y2="1">
-                                            <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3} />
-                                            <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
+                                            <stop offset="5%" stopColor="#cf3453" stopOpacity={0.3} />
+                                            <stop offset="95%" stopColor="#cf3453" stopOpacity={0} />
                                         </linearGradient>
                                     </defs>
-                                    <CartesianGrid stroke="#232330" strokeDasharray="3 3" vertical={false} />
+                                    <CartesianGrid stroke="#2d2520" strokeDasharray="3 3" vertical={false} />
                                     <XAxis
                                         dataKey="day"
                                         {...CHART_AXIS_PROPS}
@@ -171,10 +171,10 @@ export default function BillingPage() {
                                         type="monotone"
                                         dataKey="spend"
                                         name="Spend"
-                                        stroke="#8b5cf6"
+                                        stroke="#cf3453"
                                         strokeWidth={2}
                                         fill="url(#spendGrad)"
-                                        activeDot={{ r: 4, strokeWidth: 0, fill: '#8b5cf6' }}
+                                        activeDot={{ r: 4, strokeWidth: 0, fill: '#cf3453' }}
                                     />
                                 </AreaChart>
                             </ResponsiveContainer>

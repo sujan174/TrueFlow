@@ -7,12 +7,12 @@ import { getStatusDistribution, StatusStat } from "@/lib/api";
 import { CustomTooltip } from "@/components/ui/chart-utils";
 
 const COLORS = {
-    "200": "var(--chart-1, #10b981)",
-    "400": "var(--chart-2, #f59e0b)",
-    "500": "var(--chart-3, #ef4444)",
+    "200": "var(--chart-1, #a9927d)",
+    "400": "var(--chart-2, #d4a574)",
+    "500": "var(--chart-3, #cf3453)",
 };
 
-const DEFAULT_COLOR = "#8884d8";
+const DEFAULT_COLOR = "#5e503f";
 
 export function StatusPieChart() {
     const [data, setData] = useState<{ name: string; value: number; fill: string }[]>([]);
@@ -53,7 +53,7 @@ export function StatusPieChart() {
                                 <Cell key={`cell-${index}`} fill={entry.fill} />
                             ))}
                         </Pie>
-                        <Tooltip content={<CustomTooltip  contentStyle={{ backgroundColor: "#1A1A1F", borderColor: "#2C2C35", color: "#F0F0F4" }} />} />
+                        <Tooltip content={<CustomTooltip contentStyle={{ backgroundColor: "#161210", borderColor: "#2d2520", color: "#eee9e5" }} />} />
                         <Legend verticalAlign="bottom" height={36} wrapperStyle={{ fontSize: '12px' }} />
                     </PieChart>
                 </ResponsiveContainer>

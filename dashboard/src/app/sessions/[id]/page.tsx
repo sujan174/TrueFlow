@@ -25,7 +25,7 @@ import { CHART_AXIS_PROPS } from "@/components/ui/chart-utils";
 import { toast } from "sonner";
 
 const MODEL_COLORS = [
-    "#6366f1", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6",
+    "#cf3453", "#a9927d", "#d4a574", "#c47a50", "#e85d75",
     "#06b6d4", "#ec4899", "#84cc16",
 ];
 
@@ -349,7 +349,7 @@ export default function SessionDetailPage() {
                     <CardContent>
                         <ResponsiveContainer width="100%" height={Math.max(180, chartData.length * 40 + 60)}>
                             <BarChart layout="vertical" data={chartData} margin={{ top: 0, right: 20, bottom: 0, left: -20 }}>
-                                <CartesianGrid stroke="#232330" strokeDasharray="3 3" vertical={false} />
+                                <CartesianGrid stroke="#2d2520" strokeDasharray="3 3" vertical={false} />
                                 <XAxis type="number" tickFormatter={(v) => `${v}ms`} {...CHART_AXIS_PROPS} />
                                 <YAxis type="category" dataKey="name" {...CHART_AXIS_PROPS} width={50} />
                                 <Tooltip

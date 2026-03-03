@@ -284,11 +284,11 @@ export default function OverviewPage() {
                                 <AreaChart data={latencySeries} margin={{ top: 8, right: 8, left: -24, bottom: 0 }}>
                                     <defs>
                                         <linearGradient id="colorLatency" x1="0" y1="0" x2="0" y2="1">
-                                            <stop offset="5%" stopColor="#14B8A6" stopOpacity={0.2} />
-                                            <stop offset="95%" stopColor="#14B8A6" stopOpacity={0} />
+                                            <stop offset="5%" stopColor="#cf3453" stopOpacity={0.2} />
+                                            <stop offset="95%" stopColor="#cf3453" stopOpacity={0} />
                                         </linearGradient>
                                     </defs>
-                                    <CartesianGrid stroke="#1C1F2E" strokeDasharray="3 3" vertical={false} />
+                                    <CartesianGrid stroke="#2d2520" strokeDasharray="3 3" vertical={false} />
                                     <XAxis
                                         dataKey="bucket"
                                         tickFormatter={formatDate}
@@ -311,12 +311,12 @@ export default function OverviewPage() {
                                         type="monotone"
                                         dataKey="avg_latency_ms"
                                         name="Latency"
-                                        stroke="#14B8A6"
+                                        stroke="#cf3453"
                                         strokeWidth={1.5}
                                         fillOpacity={1}
                                         fill="url(#colorLatency)"
                                         isAnimationActive={false}
-                                        activeDot={{ r: 3, strokeWidth: 0, fill: '#14B8A6' }}
+                                        activeDot={{ r: 3, strokeWidth: 0, fill: '#cf3453' }}
                                     />
                                 </AreaChart>
                             </ResponsiveContainer>

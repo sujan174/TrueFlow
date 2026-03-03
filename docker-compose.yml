@@ -54,6 +54,9 @@ services:
       GATEWAY_INTERNAL_URL: "http://gateway:8443"
       AILINK_ADMIN_KEY: "ailink-admin-test"
       DASHBOARD_SECRET: "ailink-dashboard-dev-secret"
+      GOOGLE_CLIENT_ID: "${GOOGLE_CLIENT_ID}"
+      GOOGLE_CLIENT_SECRET: "${GOOGLE_CLIENT_SECRET}"
+      NEXTAUTH_URL: "http://localhost:3000"
     depends_on:
       gateway:
         condition: service_healthy

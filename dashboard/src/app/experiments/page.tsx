@@ -30,7 +30,7 @@ import {
 } from 'recharts';
 
 // A refined teal/indigo palette for the variants
-const VARIANT_COLORS = ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444'];
+const VARIANT_COLORS = ['#cf3453', '#a9927d', '#d4a574', '#c47a50', '#e85d75'];
 
 export default function ExperimentsPage() {
     // We pass a very large limit here because the backend aggregates this already
@@ -170,7 +170,7 @@ export default function ExperimentsPage() {
                                         <div className="h-[250px] w-full mt-4">
                                             <ResponsiveContainer width="100%" height="100%">
                                                 <BarChart data={chartData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
-                                                    <CartesianGrid stroke="#232330" strokeDasharray="3 3" vertical={false} />
+                                                    <CartesianGrid stroke="#2d2520" strokeDasharray="3 3" vertical={false} />
                                                     <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#888' }} />
                                                     <YAxis yAxisId="left" orientation="left" stroke="#888" axisLine={false} tickLine={false} tick={{ fontSize: 12 }} />
                                                     <YAxis yAxisId="right" orientation="right" stroke="#888" axisLine={false} tickLine={false} tick={{ fontSize: 12 }} />

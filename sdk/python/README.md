@@ -46,7 +46,7 @@ agent = Agent(role="Researcher", llm=llm, ...)
 Settings.llm = llamaindex_llm(client, model="gpt-4o")
 ```
 
-See [Framework Integration Cookbook](../../docs/FRAMEWORK_INTEGRATIONS.md) for full examples.
+See [Framework Integration Cookbook](../../docs/guides/framework-integrations.md) for full examples.
 
 ## Quick Start
 
@@ -120,11 +120,6 @@ policy = admin.policies.create(
 )
 admin.policies.update(policy["id"], mode="shadow")
 admin.policies.delete(policy["id"])
-
-# Model Aliases
-alias = admin.model_aliases.create(alias="smart", model="gpt-4o")
-aliases = admin.model_aliases.list()
-admin.model_aliases.delete("smart")
 
 # Webhooks
 webhook = admin.webhooks.create(url="https://mylogger.com/webhook", events=["token.created"])

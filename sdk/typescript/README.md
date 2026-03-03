@@ -41,7 +41,7 @@ const response = await openai.chat.completions.create({
 | Feature | Description |
 |---------|-------------|
 | **OpenAI / Anthropic drop-in** | `client.openai()` / `client.anthropic()` — use familiar SDKs, routed through AILink |
-| **18 resource groups** | Tokens, Credentials, Policies, Approvals (HITL), Audit, Services, Webhooks, Guardrails, Model Aliases, Analytics, Config-as-Code, Batches, Fine-tuning, Realtime, Billing, Projects, API Keys, Experiments |
+| **18 resource groups** | Tokens, Credentials, Policies, Approvals (HITL), Audit, Services, Webhooks, Guardrails, Analytics, Config-as-Code, Batches, Fine-tuning, Realtime, Billing, Projects, API Keys, Experiments, Prompts |
 | **10 typed errors** | Catch `RateLimitError`, `PolicyDeniedError`, `ContentBlockedError`, etc. with typed properties |
 | **BYOK passthrough** | `client.withUpstreamKey("sk-...")` — bring your own key |
 | **Session tracing** | `client.trace({ sessionId: "agent-run-42" })` — correlate multi-step workflows |

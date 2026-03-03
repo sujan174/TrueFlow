@@ -56,19 +56,18 @@
 
 /* 
   ┌─────────────────────────────────────────────────────────────┐
-  │  WARM SLATE — AILink Dashboard Design System                 │
+  │  WARM BORDEAUX — AILink Dashboard Design System             │
   │                                                             │
-  │  Philosophy: Professional infrastructure tooling.            │
-  │  Inspired by Linear's restraint, Vercel's density,          │
-  │  Stripe's typographic precision.                            │
+  │  Philosophy: Premium, warm, luxurious infrastructure.       │
+  │  Inspired by deep wines, warm leather, aged stone.          │
   │                                                             │
-  │  Base:    #0C0E14  — Warm dark navy-slate                   │
-  │  Surface: #151821  — Lifted card surface                    │
-  │  Raise:   #1C1F2E  — Popover / dropdown                    │
-  │  Border:  #252A3A  — Warm slate border                      │
-  │  Primary: #14B8A6  — Teal-500 — professional, distinctive  │
-  │  Text:    #E8ECF4  — Slightly blue-white                    │
-  │  Muted:   #64748B  — Slate-500                              │
+  │  Base:    #0a0908  — Near-black warm charcoal               │
+  │  Surface: #161210  — Dark roasted stone                     │
+  │  Raise:   #1e1916  — Warm char popover                      │
+  │  Border:  #2d2520  — Subtle warm edge                       │
+  │  Primary: #cf3453  — Bordeaux rose — bold, distinctive      │
+  │  Text:    #eee9e5  — Warm white smoke                       │
+  │  Muted:   #a9927d  — Dusty taupe                            │
   └─────────────────────────────────────────────────────────────┘
 */
 
@@ -77,28 +76,28 @@
   :root,
   .dark {
     /* ── Surfaces ── */
-    --background: #0C0E14;
-    --foreground: #E8ECF4;
+    --background: #0a0908;
+    --foreground: #eee9e5;
 
-    --card: #151821;
-    --card-foreground: #E8ECF4;
+    --card: #161210;
+    --card-foreground: #eee9e5;
 
-    --popover: #1C1F2E;
-    --popover-foreground: #E8ECF4;
+    --popover: #1e1916;
+    --popover-foreground: #eee9e5;
 
     /* ── Brand ── */
-    --primary: #14B8A6;
-    --primary-foreground: #FFFFFF;
+    --primary: #cf3453;
+    --primary-foreground: #f2f4f3;
 
     /* ── Neutrals ── */
-    --secondary: #252A3A;
-    --secondary-foreground: #CBD5E1;
+    --secondary: #2d2520;
+    --secondary-foreground: #d3cec9;
 
-    --muted: #151821;
-    --muted-foreground: #64748B;
+    --muted: #161210;
+    --muted-foreground: #a9927d;
 
-    --accent: #1C1F2E;
-    --accent-foreground: #CBD5E1;
+    --accent: #1e1916;
+    --accent-foreground: #d3cec9;
 
     /* ── Semantic ── */
     --destructive: #E11D48;
@@ -111,21 +110,21 @@
     --warning-foreground: #FFFBEB;
 
     /* ── Input primitives ── */
-    --border: #252A3A;
-    --input: #1C1F2E;
-    --ring: #14B8A6;
+    --border: #2d2520;
+    --input: #1e1916;
+    --ring: #cf3453;
 
     /* ── Shape ── */
     --radius: 0.5rem;
 
     /* ── Sidebar ── */
-    --sidebar-bg: #0C0E14;
-    --sidebar-border: #1C1F2E;
+    --sidebar-bg: #0a0908;
+    --sidebar-border: #1e1916;
 
     /* ── Derived convenience ── */
-    --surface-raised: #1C1F2E;
-    --accent-glow: rgba(20, 184, 166, 0.15);
-    --accent-glow-sm: rgba(20, 184, 166, 0.06);
+    --surface-raised: #1e1916;
+    --accent-glow: rgba(207, 52, 83, 0.15);
+    --accent-glow-sm: rgba(207, 52, 83, 0.06);
   }
 }
 
@@ -151,12 +150,12 @@
   }
 
   ::-webkit-scrollbar-thumb {
-    background: #252A3A;
+    background: #2d2520;
     border-radius: 99px;
   }
 
   ::-webkit-scrollbar-thumb:hover {
-    background: #334155;
+    background: #4c4133;
   }
 
   code,
@@ -166,8 +165,8 @@
   }
 
   ::selection {
-    background: rgba(20, 184, 166, 0.25);
-    color: #E8ECF4;
+    background: rgba(207, 52, 83, 0.25);
+    color: #eee9e5;
   }
 }
 
@@ -321,19 +320,19 @@
   .hover-lift:hover {
     transform: translateY(-1px);
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
-    border-color: #334155;
+    border-color: #4c4133;
   }
 
-  /* ── Gradient Text (teal) ── */
+  /* ── Gradient Text (bordeaux) ── */
   .gradient-text {
-    background: linear-gradient(135deg, #2DD4BF, #14B8A6);
+    background: linear-gradient(135deg, #df788c, #cf3453);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
   }
 
   .gradient-text-emerald {
-    background: linear-gradient(135deg, #34D399, #10B981);
+    background: linear-gradient(135deg, #d4a574, #a9927d);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
@@ -351,7 +350,7 @@
 
   /* ── Accent glow ── */
   .accent-glow {
-    box-shadow: 0 0 0 1px rgba(20, 184, 166, 0.3), 0 4px 16px rgba(20, 184, 166, 0.12);
+    box-shadow: 0 0 0 1px rgba(207, 52, 83, 0.3), 0 4px 16px rgba(207, 52, 83, 0.12);
   }
 
   /* ── Glass card (reserved for modals/dropdowns only) ── */
@@ -502,9 +501,9 @@
   }
 
   .card-glow:hover {
-    box-shadow: 0 0 0 1px rgba(20, 184, 166, 0.15),
+    box-shadow: 0 0 0 1px rgba(207, 52, 83, 0.15),
       0 4px 20px rgba(0, 0, 0, 0.25);
-    border-color: rgba(20, 184, 166, 0.2);
+    border-color: rgba(207, 52, 83, 0.2);
   }
 
   /* ── Icon spin on hover ── */

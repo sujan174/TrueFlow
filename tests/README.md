@@ -17,7 +17,7 @@ tests/
 │   ├── test_roadmap_features.py  # Framework integrations, spend tracking
 │   └── run_integration.sh     # Shell runner for CI
 │
-├── e2e/                  # Full-stack mock E2E — 176 tests across 34 phases
+├── e2e/                  # Full-stack mock E2E — 176+ tests across 49 phases
 │   └── test_mock_suite.py
 │
 ├── realworld/            # Real provider tests — needs live API keys
@@ -56,7 +56,7 @@ python3 -m pytest tests/integration/ -v
 bash tests/integration/run_integration.sh
 ```
 
-### 3. E2E mock suite — 176 tests across 34 phases
+### 3. E2E mock suite — 176+ tests across 49 phases
 
 The E2E suite uses the `mock-upstream` service (no real API keys needed).
 The mock upstream is defined in a **separate overlay** (`docker-compose.test.yml`).
@@ -111,6 +111,21 @@ python3 tests/e2e/test_mock_suite.py
 | 32 | A/B experiments (create, variants, results, traffic split, stop) |
 | 33 | Guardrail presets (list, enable, disable, status) |
 | 34 | Config-as-code (export full config, policies-only, tokens-only) |
+| 35 | Condition operators (neq, contains, And/Or composition) + policy version list |
+| 36 | Audit log queries (list, get-by-id, scope denial, field verification) |
+| 37 | Analytics endpoints (summary, volume, status, latency, timeseries, per-token, spend breakdown) |
+| 38 | Projects CRUD (create, list, update, delete, nonexistent delete) |
+| 39 | Services CRUD (create, list, delete, nonexistent delete) |
+| 40 | Webhooks CRUD (create, list, test delivery, delete) |
+| 41 | Notifications (list, unread count, mark-all-read) |
+| 42 | Config-as-code round-trip (export → import, empty import) |
+| 43 | Model pricing (upsert, list, delete) |
+| 44 | Settings (get, update, re-read) |
+| 45 | Cache management (cache-stats, flush, stats-after-flush) |
+| 46 | Health checks (healthz, readyz, upstream health) |
+| 47 | Billing usage (org-level usage, cost verification) |
+| 48 | Experiments with traffic (create → send traffic → per-variant results) |
+| 49 | HITL edge cases (double decision idempotency, nonexistent approval 404) |
 
 ### 4. Real-world suite — requires live API keys
 

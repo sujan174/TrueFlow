@@ -154,12 +154,14 @@ AIlink occupies a unique intersection that no existing product covers:
 - **Python SDK** — OpenAI drop-in, async, HITL, fallback patterns, health polling, session tracing, guardrails, BYOK passthrough, LangChain/CrewAI/LlamaIndex integrations
 - **TypeScript SDK** — Full parity: OpenAI/Anthropic drop-in, admin management API, health polling, guardrail presets, realtime WebSocket, SSE streaming
 - **Universal Model Router** — Auto-detect and translate between OpenAI, Anthropic Claude, and Google Gemini formats
+- **Provider Breadth** — 10 providers: OpenAI, Anthropic, Gemini, Azure OpenAI, Bedrock, Groq, Mistral, Together AI, Cohere, Ollama
 - **MCP Integration** — Register MCP servers, auto-discover tools, autonomous tool execution loop (up to 10 iterations)
 - **Docker Compose** — One-command self-hosted deployment with PostgreSQL 16, Redis 7, optional Jaeger tracing
+- **Prompt Management** — Create, version, deploy, and render prompt templates with variable substitution
+- **A/B Experiments** — Compare models, prompts, or routing strategies with weighted traffic splitting
 
 ### 🔜 Next
 
-- **Provider Breadth** — Azure OpenAI, Bedrock, Groq, Mistral, Together, Cohere, Ollama
 - **MCP Auto-Discovery + OAuth 2.0** — Auto-initialize from URL + OAuth 2.0 token refresh
 - **Helm Charts** — Production Kubernetes deployment
 - **Terraform Provider** — Policy-as-code and GitOps workflows

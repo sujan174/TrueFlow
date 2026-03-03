@@ -393,6 +393,7 @@ Register Model Context Protocol servers. The gateway auto-discovers tools and in
 | `POST /mcp/servers/test` | 🔒 admin + 📋 `mcp:write` |
 | `POST /mcp/servers/discover` | 🔒 admin + 📋 `mcp:read` |
 | `POST /mcp/servers/{id}/refresh` | 🔒 admin + 📋 `mcp:write` |
+| `POST /mcp/servers/{id}/reauth` | 🔒 admin + 📋 `mcp:write` |
 | `GET /mcp/servers/{id}/tools` | 📋 `mcp:read` |
 
 #### List MCP Servers
@@ -414,6 +415,9 @@ Performs the MCP `initialize` handshake and caches tool schemas. Server names mu
 
 #### Refresh Tool Cache
 `POST /mcp/servers/{id}/refresh`
+
+#### Re-authenticate MCP Server (OAuth)
+`POST /mcp/servers/{id}/reauth` — Re-initiates OAuth 2.0 token exchange for a registered MCP server.
 
 #### List Cached Tools
 `GET /mcp/servers/{id}/tools`
@@ -907,57 +911,6 @@ Exposes:
 
 ### SSO / OIDC
 
-Register external identity providers for Single Sign-On.
+AILink supports OIDC-based SSO authentication. Identity providers are configured at the database level and validated via JWKS-based JWT verification during request authentication.
 
-> **Auth**: OIDC management endpoints require only a valid authenticated API key (any role, no specific scope).
-
-#### List OIDC Providers
-`GET /oidc/providers`
-
-#### Register OIDC Provider
-`POST /oidc/providers`
-```json
-{
-  "name": "okta-prod",
-  "issuer_url": "https://your-org.okta.com",
-  "client_id": "0oa...",
-  "client_secret": "...",
-  "claim_mappings": {
-    "role": "groups",
-    "org_id": "org_claim"
-  }
-}
-```
-
-#### Update OIDC Provider
-`PUT /oidc/providers/{id}`
-
-#### Delete OIDC Provider
-`DELETE /oidc/providers/{id}`
-
----
-
-### Upstreams
-
-Manage upstream provider configurations and multi-upstream routing.
-
-#### List Upstreams
-`GET /upstreams`
-
-#### Create Upstream
-`POST /upstreams`
-```json
-{
-  "name": "openai-primary",
-  "url": "https://api.openai.com",
-  "weight": 70,
-  "priority": 1,
-  "credential_id": "uuid"
-}
-```
-
-#### Update Upstream
-`PUT /upstreams/{id}`
-
-#### Delete Upstream
-`DELETE /upstreams/{id}`
+> **Note**: There is no Management API for OIDC provider CRUD. Providers are registered directly in the `oidc_providers` database table. JWT tokens from registered providers are validated automatically against the provider's OIDC discovery document.

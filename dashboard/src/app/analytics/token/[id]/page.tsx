@@ -65,10 +65,10 @@ export default function TokenAnalyticsPage({ params }: { params: { id: string } 
         // Server returns status code itself.
         // Let's bucket them
         value: d.count,
-        color: d.status >= 200 && d.status < 300 ? "#10b981" :
-            d.status >= 300 && d.status < 400 ? "#06b6d4" :
-                d.status >= 400 && d.status < 500 ? "#f59e0b" :
-                    d.status >= 500 ? "#ef4444" : "#71717a"
+        color: d.status >= 200 && d.status < 300 ? "#a9927d" :
+            d.status >= 300 && d.status < 400 ? "#d4a574" :
+                d.status >= 400 && d.status < 500 ? "#c47a50" :
+                    d.status >= 500 ? "#cf3453" : "#5e503f"
     }));
     // Aggregate by bucket?
     // Actually server implementation returns distinct status codes? Yes.
@@ -82,10 +82,10 @@ export default function TokenAnalyticsPage({ params }: { params: { id: string } 
     const finalPieData = Object.entries(statusBuckets).map(([name, value]) => ({
         name,
         value,
-        color: name === "2xx" ? "#10b981" :
-            name === "3xx" ? "#06b6d4" :
-                name === "4xx" ? "#f59e0b" :
-                    name === "5xx" ? "#ef4444" : "#71717a"
+        color: name === "2xx" ? "#a9927d" :
+            name === "3xx" ? "#d4a574" :
+                name === "4xx" ? "#c47a50" :
+                    name === "5xx" ? "#cf3453" : "#5e503f"
     }));
 
     return (
@@ -158,38 +158,44 @@ export default function TokenAnalyticsPage({ params }: { params: { id: string } 
                         <CardTitle>Request Volume (Hourly)</CardTitle>
                     </CardHeader>
                     <CardContent className="h-[300px]">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <AreaChart data={volume}>
-                                <defs>
-                                    <linearGradient id="volGradient" x1="0" y1="0" x2="0" y2="1">
-                                        <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
-                                        <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
-                                    </linearGradient>
-                                </defs>
-                                <CartesianGrid stroke="#232330" strokeDasharray="3 3" vertical={false} />
-                                <XAxis
-                                    dataKey="hour"
-                                    {...CHART_AXIS_PROPS}
-                                    tickFormatter={(val) => new Date(val).getHours() + 'h'}
-                                />
-                                <YAxis {...CHART_AXIS_PROPS} />
-                                <Tooltip
-                                    content={<CustomTooltip
-                                        labelFormatter={(label: any) => new Date(label).toLocaleString()}
-                                    />}
-                                    cursor={{ stroke: 'var(--border)', strokeWidth: 1, strokeDasharray: '4 4' }}
-                                />
-                                <Area
-                                    type="monotone"
-                                    dataKey="count"
-                                    name="Requests"
-                                    stroke="#3b82f6"
-                                    strokeWidth={2}
-                                    fill="url(#volGradient)"
-                                    activeDot={{ r: 4, strokeWidth: 0, fill: '#3b82f6' }}
-                                />
-                            </AreaChart>
-                        </ResponsiveContainer>
+                        {volume && volume.length > 0 ? (
+                            <ResponsiveContainer width="100%" height="100%">
+                                <AreaChart data={volume}>
+                                    <defs>
+                                        <linearGradient id="volGradient" x1="0" y1="0" x2="0" y2="1">
+                                            <stop offset="5%" stopColor="#cf3453" stopOpacity={0.3} />
+                                            <stop offset="95%" stopColor="#cf3453" stopOpacity={0} />
+                                        </linearGradient>
+                                    </defs>
+                                    <CartesianGrid stroke="#2d2520" strokeDasharray="3 3" vertical={false} />
+                                    <XAxis
+                                        dataKey="hour"
+                                        {...CHART_AXIS_PROPS}
+                                        tickFormatter={(val) => new Date(val).getHours() + 'h'}
+                                    />
+                                    <YAxis {...CHART_AXIS_PROPS} />
+                                    <Tooltip
+                                        content={<CustomTooltip
+                                            labelFormatter={(label: any) => new Date(label).toLocaleString()}
+                                        />}
+                                        cursor={{ stroke: 'var(--border)', strokeWidth: 1, strokeDasharray: '4 4' }}
+                                    />
+                                    <Area
+                                        type="monotone"
+                                        dataKey="count"
+                                        name="Requests"
+                                        stroke="#cf3453"
+                                        strokeWidth={2}
+                                        fill="url(#volGradient)"
+                                        activeDot={{ r: 4, strokeWidth: 0, fill: '#cf3453' }}
+                                    />
+                                </AreaChart>
+                            </ResponsiveContainer>
+                        ) : (
+                            <div className="h-full w-full flex items-center justify-center text-[13px] text-muted-foreground border border-dashed border-border/60 rounded-md bg-card/30">
+                                No volume data available
+                            </div>
+                        )}
                     </CardContent>
                 </Card>
 
@@ -198,39 +204,46 @@ export default function TokenAnalyticsPage({ params }: { params: { id: string } 
                     <CardHeader>
                         <CardTitle>Status Codes</CardTitle>
                     </CardHeader>
-                    <CardContent className="h-[300px] flex items-center justify-center">
-                        <ResponsiveContainer width="50%" height="100%">
-                            <PieChart margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
-                                <Pie
-                                    data={finalPieData}
-                                    cx="50%"
-                                    cy="50%"
-                                    innerRadius={60}
-                                    outerRadius={80}
-                                    paddingAngle={4}
-                                    dataKey="value"
-                                    stroke="none"
-                                >
-                                    {finalPieData.map((entry, index) => (
-                                        <Cell key={`cell-${index}`} fill={entry.color} />
+                    <CardContent className="h-[300px] flex flex-col md:flex-row items-center justify-center gap-6">
+                        {finalPieData && finalPieData.length > 0 ? (
+                            <>
+                                <ResponsiveContainer width="100%" height="100%" className="flex-1 min-w-[50%]">
+                                    <PieChart margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
+                                        <Pie
+                                            data={finalPieData}
+                                            cx="50%"
+                                            cy="50%"
+                                            innerRadius={60}
+                                            outerRadius={80}
+                                            paddingAngle={4}
+                                            dataKey="value"
+                                            stroke="none"
+                                        >
+                                            {finalPieData.map((entry, index) => (
+                                                <Cell key={`cell-${index}`} fill={entry.color} />
+                                            ))}
+                                        </Pie>
+                                        <Tooltip content={<CustomTooltip contentStyle={{ backgroundColor: "#161210", borderColor: "#2d2520", color: "#eee9e5" }} />} />
+                                    </PieChart>
+                                </ResponsiveContainer>
+                                <div className="space-y-4">
+                                    {finalPieData.map((entry) => (
+                                        <div key={entry.name} className="flex items-center gap-3">
+                                            <div
+                                                className="h-3 w-3 rounded-full"
+                                                style={{ backgroundColor: entry.color }}
+                                            />
+                                            <span className="text-sm font-mono">{entry.name}</span>
+                                            <span className="text-sm font-bold tabular-nums">{entry.value}</span>
+                                        </div>
                                     ))}
-                                </Pie>
-                                <Tooltip content={<CustomTooltip  contentStyle={{ backgroundColor: "#1A1A1F", borderColor: "#2C2C35", color: "#F0F0F4" }} />} />
-                            </PieChart>
-                        </ResponsiveContainer>
-                        <div className="space-y-4">
-                            {finalPieData.map((entry) => (
-                                <div key={entry.name} className="flex items-center gap-3">
-                                    <div
-                                        className="h-3 w-3 rounded-full"
-                                        style={{ backgroundColor: entry.color }}
-                                    />
-                                    <span className="text-sm font-mono">{entry.name}</span>
-                                    <span className="text-sm font-bold tabular-nums">{entry.value}</span>
                                 </div>
-                            ))}
-                            {finalPieData.length === 0 && <span className="text-[13px] text-muted-foreground">No data available</span>}
-                        </div>
+                            </>
+                        ) : (
+                            <div className="h-full w-full flex items-center justify-center text-[13px] text-muted-foreground border border-dashed border-border/60 rounded-md bg-card/30">
+                                No status data available
+                            </div>
+                        )}
                     </CardContent>
                 </Card>
             </div>

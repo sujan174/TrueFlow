@@ -215,8 +215,8 @@ export default function TokenDetailPage() {
                                 <AreaChart data={usage.hourly}>
                                     <defs>
                                         <linearGradient id="colorCount" x1="0" y1="0" x2="0" y2="1">
-                                            <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
-                                            <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                                            <stop offset="5%" stopColor="#cf3453" stopOpacity={0.3} />
+                                            <stop offset="95%" stopColor="#cf3453" stopOpacity={0} />
                                         </linearGradient>
                                     </defs>
                                     <XAxis dataKey="bucket" hide />
@@ -228,7 +228,7 @@ export default function TokenDetailPage() {
                                         formatter={(value: any) => [value, "Requests"]}
                                         labelFormatter={(label: any) => new Date(label).toLocaleTimeString()}
                                     />
-                                    <Area type="monotone" dataKey="count" stroke="#3b82f6" strokeWidth={2} fillOpacity={1} fill="url(#colorCount)" />
+                                    <Area type="monotone" dataKey="count" stroke="#cf3453" strokeWidth={2} fillOpacity={1} fill="url(#colorCount)" />
                                 </AreaChart>
                             </ResponsiveContainer>
                         </div>
