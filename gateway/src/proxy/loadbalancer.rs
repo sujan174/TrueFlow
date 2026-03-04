@@ -377,11 +377,7 @@ impl LoadBalancer {
                     h.last_failure.map(|lf| {
                         let elapsed = lf.elapsed().as_secs();
                         let default_cooldown = default_recovery_secs();
-                        if elapsed < default_cooldown {
-                            default_cooldown - elapsed
-                        } else {
-                            0
-                        }
+                        default_cooldown.saturating_sub(elapsed)
                     })
                 } else {
                     None

@@ -83,6 +83,7 @@ impl WebhookEvent {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn approval_requested(
         token_id: &str,
         token_name: &str,

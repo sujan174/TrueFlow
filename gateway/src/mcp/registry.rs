@@ -62,6 +62,7 @@ pub struct McpServerState {
     pub auth_type: String,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq)]
 pub enum McpServerStatus {
     Connected,
@@ -76,6 +77,12 @@ pub struct McpRegistry {
     name_index: Arc<RwLock<HashMap<String, Uuid>>>,
     /// Shared OAuth token manager for all OAuth-authed servers.
     oauth_manager: Arc<OAuthTokenManager>,
+}
+
+impl Default for McpRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl McpRegistry {

@@ -11,7 +11,7 @@ use crate::mcp::registry::McpRegistry;
 use crate::mcp::types;
 
 /// Maximum number of tool execution loop iterations to prevent infinite loops.
-const MAX_TOOL_LOOP_ITERATIONS: usize = 10;
+pub const MAX_TOOL_LOOP_ITERATIONS: usize = 10;
 
 /// Extract MCP server names from the `X-MCP-Servers` header.
 /// Format: comma-separated list of server names, e.g., "slack,jira,brave"
@@ -71,7 +71,7 @@ pub fn is_tool_permitted(
     // 2. Check allowlist
     match allowed {
         None => true, // NULL = unrestricted
-        Some(allowed_list) if allowed_list.is_empty() => false, // [] = deny all
+        Some([]) => false, // [] = deny all
         Some(allowed_list) => {
             // Must match at least one pattern
             allowed_list.iter().any(|pattern| {

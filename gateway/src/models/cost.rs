@@ -233,6 +233,7 @@ pub async fn calculate_cost_with_cache(
 
 /// Synchronous version kept for backwards compatibility with non-async call sites.
 /// Uses only the hardcoded fallback table.
+#[allow(dead_code)]
 pub fn calculate_cost(
     provider: &str,
     model: &str,

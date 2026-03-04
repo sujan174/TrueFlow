@@ -95,6 +95,7 @@ impl PayloadStore {
     ///
     /// Returns the object store key (to be stored as `payload_url`).
     /// Callers should only call this when `should_offload()` returns true.
+    #[allow(clippy::too_many_arguments)]
     pub async fn put(
         &self,
         request_id: Uuid,

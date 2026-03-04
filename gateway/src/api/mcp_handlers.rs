@@ -52,6 +52,7 @@ pub struct TestMcpServerResponse {
     pub error: Option<String>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 pub struct DiscoverMcpServerRequest {
     pub endpoint: String,

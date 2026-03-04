@@ -35,6 +35,12 @@ pub struct PrometheusRecorder {
     cache_hit_total: CounterVec,
 }
 
+impl Default for PrometheusRecorder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PrometheusRecorder {
     /// Create and register all metrics in the global Prometheus registry.
     pub fn new() -> Self {

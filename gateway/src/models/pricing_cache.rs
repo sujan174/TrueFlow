@@ -20,6 +20,12 @@ pub struct PricingEntry {
 #[derive(Clone)]
 pub struct PricingCache(Arc<RwLock<Vec<PricingEntry>>>);
 
+impl Default for PricingCache {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PricingCache {
     pub fn new() -> Self {
         Self(Arc::new(RwLock::new(Vec::new())))

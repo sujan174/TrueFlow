@@ -227,10 +227,7 @@ impl McpClient {
         let mut cursor: Option<String> = None;
 
         loop {
-            let params = match &cursor {
-                Some(c) => Some(serde_json::json!({ "cursor": c })),
-                None => None,
-            };
+            let params = cursor.as_ref().map(|c| serde_json::json!({ "cursor": c }));
 
             let result = self.rpc("tools/list", params).await?;
             let page: ListToolsResult = serde_json::from_value(result)
@@ -267,12 +264,14 @@ impl McpClient {
     }
 
     /// Simple health check — attempts initialization.
+    #[allow(dead_code)]
     pub async fn health_check(&self) -> Result<(), String> {
         self.initialize().await?;
         Ok(())
     }
 
     /// Get a reference to the endpoint URL.
+    #[allow(dead_code)]
     pub fn endpoint(&self) -> &str {
         &self.endpoint
     }

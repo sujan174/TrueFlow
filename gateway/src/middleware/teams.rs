@@ -109,6 +109,7 @@ pub async fn check_team_budget(
 
 /// Increment team spend for the current period.
 /// Called after each successful proxied request.
+#[allow(dead_code)]
 pub async fn record_team_spend(
     pool: &sqlx::PgPool,
     team_id: Uuid,
@@ -207,6 +208,7 @@ pub fn check_team_model_access(
 }
 
 /// Merge token tags with team tags. Token tags take precedence.
+#[allow(dead_code)]
 pub fn merge_tags(
     team_tags: &serde_json::Value,
     token_tags: &serde_json::Value,

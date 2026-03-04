@@ -540,11 +540,9 @@ fn remove_body_field_by_path(body: &mut Value, path: &str) {
         if let Some(obj) = body.as_object_mut() {
             obj.remove(parts[0]);
         }
-    } else {
-        if let Some(obj) = body.as_object_mut() {
-            if let Some(child) = obj.get_mut(parts[0]) {
-                remove_body_field_by_path(child, parts[1]);
-            }
+    } else if let Some(obj) = body.as_object_mut() {
+        if let Some(child) = obj.get_mut(parts[0]) {
+            remove_body_field_by_path(child, parts[1]);
         }
     }
 }

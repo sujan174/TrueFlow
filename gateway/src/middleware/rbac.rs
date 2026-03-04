@@ -12,7 +12,7 @@ pub enum Role {
 }
 
 impl Role {
-    #[allow(dead_code)]
+    #[allow(dead_code, clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Self {
         match s.to_lowercase().as_str() {
             "admin" => Role::Admin,

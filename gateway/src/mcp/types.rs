@@ -32,6 +32,7 @@ impl JsonRpcRequest {
 pub struct JsonRpcResponse {
     #[allow(dead_code)]
     pub jsonrpc: String,
+    #[allow(dead_code)]
     pub id: Option<u64>,
     pub result: Option<Value>,
     pub error: Option<JsonRpcError>,
@@ -88,6 +89,7 @@ pub struct ServerCapabilities {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct ToolsCapability {
+    #[allow(dead_code)]
     #[serde(rename = "listChanged")]
     pub list_changed: Option<bool>,
 }

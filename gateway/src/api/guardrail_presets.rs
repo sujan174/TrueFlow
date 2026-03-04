@@ -644,7 +644,7 @@ pub async fn disable_guardrails(
 
     let project_id = auth.default_project_id();
     let prefix = payload.policy_name_prefix
-        .unwrap_or_else(|| format!("guardrails:"));
+        .unwrap_or_else(|| "guardrails:".to_string());
     // Match both old "guardrails-auto-{token_id}" and new "guardrails:{src}:{token_id}" formats
     let token_suffix = format!(":{}", payload.token_id);
 

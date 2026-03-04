@@ -885,10 +885,10 @@ pub async fn create_policy(
     Extension(auth): Extension<AuthContext>,
     Json(payload): Json<CreatePolicyRequest>,
 ) -> impl IntoResponse {
-    if let Err(_) = auth.require_role("admin") {
+    if auth.require_role("admin").is_err() {
         return StatusCode::FORBIDDEN.into_response();
     }
-    if let Err(_) = auth.require_scope("policies:write") {
+    if auth.require_scope("policies:write").is_err() {
         return StatusCode::FORBIDDEN.into_response();
     }
     let project_id = payload.project_id.unwrap_or_else(|| auth.default_project_id());

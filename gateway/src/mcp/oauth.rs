@@ -74,7 +74,9 @@ pub struct CachedToken {
     pub refresh_token: Option<String>,
     pub expires_at: DateTime<Utc>,
     pub token_endpoint: String,
+    #[allow(dead_code)]
     pub client_id: String,
+    #[allow(dead_code)]
     pub client_secret: String,
     pub scopes: Vec<String>,
 }
@@ -86,6 +88,7 @@ impl CachedToken {
     }
 
     /// Returns true if the token is already expired.
+    #[allow(dead_code)]
     pub fn is_expired(&self) -> bool {
         Utc::now() >= self.expires_at
     }
@@ -109,6 +112,12 @@ const MAX_REFRESH_RETRIES: u32 = 3;
 pub struct OAuthTokenManager {
     http: Client,
     cache: Arc<RwLock<HashMap<Uuid, CachedToken>>>,
+}
+
+impl Default for OAuthTokenManager {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl OAuthTokenManager {
@@ -137,10 +146,7 @@ impl OAuthTokenManager {
 
         // Step 1: Try fetching protected resource metadata (RFC 9728)
         let resource_url = format!("{}/.well-known/oauth-protected-resource", base_url);
-        let resource_meta = match self.fetch_json::<ProtectedResourceMetadata>(&resource_url).await {
-            Ok(meta) => Some(meta),
-            Err(_) => None,
-        };
+        let resource_meta = self.fetch_json::<ProtectedResourceMetadata>(&resource_url).await.ok();
 
         // Step 2: Determine authorization server URL
         let as_url = if let Some(ref meta) = resource_meta {

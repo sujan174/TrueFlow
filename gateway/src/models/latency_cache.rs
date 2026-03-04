@@ -12,6 +12,12 @@ use tokio::sync::RwLock;
 #[derive(Clone)]
 pub struct LatencyCache(Arc<RwLock<HashMap<String, f64>>>);
 
+impl Default for LatencyCache {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl LatencyCache {
     pub fn new() -> Self {
         Self(Arc::new(RwLock::new(HashMap::new())))

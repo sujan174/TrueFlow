@@ -211,7 +211,7 @@ async fn store_token(
     .bind(token)
     .bind(pii_type)
     .bind(&envelope_bytes)
-    .bind(&[0u8; 12]) // nonce is embedded in envelope, placeholder for schema compat
+    .bind([0u8; 12]) // nonce is embedded in envelope, placeholder for schema compat
     .bind(project_id)
     .bind(audit_log_id)
     .execute(pool)

@@ -128,7 +128,7 @@ pub async fn realtime_handler(
             .increment(&rl_key, state.config.default_rate_limit_window)
             .await
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-        if count > state.config.default_rate_limit as u64 {
+        if count > state.config.default_rate_limit {
             tracing::warn!(token_id = %token_id, "realtime: rate limit exceeded");
             return Err(StatusCode::TOO_MANY_REQUESTS);
         }
@@ -162,7 +162,7 @@ async fn relay(
     token_id: &str,
     model: &str,
     project_id: uuid::Uuid,
-    state: &Arc<AppState>,
+    _state: &Arc<AppState>,
 ) -> anyhow::Result<()> {
     let session_start = Instant::now();
 
@@ -261,11 +261,6 @@ fn build_realtime_url(base_url: &str, model: &str) -> String {
     // If already pointing at realtime, just add query param
     if base.contains("/v1/realtime") {
         format!("{}?model={}", base, urlencoding::encode(model))
-    } else if base.contains("openai.com")
-        || base.contains("api.groq.com")
-        || base.contains("localhost")
-    {
-        format!("{}/v1/realtime?model={}", base, urlencoding::encode(model))
     } else {
         format!("{}/v1/realtime?model={}", base, urlencoding::encode(model))
     }
@@ -290,14 +285,14 @@ fn axum_to_tungstenite(msg: axum::extract::ws::Message) -> Option<Message> {
 fn tungstenite_to_axum(msg: Message) -> axum::extract::ws::Message {
     use axum::extract::ws::Message as AM;
     match msg {
-        Message::Text(t) => AM::Text(t.into()),
-        Message::Binary(b) => AM::Binary(b.into()),
-        Message::Ping(d) => AM::Ping(d.into()),
-        Message::Pong(d) => AM::Pong(d.into()),
+        Message::Text(t) => AM::Text(t),
+        Message::Binary(b) => AM::Binary(b),
+        Message::Ping(d) => AM::Ping(d),
+        Message::Pong(d) => AM::Pong(d),
         Message::Close(f) => AM::Close(f.map(|cf| axum::extract::ws::CloseFrame {
             code: cf.code.into(),
             reason: cf.reason.to_string().into(),
         })),
-        Message::Frame(_) => AM::Binary(vec![].into()),
+        Message::Frame(_) => AM::Binary(vec![]),
     }
 }

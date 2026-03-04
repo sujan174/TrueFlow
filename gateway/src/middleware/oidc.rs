@@ -248,7 +248,7 @@ pub async fn verify_jwt_signature(
         jwks.keys.iter()
             .find(|k| {
                 k.key_use.as_deref() != Some("enc") &&
-                k.alg.as_deref().map_or(true, |a| a == alg_str)
+                k.alg.as_deref().is_none_or(|a| a == alg_str)
             })
             .ok_or_else(|| anyhow::anyhow!("No suitable JWK found in JWKS"))?
     };

@@ -422,6 +422,7 @@ impl PgStore {
         Ok(id)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn update_policy(
         &self,
         id: Uuid,
@@ -1826,6 +1827,7 @@ pub struct TokenLatencyStat {
 impl PgStore {
     // ── API Keys ─────────────────────────────────────────────────
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn create_api_key(
         &self,
         org_id: Uuid,

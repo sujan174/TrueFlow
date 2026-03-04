@@ -1250,7 +1250,7 @@ pub async fn proxy_handler(
                 audit.emit(&state);
                 return Err(AppError::ApprovalRejected);
             }
-            "expired" | _ => {
+            _ => {
                 hitl_decision = Some("expired".to_string());
                 let mut audit = base_audit(
                     request_id, token.project_id, &token.id, agent_name, method.as_str(), &path,
@@ -1277,8 +1277,7 @@ pub async fn proxy_handler(
     // dynamically resolve the service and use its credential + base_url.
     let service_prefix = "/v1/proxy/services/";
     let (effective_credential_id, effective_upstream_url, effective_path) =
-        if path.starts_with(service_prefix) {
-            let rest = &path[service_prefix.len()..]; // "stripe/v1/charges"
+        if let Some(rest) = path.strip_prefix(service_prefix) {
             let (svc_name, remaining_path) = match rest.find('/') {
                 Some(pos) => (&rest[..pos], &rest[pos..]),         // ("stripe", "/v1/charges")
                 None => (rest, "/"),                                // ("stripe", "/")
@@ -1755,6 +1754,13 @@ pub async fn proxy_handler(
     // Track in-flight requests for least-busy routing
     state.lb.increment_in_flight(&final_upstream_url);
 
+    // Save upstream headers for potential MCP tool loop continuation requests
+    let mcp_upstream_headers = if !mcp_server_names.is_empty() {
+        Some(upstream_headers.clone())
+    } else {
+        None
+    };
+
     // ── FIX(C1): Apply deferred SigV4 signing for Bedrock ──────────────────
     // SigV4 signing requires the final body (for payload hash) and final URL,
     // so it must happen after all body/URL transformations but before sending.
@@ -1788,10 +1794,15 @@ pub async fn proxy_handler(
         }
     }
 
-    // Zero the decrypted key from memory (if credential was injected)
-    if let Some(mut cred) = injected_cred {
-        use zeroize::Zeroize;
-        cred.key.zeroize();
+    // Credential zeroization is deferred until after MCP tool loop (if active)
+    // so that continuation requests can reuse the same auth headers.
+    // If no MCP loop is needed, zeroize immediately.
+    let mut injected_cred = injected_cred;
+    if mcp_server_names.is_empty() {
+        if let Some(ref mut cred) = injected_cred {
+            use zeroize::Zeroize;
+            cred.key.zeroize();
+        }
     }
 
     // -- 5.1 Resolve Retry Config --
@@ -2136,7 +2147,7 @@ pub async fn proxy_handler(
     // requests are handled by the fast path (line 1948) and never reach here.
     if status.is_success() {
         // Non-streaming JSON response: translate to OpenAI format
-        if let Some(parsed) = serde_json::from_slice::<serde_json::Value>(&resp_body_vec).ok() {
+        if let Ok(parsed) = serde_json::from_slice::<serde_json::Value>(&resp_body_vec) {
             if let Some(translated) = proxy::model_router::translate_response(
                 detected_provider,
                 &parsed,
@@ -2160,6 +2171,145 @@ pub async fn proxy_handler(
         }
     }
 
+    // ── MCP Tool Execution Loop (Phase 2) ─────────────────────────────────────
+    // If the LLM response contains MCP tool calls (finish_reason == "tool_calls"),
+    // execute those tools via the MCP registry, build continuation messages,
+    // and re-send to the LLM. Repeat until no more MCP tool calls or max iterations.
+    let mut mcp_loop_iterations: u16 = 0;
+    if !mcp_server_names.is_empty() && status.is_success() {
+        let max_iters = crate::middleware::mcp::MAX_TOOL_LOOP_ITERATIONS;
+
+        for iteration in 0..max_iters {
+            // Parse current response
+            let current_resp: serde_json::Value = match serde_json::from_slice(&resp_body_vec) {
+                Ok(v) => v,
+                Err(_) => break,
+            };
+
+            // Check if LLM wants to call MCP tools
+            if !crate::middleware::mcp::has_mcp_tool_calls(&current_resp) {
+                break;
+            }
+
+            tracing::info!(
+                iteration = iteration,
+                "MCP tool loop: LLM requested tool calls, executing"
+            );
+
+            // Extract and filter tool calls
+            let all_calls = crate::middleware::mcp::extract_mcp_tool_calls(&current_resp);
+            let (permitted, denied) = crate::middleware::mcp::filter_mcp_tool_calls(
+                all_calls,
+                mcp_allowed.as_deref(),
+                mcp_blocked.as_deref(),
+            );
+
+            if permitted.is_empty() && denied.is_empty() {
+                break;
+            }
+
+            // Execute permitted MCP tool calls
+            let tool_messages = crate::middleware::mcp::execute_mcp_tool_calls(
+                &state.mcp_registry,
+                &current_resp,
+            ).await;
+
+            let Some(mut new_messages) = tool_messages else {
+                break;
+            };
+
+            // Add error results for denied tool calls so LLM knows they were blocked
+            for denied_call in &denied {
+                new_messages.push(serde_json::json!({
+                    "role": "tool",
+                    "tool_call_id": denied_call.tool_call_id,
+                    "content": format!("Error: Tool '{}' on server '{}' is blocked by token policy.",
+                        denied_call.tool_name, denied_call.server_name),
+                }));
+            }
+
+            // Build continuation request body
+            let req_body_val = parsed_body.as_ref()
+                .cloned()
+                .unwrap_or(serde_json::json!({"messages": []}));
+            let Some(continuation_body) = crate::middleware::mcp::build_continuation_body(
+                &req_body_val,
+                &new_messages,
+            ) else {
+                tracing::warn!("MCP tool loop: failed to build continuation body");
+                break;
+            };
+
+            // Update parsed_body for the next iteration (so messages accumulate)
+            parsed_body = serde_json::from_slice(&continuation_body).ok();
+
+            // Re-send to the LLM with the same upstream URL and headers
+            let loop_headers = mcp_upstream_headers.clone().unwrap_or_default();
+            let loop_method = reqwest::Method::POST;
+            let no_retry = crate::models::policy::RetryConfig::default();
+
+            let loop_resp = match state.upstream_client.forward(
+                loop_method,
+                &final_upstream_url,
+                loop_headers,
+                bytes::Bytes::from(continuation_body),
+                &no_retry,
+            ).await {
+                Ok(resp) => resp,
+                Err(e) => {
+                    tracing::error!(iteration = iteration, error = %e, "MCP tool loop: upstream request failed");
+                    break;
+                }
+            };
+
+            let loop_status = loop_resp.status();
+            let loop_body = match loop_resp.bytes().await {
+                Ok(b) => b.to_vec(),
+                Err(e) => {
+                    tracing::error!("MCP tool loop: failed to read response body: {}", e);
+                    break;
+                }
+            };
+
+            if !loop_status.is_success() {
+                tracing::warn!(
+                    iteration = iteration,
+                    status = %loop_status,
+                    "MCP tool loop: upstream returned non-success, stopping loop"
+                );
+                resp_body_vec = loop_body;
+                break;
+            }
+
+            // Translate response if non-OpenAI provider
+            resp_body_vec = if let Ok(parsed) = serde_json::from_slice::<serde_json::Value>(&loop_body) {
+                if let Some(translated) = proxy::model_router::translate_response(
+                    detected_provider, &parsed, &detected_model,
+                ) {
+                    serde_json::to_vec(&translated).unwrap_or(loop_body)
+                } else {
+                    loop_body
+                }
+            } else {
+                loop_body
+            };
+
+            mcp_loop_iterations = (iteration + 1) as u16;
+        }
+
+        // Zeroize credential now that MCP loop is done
+        if let Some(ref mut cred) = injected_cred {
+            use zeroize::Zeroize;
+            cred.key.zeroize();
+        }
+
+        if mcp_loop_iterations > 0 {
+            tracing::info!(
+                iterations = mcp_loop_iterations,
+                "MCP tool loop completed"
+            );
+        }
+    }
 
     let parsed_resp_body: Option<serde_json::Value> = serde_json::from_slice(&resp_body_vec).ok();
 
@@ -2542,10 +2692,10 @@ pub async fn proxy_handler(
 
     // ── Phase 5: LLM Observability extraction ─────────────────
     let llm_tool_calls = parsed_resp_body.as_ref()
-        .map(|body| crate::models::llm::extract_tool_calls_from_value(body))
+        .map(crate::models::llm::extract_tool_calls_from_value)
         .unwrap_or_default();
     let llm_finish_reason = parsed_resp_body.as_ref()
-        .and_then(|body| crate::models::llm::extract_finish_reason_from_value(body));
+        .and_then(crate::models::llm::extract_finish_reason_from_value);
     let llm_error_type = if !status.is_success() {
         let body_str = parsed_resp_body.as_ref()
             .map(|v| v.to_string())
@@ -2945,6 +3095,7 @@ impl AuditBuilder {
 }
 
 /// Helper to create a pre-populated AuditBuilder from shared request context.
+#[allow(clippy::too_many_arguments)]
 fn base_audit(
     req_id: Uuid,
     project_id: Uuid,
@@ -3096,7 +3247,7 @@ fn is_safe_webhook_url(url_str: &str) -> bool {
                     // Link-local (fe80::/10)
                     || (v6.segments()[0] & 0xffc0) == 0xfe80
                     // IPv4-mapped (::ffff:x.x.x.x) — check the embedded v4
-                    || v6.to_ipv4_mapped().map_or(false, |v4| {
+                    || v6.to_ipv4_mapped().is_some_and(|v4| {
                         v4.is_loopback() || v4.is_private() || v4.is_link_local()
                             || v4.is_unspecified()
                             || (v4.octets()[0] == 169 && v4.octets()[1] == 254)

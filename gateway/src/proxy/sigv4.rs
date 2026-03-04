@@ -90,6 +90,7 @@ fn derive_signing_key(secret: &str, date_stamp: &str, region: &str, service: &st
 /// * `secret_key` — AWS secret access key
 /// * `region` — AWS region (e.g. "us-east-1")
 /// * `service` — AWS service name (e.g. "bedrock")
+#[allow(clippy::too_many_arguments)]
 pub fn sign_request(
     method: &str,
     url: &str,

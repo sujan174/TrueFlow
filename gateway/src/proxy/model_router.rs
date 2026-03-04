@@ -406,10 +406,10 @@ fn openai_to_anthropic_request(body: &Value) -> Value {
                                             .unwrap_or("");
                                         if url.starts_with("data:") {
                                             // Base64 data URI → Anthropic base64 source block
-                                            let mime = url.split(';').next()
-                                                .and_then(|s| s.strip_prefix("data:"))
+                                            let mime = url.split_once(';')
+                                                .and_then(|(prefix, _)| prefix.strip_prefix("data:"))
                                                 .unwrap_or("image/jpeg");
-                                            let data = url.splitn(2, ',').nth(1).unwrap_or("");
+                                            let data = url.split_once(',').map(|(_, d)| d).unwrap_or("");
                                             json!({
                                                 "type": "image",
                                                 "source": {
@@ -625,10 +625,10 @@ fn translate_content_to_gemini_parts(content: Option<&Value>) -> Vec<Value> {
                         .unwrap_or("");
                     if url.starts_with("data:") {
                         // data:image/jpeg;base64,<data> → Gemini inlineData
-                        let mime = url.split(';').next()
-                            .and_then(|s| s.strip_prefix("data:"))
+                        let mime = url.split_once(';')
+                            .and_then(|(prefix, _)| prefix.strip_prefix("data:"))
                             .unwrap_or("image/jpeg");
-                        let data = url.splitn(2, ',').nth(1).unwrap_or("");
+                        let data = url.split_once(',').map(|(_, d)| d).unwrap_or("");
                         json!({"inlineData": {"mimeType": mime, "data": data}})
                     } else {
                         // HTTP URL → Gemini fileData
@@ -901,6 +901,7 @@ fn gemini_to_openai_response(body: &Value, model: &str) -> Value {
 /// Translate an entire SSE response body from a non-OpenAI provider
 /// into OpenAI-compatible `chat.completion.chunk` SSE events.
 /// Returns `None` if no translation is needed (OpenAI/Unknown).
+#[allow(dead_code)]
 pub fn translate_sse_body(provider: Provider, body: &[u8], model: &str) -> Option<Vec<u8>> {
     match provider {
         Provider::Anthropic => Some(translate_anthropic_sse_to_openai(body, model)),
@@ -1274,7 +1275,7 @@ pub fn normalize_error_response(provider: Provider, body: &[u8]) -> Option<serde
                 .unwrap_or("api_error");
             // Convert AWS exception type to snake_case
             let normalized_type = err_type
-                .split('#').last().unwrap_or(err_type)
+                .rsplit_once('#').map(|(_, s)| s).unwrap_or(err_type)
                 .replace("Exception", "")
                 .chars()
                 .enumerate()
@@ -1454,13 +1455,13 @@ fn translate_openai_content_to_bedrock(content: Option<&Value>) -> Vec<Value> {
                         .unwrap_or("");
                     if url.starts_with("data:") {
                         // Base64 data URI → Bedrock image block
-                        let mime = url.split(';').next()
-                            .and_then(|s| s.strip_prefix("data:"))
+                        let mime = url.split_once(';')
+                            .and_then(|(prefix, _)| prefix.strip_prefix("data:"))
                             .unwrap_or("image/jpeg");
-                        let data = url.splitn(2, ',').nth(1).unwrap_or("");
+                        let data = url.split_once(',').map(|(_, d)| d).unwrap_or("");
                         json!({
                             "image": {
-                                "format": mime.split('/').last().unwrap_or("jpeg"),
+                                "format": mime.rsplit_once('/').map(|(_, s)| s).unwrap_or("jpeg"),
                                 "source": {"bytes": data}
                             }
                         })
@@ -1723,6 +1724,7 @@ pub fn decode_bedrock_event_stream(data: &[u8]) -> Vec<(String, Value)> {
 
 /// Translate decoded Bedrock event stream events into OpenAI SSE format.
 /// This works on the raw binary bytes of the event stream.
+#[allow(dead_code)]
 fn translate_bedrock_event_stream_to_openai(body: &[u8], model: &str) -> Vec<u8> {
     let events = decode_bedrock_event_stream(body);
     let chunk_id = format!("chatcmpl-{}", uuid::Uuid::new_v4().simple());

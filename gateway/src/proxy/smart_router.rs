@@ -39,6 +39,7 @@ static RR_COUNTERS: std::sync::LazyLock<dashmap::DashMap<String, Arc<AtomicU64>>
 /// for `token_id` is skipped. If all targets are unhealthy, `fallback` is used.
 /// If fallback is also None, returns None (caller should let the request proceed
 /// with the original model/upstream as a last-resort fail-open).
+#[allow(clippy::too_many_arguments)]
 pub async fn select_route(
     strategy: &RoutingStrategy,
     pool: &[RouteTarget],
