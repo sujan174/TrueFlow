@@ -34,7 +34,7 @@ function cacheKey(
  *
  * @example
  * ```ts
- * const admin = AILinkClient.admin({ adminKey: "..." });
+ * const admin = TrueFlowClient.admin({ adminKey: "..." });
  *
  * // Create a prompt
  * const prompt = await admin.prompts.create({ name: "Customer Support Agent" });

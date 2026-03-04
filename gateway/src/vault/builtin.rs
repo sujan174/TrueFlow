@@ -174,7 +174,7 @@ fn generate_nonce() -> [u8; 12] {
 pub fn parse_master_key(hex: &str) -> anyhow::Result<[u8; 32]> {
     if hex.len() != 64 {
         anyhow::bail!(
-            "AILINK_MASTER_KEY must be 64 hex chars (32 bytes), got {} chars",
+            "TRUEFLOW_MASTER_KEY must be 64 hex chars (32 bytes), got {} chars",
             hex.len()
         );
     }

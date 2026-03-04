@@ -1,4 +1,4 @@
-//! Langfuse trace exporter for AILink Gateway.
+//! Langfuse trace exporter for TrueFlow Gateway.
 //!
 //! Sends LLM generation traces to Langfuse's ingestion API.
 //! Supports batching (up to 50 events per flush, every 5 seconds).
@@ -190,7 +190,7 @@ impl LangfuseExporter {
             name: entry
                 .agent_name
                 .clone()
-                .unwrap_or_else(|| "ailink-proxy".to_string()),
+                .unwrap_or_else(|| "trueflow-proxy".to_string()),
             session_id: entry.session_id.clone(),
             user_id: entry.user_id.clone(),
             metadata: entry.custom_properties.clone(),

@@ -151,7 +151,7 @@ fn hmac_sha256_hex(secret: &str, payload: &[u8]) -> String {
 
 /// Dispatches webhook events to one or more configured URLs.
 /// Supports:
-/// - HMAC-SHA256 signing (X-AILink-Signature header)
+/// - HMAC-SHA256 signing (X-TrueFlow-Signature header)
 /// - Up to 3 retries with exponential back-off (1s → 5s → 25s)
 #[derive(Clone)]
 pub struct WebhookNotifier {
@@ -163,7 +163,7 @@ impl WebhookNotifier {
         Self {
             client: reqwest::Client::builder()
                 .timeout(Duration::from_secs(10))
-                .user_agent("AILink-Webhook/1.0")
+                .user_agent("TrueFlow-Webhook/1.0")
                 .build()
                 .expect("failed to build webhook HTTP client"),
         }
@@ -172,7 +172,7 @@ impl WebhookNotifier {
     /// Send a signed webhook event to a single URL with retry.
     ///
     /// If `signing_secret` is `Some`, the request body is signed with HMAC-SHA256
-    /// and the signature is sent in the `X-AILink-Signature` header.
+    /// and the signature is sent in the `X-TrueFlow-Signature` header.
     ///
     /// Retries up to 3 times on failure with exponential back-off.
     /// Returns `Ok(())` if delivery succeeded on any attempt.
@@ -207,12 +207,12 @@ impl WebhookNotifier {
                 .client
                 .post(url)
                 .header("content-type", "application/json")
-                .header("x-ailink-delivery-id", &delivery_id)
-                .header("x-ailink-timestamp", &timestamp)
-                .header("x-ailink-event", &event.event_type);
+                .header("x-trueflow-delivery-id", &delivery_id)
+                .header("x-trueflow-timestamp", &timestamp)
+                .header("x-trueflow-event", &event.event_type);
 
             if let Some(ref sig) = signature {
-                req = req.header("x-ailink-signature", sig.as_str());
+                req = req.header("x-trueflow-signature", sig.as_str());
             }
 
             let result = req

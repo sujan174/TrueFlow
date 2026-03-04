@@ -1,7 +1,7 @@
 """
 Feature 10: Fine-tuning API resource.
 
-Proxies requests to OpenAI's /v1/fine_tuning endpoint through the AILink
+Proxies requests to OpenAI's /v1/fine_tuning endpoint through the TrueFlow
 gateway, with credential injection, audit logging, and policy enforcement.
 """
 
@@ -12,14 +12,14 @@ from typing import TYPE_CHECKING, Any, Dict, Optional
 from ..exceptions import raise_for_status
 
 if TYPE_CHECKING:
-    from ..client import AIlinkClient, AsyncClient
+    from ..client import TrueFlowClient, AsyncClient
 
 
 class FineTuningResource:
     """Synchronous Fine-tuning API resource.
 
     Exposes the same interface as the OpenAI SDK's ``client.fine_tuning.jobs``
-    resource. All requests are routed through the AILink gateway.
+    resource. All requests are routed through the TrueFlow gateway.
 
     Example::
 
@@ -30,7 +30,7 @@ class FineTuningResource:
         print(job["id"], job["status"])
     """
 
-    def __init__(self, client: "AIlinkClient") -> None:
+    def __init__(self, client: "TrueFlowClient") -> None:
         self._client = client
 
     # ── Jobs ──────────────────────────────────────────────────

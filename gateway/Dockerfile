@@ -1,7 +1,7 @@
 # ── Build Stage ───────────────────────────────────────────────────────────────
 FROM rust:1.88-bookworm AS builder
 
-WORKDIR /usr/src/ailink
+WORKDIR /usr/src/trueflow
 
 # Install build deps (cached layer)
 RUN apt-get update && apt-get install -y pkg-config libssl-dev && rm -rf /var/lib/apt/lists/*
@@ -22,7 +22,7 @@ RUN rm -rf src
 # Copy real source and rebuild (only the app crate recompiles, deps are cached)
 COPY . .
 ENV SQLX_OFFLINE=true
-RUN touch src/main.rs && cargo build --release --bin ailink
+RUN touch src/main.rs && cargo build --release --bin trueflow
 
 # ── Runtime Stage ─────────────────────────────────────────────────────────────
 FROM debian:bookworm-slim
@@ -36,15 +36,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 # Copy binary + migrations from builder
-COPY --from=builder /usr/src/ailink/target/release/ailink /app/ailink
-COPY --from=builder /usr/src/ailink/migrations /app/migrations
+COPY --from=builder /usr/src/trueflow/target/release/trueflow /app/trueflow
+COPY --from=builder /usr/src/trueflow/migrations /app/migrations
 
 # Non-root user
-RUN useradd -m ailink
-USER ailink
+RUN useradd -m trueflow
+USER trueflow
 
 EXPOSE 8443
 
 # Disable core dumps to prevent key leakage
 ENV MALLOC_TRIM_THRESHOLD_=0
-CMD ["sh", "-c", "ulimit -c 0 && exec ./ailink serve"]
+CMD ["sh", "-c", "ulimit -c 0 && exec ./trueflow serve"]

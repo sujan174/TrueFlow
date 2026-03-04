@@ -4,7 +4,7 @@ use axum::Json;
 use serde_json::{json, Value};
 use thiserror::Error;
 
-/// Canonical error body emitted by every AILink endpoint.
+/// Canonical error body emitted by every TrueFlow endpoint.
 ///
 /// Shape:
 /// ```json
@@ -98,14 +98,14 @@ impl AppError {
                 StatusCode::UNAUTHORIZED,
                 "authentication_error",
                 "token_not_found",
-                "Invalid or missing API token. Ensure AILINK_API_KEY is set correctly.".to_string(),
+                "Invalid or missing API token. Ensure TRUEFLOW_API_KEY is set correctly.".to_string(),
                 None,
             ),
             AppError::TokenRevoked => (
                 StatusCode::UNAUTHORIZED,
                 "authentication_error",
                 "token_revoked",
-                "This token has been revoked. Create a new one at your AILink dashboard.".to_string(),
+                "This token has been revoked. Create a new one at your TrueFlow dashboard.".to_string(),
                 None,
             ),
             AppError::CredentialMissing => (

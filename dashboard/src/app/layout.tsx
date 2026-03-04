@@ -20,8 +20,8 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "AIlink Dashboard",
-  description: "Manage tokens, approvals, and audit logs for the AIlink Gateway",
+  title: "TrueFlow Dashboard",
+  description: "Manage tokens, approvals, and audit logs for the TrueFlow Gateway",
 };
 
 export default function RootLayout({

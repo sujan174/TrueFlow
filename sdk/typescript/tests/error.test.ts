@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-    AILinkError,
+    TrueFlowError,
     AuthenticationError,
     AccessDeniedError,
     PolicyDeniedError,
@@ -32,28 +32,28 @@ function mockResponse(
 // ── Tests ────────────────────────────────────────────────────────────────
 
 describe("Error hierarchy", () => {
-    it("base AILinkError has all properties", () => {
-        const e = new AILinkError("oops", { statusCode: 500, errorType: "t", code: "c", requestId: "r" });
+    it("base TrueFlowError has all properties", () => {
+        const e = new TrueFlowError("oops", { statusCode: 500, errorType: "t", code: "c", requestId: "r" });
         expect(e.message).toBe("oops");
         expect(e.statusCode).toBe(500);
         expect(e.errorType).toBe("t");
         expect(e.code).toBe("c");
         expect(e.requestId).toBe("r");
-        expect(e.name).toBe("AILinkError");
+        expect(e.name).toBe("TrueFlowError");
         expect(e).toBeInstanceOf(Error);
     });
 
-    it("subclasses are instanceof AILinkError", () => {
-        expect(new AuthenticationError("x")).toBeInstanceOf(AILinkError);
-        expect(new AccessDeniedError("x")).toBeInstanceOf(AILinkError);
+    it("subclasses are instanceof TrueFlowError", () => {
+        expect(new AuthenticationError("x")).toBeInstanceOf(TrueFlowError);
+        expect(new AccessDeniedError("x")).toBeInstanceOf(TrueFlowError);
         expect(new PolicyDeniedError("x")).toBeInstanceOf(AccessDeniedError);
         expect(new ContentBlockedError("x")).toBeInstanceOf(AccessDeniedError);
-        expect(new NotFoundError("x")).toBeInstanceOf(AILinkError);
-        expect(new RateLimitError("x")).toBeInstanceOf(AILinkError);
-        expect(new ValidationError("x")).toBeInstanceOf(AILinkError);
-        expect(new PayloadTooLargeError("x")).toBeInstanceOf(AILinkError);
-        expect(new SpendCapError("x")).toBeInstanceOf(AILinkError);
-        expect(new GatewayError("x")).toBeInstanceOf(AILinkError);
+        expect(new NotFoundError("x")).toBeInstanceOf(TrueFlowError);
+        expect(new RateLimitError("x")).toBeInstanceOf(TrueFlowError);
+        expect(new ValidationError("x")).toBeInstanceOf(TrueFlowError);
+        expect(new PayloadTooLargeError("x")).toBeInstanceOf(TrueFlowError);
+        expect(new SpendCapError("x")).toBeInstanceOf(TrueFlowError);
+        expect(new GatewayError("x")).toBeInstanceOf(TrueFlowError);
     });
 
     it("RateLimitError has retryAfter", () => {
@@ -70,7 +70,7 @@ describe("Error hierarchy", () => {
     });
 
     it("defaults optional fields to empty strings", () => {
-        const e = new AILinkError("oops");
+        const e = new TrueFlowError("oops");
         expect(e.statusCode).toBeUndefined();
         expect(e.errorType).toBe("");
         expect(e.code).toBe("");
@@ -150,9 +150,9 @@ describe("raiseForStatus", () => {
         await expect(raiseForStatus(res)).rejects.toThrow(GatewayError);
     });
 
-    it("throws AILinkError for other 4xx codes", async () => {
+    it("throws TrueFlowError for other 4xx codes", async () => {
         const res = mockResponse(418, "I'm a teapot");
-        await expect(raiseForStatus(res)).rejects.toThrow(AILinkError);
+        await expect(raiseForStatus(res)).rejects.toThrow(TrueFlowError);
     });
 
     it("uses x-request-id header when body has no request_id", async () => {

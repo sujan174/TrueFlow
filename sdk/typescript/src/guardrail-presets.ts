@@ -3,7 +3,7 @@
  *
  * @example
  * ```ts
- * import { PRESET_PROMPT_INJECTION, PRESET_PII_ENTERPRISE } from "@ailink/sdk";
+ * import { PRESET_PROMPT_INJECTION, PRESET_PII_ENTERPRISE } from "@trueflow/sdk";
  *
  * await admin.guardrails.enable("tok_abc", [PRESET_PROMPT_INJECTION, PRESET_PII_ENTERPRISE]);
  * ```

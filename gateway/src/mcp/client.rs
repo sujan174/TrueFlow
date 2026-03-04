@@ -197,7 +197,7 @@ impl McpClient {
             protocol_version: "2025-06-18".to_string(),
             capabilities: ClientCapabilities {},
             client_info: Implementation {
-                name: "ailink-gateway".to_string(),
+                name: "trueflow-gateway".to_string(),
                 version: env!("CARGO_PKG_VERSION").to_string(),
             },
         })

@@ -2,7 +2,7 @@
 
 Run A/B experiments to compare models, prompts, or routing strategies::
 
-    admin = AIlinkClient.admin(admin_key="...")
+    admin = TrueFlowClient.admin(admin_key="...")
 
     # Create an experiment
     exp = admin.experiments.create(

@@ -368,7 +368,7 @@ mod webhook_tests {
 mod config_tests {
     #[test]
     fn test_webhook_urls_parsing_empty() {
-        // Simulates AILINK_WEBHOOK_URLS not set
+        // Simulates TRUEFLOW_WEBHOOK_URLS not set
         let urls: Vec<String> = ""
             .split(',')
             .map(str::trim)

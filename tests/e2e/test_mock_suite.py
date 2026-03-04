@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-AILink Mock-Based Integration Test Suite
+TrueFlow Mock-Based Integration Test Suite
 =========================================
 Covers all features NOT tested by test_realworld_suite.py, using the local
 mock-upstream server (tests/mock-upstream/server.py, port 9000) instead of
@@ -12,7 +12,7 @@ Start the mock before running:
 Then:
     python3 scripts/test_mock_suite.py
 
-The gateway must be running (docker compose up ailink) and able to reach
+The gateway must be running (docker compose up trueflow) and able to reach
 host.docker.internal:9000 (Mac Docker networking default).
 
 Features tested (150+ tests across 49 phases):
@@ -75,16 +75,16 @@ from typing import Optional
 import httpx
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "..", "sdk", "python"))
-from ailink import AIlinkClient
+from trueflow import TrueFlowClient
 
 # ── Config ────────────────────────────────────────────────────
 
-GATEWAY_URL  = os.getenv("AILINK_GATEWAY_URL", "http://localhost:8443")
-ADMIN_KEY    = os.getenv("AILINK_ADMIN_KEY",   "ailink-admin-test")
+GATEWAY_URL  = os.getenv("TRUEFLOW_GATEWAY_URL", "http://localhost:8443")
+ADMIN_KEY    = os.getenv("TRUEFLOW_ADMIN_KEY",   "trueflow-admin-test")
 # URL the **gateway container** uses to reach the mock (host.docker.internal on Mac)
-MOCK_GATEWAY = os.getenv("AILINK_MOCK_URL",    "http://host.docker.internal:9000")
+MOCK_GATEWAY = os.getenv("TRUEFLOW_MOCK_URL",    "http://host.docker.internal:9000")
 # URL the **test runner** uses to reach the mock (local)
-MOCK_LOCAL   = os.getenv("AILINK_MOCK_LOCAL",  "http://localhost:9000")
+MOCK_LOCAL   = os.getenv("TRUEFLOW_MOCK_LOCAL",  "http://localhost:9000")
 
 RUN_ID = str(uuid.uuid4())[:8]
 
@@ -133,13 +133,13 @@ def gw(method, path, token=None, **kwargs):
     if token:
         headers["Authorization"] = f"Bearer {token}"
     headers.setdefault("Content-Type", "application/json")
-    headers.setdefault("User-Agent", "AILink-MockTest/1.0")
+    headers.setdefault("User-Agent", "TrueFlow-MockTest/1.0")
     return httpx.request(method, f"{GATEWAY_URL}{path}", headers=headers,
                          timeout=kwargs.pop("timeout", 30), **kwargs)
 
 
 def mock(method, path, **kwargs):
-    """Direct call to the mock upstream (bypasses AILink)."""
+    """Direct call to the mock upstream (bypasses TrueFlow)."""
     return httpx.request(method, f"{MOCK_LOCAL}{path}", timeout=15, **kwargs)
 
 
@@ -150,10 +150,10 @@ def chat(token_id: str, prompt: str, model: str = "gpt-4o", **extra):
 
 # ── Shared setup ──────────────────────────────────────────────
 
-admin = AIlinkClient.admin(admin_key=ADMIN_KEY, gateway_url=GATEWAY_URL)
+admin = TrueFlowClient.admin(admin_key=ADMIN_KEY, gateway_url=GATEWAY_URL)
 
 print("╔══════════════════════════════════════════════════════════════════╗")
-print("║        AILink Mock-Based Integration Test Suite v1              ║")
+print("║        TrueFlow Mock-Based Integration Test Suite v1              ║")
 print(f"║        Run: {RUN_ID}   Gateway: {GATEWAY_URL:<28s} ║")
 print(f"║        Mock: {MOCK_GATEWAY:<51s} ║")
 print("╚══════════════════════════════════════════════════════════════════╝")
@@ -960,17 +960,17 @@ def _transform_tok(ops: list) -> str:
 
 
 def t9_append_system_prompt():
-    tok = _transform_tok([{"type": "append_system_prompt", "text": "Always reply with AILINK."}])
+    tok = _transform_tok([{"type": "append_system_prompt", "text": "Always reply with TRUEFLOW."}])
     r = chat(tok, "Say hello.", model="gpt-4o")
     assert r.status_code == 200
     debug = r.json().get("_debug", {})
     received_body = debug.get("received_body", {})
     messages = received_body.get("messages", [])
     system_msgs = [m for m in messages if m.get("role") == "system"]
-    assert any("AILINK" in (m.get("content") or "") for m in system_msgs), (
-        f"AppendSystemPrompt: 'AILINK' not found in system messages: {system_msgs}"
+    assert any("TRUEFLOW" in (m.get("content") or "") for m in system_msgs), (
+        f"AppendSystemPrompt: 'TRUEFLOW' not found in system messages: {system_msgs}"
     )
-    return f"AppendSystemPrompt: verified 'AILINK' in system message upstream ✓"
+    return f"AppendSystemPrompt: verified 'TRUEFLOW' in system message upstream ✓"
 
 
 def t9_prepend_system_prompt():
@@ -988,17 +988,17 @@ def t9_prepend_system_prompt():
 
 
 def t9_set_header():
-    tok = _transform_tok([{"type": "set_header", "name": "X-Custom-Header", "value": "ailink-test"}])
+    tok = _transform_tok([{"type": "set_header", "name": "X-Custom-Header", "value": "trueflow-test"}])
     r = chat(tok, "header test", model="gpt-4o")
     assert r.status_code == 200
     debug = r.json().get("_debug", {})
     received = debug.get("received_headers", {})
     # Headers are case-insensitive; check lowercase
     header_val = received.get("x-custom-header", "")
-    assert header_val == "ailink-test", (
-        f"SetHeader: expected 'ailink-test', got '{header_val}'. Headers: {list(received.keys())}"
+    assert header_val == "trueflow-test", (
+        f"SetHeader: expected 'trueflow-test', got '{header_val}'. Headers: {list(received.keys())}"
     )
-    return f"SetHeader: verified x-custom-header='ailink-test' upstream ✓"
+    return f"SetHeader: verified x-custom-header='trueflow-test' upstream ✓"
 
 
 def t9_remove_header():
@@ -1437,27 +1437,27 @@ def t14_cache_bypass_high_temp():
 
 
 def t14_cache_opt_out():
-    """x-ailink-no-cache: true header MUST bypass caching."""
+    """x-trueflow-no-cache: true header MUST bypass caching."""
     payload = {
         "model": "gpt-4o",
         "messages": [{"role": "user", "content": f"no-cache-{RUN_ID}"}],
         "temperature": 0,
     }
-    headers = {"x-ailink-no-cache": "true"}
+    headers = {"x-trueflow-no-cache": "true"}
     r1 = gw("POST", "/v1/chat/completions", token=_openai_tok, json=payload, headers=headers)
     time.sleep(0.2)
     r2 = gw("POST", "/v1/chat/completions", token=_openai_tok, json=payload, headers=headers)
     assert r1.status_code == 200 and r2.status_code == 200
     id1, id2 = r1.json().get("id"), r2.json().get("id")
     assert id1 != id2, (
-        f"x-ailink-no-cache header MUST bypass cache. Both returned id={id1}"
+        f"x-trueflow-no-cache header MUST bypass cache. Both returned id={id1}"
     )
     return f"No-cache opt-out: different IDs ✓"
 
 
 test("Response cache: identical request → cache hit", t14_cache_hit)
 test("Response cache: high temperature → bypass", t14_cache_bypass_high_temp)
-test("Response cache: x-ailink-no-cache opt-out", t14_cache_opt_out)
+test("Response cache: x-trueflow-no-cache opt-out", t14_cache_opt_out)
 
 # ═══════════════════════════════════════════════════════════════
 #  Phase 15 — RateLimit Policy
@@ -3488,7 +3488,7 @@ def t26_prometheus_has_request_counter():
     assert r.status_code == 200
     text = r.text
     has_counter = any(kw in text for kw in [
-        "ailink_requests_total",
+        "trueflow_requests_total",
         "http_requests_total",
         "requests_total",
         "proxy_requests",

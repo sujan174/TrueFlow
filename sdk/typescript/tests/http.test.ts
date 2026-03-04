@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { HttpClient } from "../src/http.js";
-import { AILinkError, GatewayError, RateLimitError } from "../src/error.js";
+import { TrueFlowError, GatewayError, RateLimitError } from "../src/error.js";
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -54,7 +54,7 @@ describe("HttpClient", () => {
         const callOpts = fetchSpy.mock.calls[0]?.[1] as RequestInit;
         const headers = callOpts.headers as Record<string, string>;
         expect(headers["Authorization"]).toBe("Bearer tok_test");
-        expect(headers["X-AILink-SDK-Version"]).toBeDefined();
+        expect(headers["X-TrueFlow-SDK-Version"]).toBeDefined();
         expect(headers["Content-Type"]).toBe("application/json");
     });
 
@@ -69,7 +69,7 @@ describe("HttpClient", () => {
 
     it("throws typed error for 4xx responses", async () => {
         fetchSpy.mockResolvedValueOnce(errorResponse(404, { message: "not found" }));
-        await expect(client.get("/api/missing")).rejects.toThrow(AILinkError);
+        await expect(client.get("/api/missing")).rejects.toThrow(TrueFlowError);
     });
 
     it("retries on 5xx and eventually throws", async () => {

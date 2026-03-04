@@ -1,22 +1,22 @@
-# AILink Python SDK
+# TrueFlow Python SDK
 
 > Drop-in replacement for OpenAI, Anthropic, and Gemini with policy enforcement, audit logging, and spend tracking.
 
 ```bash
-pip install ailink
+pip install trueflow
 ```
 
 ---
 
 ## Quick Start — OpenAI Drop-In
 
-AILink is a **drop-in replacement** for any OpenAI-compatible endpoint. Point your existing SDK at the gateway and use any model — OpenAI, Anthropic Claude, or Google Gemini — with the same API.
+TrueFlow is a **drop-in replacement** for any OpenAI-compatible endpoint. Point your existing SDK at the gateway and use any model — OpenAI, Anthropic Claude, or Google Gemini — with the same API.
 
 ```python
-from ailink import AIlinkClient
+from trueflow import TrueFlowClient
 
 # One line to get a policy-enforced, audited OpenAI client
-client = AIlinkClient(api_key="ailink_v1_...", gateway_url="https://gateway.ailink.dev")
+client = TrueFlowClient(api_key="tf_v1_...", gateway_url="https://gateway.trueflow.dev")
 oai = client.openai()
 
 # Use exactly like openai.Client — no other changes needed
@@ -63,9 +63,9 @@ for chunk in stream:
 ## Async
 
 ```python
-from ailink import AsyncClient
+from trueflow import AsyncClient
 
-async with AsyncClient(api_key="ailink_v1_...", gateway_url="https://gateway.ailink.dev") as client:
+async with AsyncClient(api_key="tf_v1_...", gateway_url="https://gateway.trueflow.dev") as client:
     oai = client.openai()
     response = await oai.chat.completions.create(
         model="gpt-4o",
@@ -119,12 +119,12 @@ async with client.realtime("gpt-4o-realtime-preview") as ws:
 
 ## Action Gateway (API Proxy)
 
-Use the `AIlinkClient` to proxy requests to any REST API:
+Use the `TrueFlowClient` to proxy requests to any REST API:
 
 ```python
-client = AIlinkClient(
-    api_key="ailink_v1_proj_abc123_tok_def456",
-    gateway_url="https://gateway.ailink.dev",
+client = TrueFlowClient(
+    api_key="tf_v1_proj_abc123_tok_def456",
+    gateway_url="https://gateway.trueflow.dev",
     agent_name="billing-agent",  # shows up in audit logs
 )
 
@@ -146,10 +146,10 @@ charge = client.post("/v1/charges", json={
 ### LangChain
 
 ```python
-from ailink.integrations import langchain_tool
+from trueflow.integrations import langchain_tool
 
 stripe_tool = langchain_tool(
-    token="ailink_v1_proj_abc123_tok_stripe",
+    token="tf_v1_proj_abc123_tok_stripe",
     name="stripe_api",
     description="Make Stripe API calls for billing operations",
     methods=["GET", "POST"],
@@ -162,10 +162,10 @@ agent = create_react_agent(llm, tools=[stripe_tool])
 ### CrewAI
 
 ```python
-from ailink.integrations import crewai_tool
+from trueflow.integrations import crewai_tool
 
 github_tool = crewai_tool(
-    token="ailink_v1_proj_abc123_tok_github",
+    token="tf_v1_proj_abc123_tok_github",
     name="github_api",
     description="Interact with GitHub repositories",
 )
@@ -220,7 +220,7 @@ response = client.post(
 ## Error Handling
 
 ```python
-from ailink import AIlinkError, PolicyDeniedError, ApprovalTimeoutError
+from trueflow import TrueFlowError, PolicyDeniedError, ApprovalTimeoutError
 
 try:
     response = client.post("/v1/charges", json={"amount": 5000})
@@ -228,7 +228,7 @@ except PolicyDeniedError as e:
     print(f"Blocked by policy: {e.policy_name} — {e.reason}")
 except ApprovalTimeoutError as e:
     print(f"Approval timed out after {e.timeout}s")
-except AIlinkError as e:
+except TrueFlowError as e:
     print(f"Gateway error: {e}")
 ```
 
@@ -241,11 +241,11 @@ except AIlinkError as e:
 response = client.post(
     "/v1/chat/completions",
     json={...},
-    headers={"x-ailink-no-cache": "true"}
+    headers={"x-trueflow-no-cache": "true"}
 )
 ```
 
-Cache hits are indicated by `x-ailink-cache: HIT` in the response headers.
+Cache hits are indicated by `x-trueflow-cache: HIT` in the response headers.
 
 ---
 
@@ -260,16 +260,16 @@ Cache hits are indicated by `x-ailink-cache: HIT` in the response headers.
 
 ```python
 import os, openai
-from ailink import AIlinkClient
+from trueflow import TrueFlowClient
 
-client       = AIlinkClient(api_key="ailink_v1_...")
+client       = TrueFlowClient(api_key="tf_v1_...")
 fallback_oai = openai.OpenAI(api_key=os.environ["OPENAI_API_KEY"])
 
 if client.is_healthy():
     oai = client.openai()
 else:
     oai = fallback_oai
-    print("⚠️  AIlink gateway unreachable — running without policy enforcement")
+    print("⚠️  TrueFlow gateway unreachable — running without policy enforcement")
 
 response = oai.chat.completions.create(model="gpt-4o", messages=[...])
 ```
@@ -284,7 +284,7 @@ with client.with_fallback(fallback_oai) as oai:
 ### Pattern 3 — Background polling
 
 ```python
-from ailink import HealthPoller
+from trueflow import HealthPoller
 
 with HealthPoller(client, interval=15) as poller:
     for user_message in incoming_messages():
@@ -295,9 +295,9 @@ with HealthPoller(client, interval=15) as poller:
 ### Pattern 4 — Async
 
 ```python
-from ailink import AsyncClient, AsyncHealthPoller
+from trueflow import AsyncClient, AsyncHealthPoller
 
-client   = AsyncClient(api_key="ailink_v1_...")
+client   = AsyncClient(api_key="tf_v1_...")
 fallback = openai.AsyncOpenAI(api_key=os.environ["OPENAI_API_KEY"])
 
 async with AsyncHealthPoller(client, interval=15) as poller:
@@ -312,7 +312,7 @@ async with AsyncHealthPoller(client, interval=15) as poller:
 When a token has **no stored credential**, supply the upstream API key at call time:
 
 ```python
-client = AIlinkClient(api_key="ailink_v1_...")
+client = TrueFlowClient(api_key="tf_v1_...")
 
 with client.with_upstream_key("sk-my-openai-key") as byok:
     resp = byok.post("/v1/chat/completions", json={
@@ -347,7 +347,7 @@ with client.with_guardrails(["pii_redaction", "prompt_injection"]) as g:
 ## Circuit Breaker
 
 ```python
-admin = AIlinkClient.admin(admin_key="ailink_admin_...")
+admin = TrueFlowClient.admin(admin_key="trueflow_admin_...")
 
 token = admin.tokens.create(
     name="prod-gpt",
@@ -369,9 +369,9 @@ health = admin.tokens.upstream_health()
 ## Configuration
 
 ```python
-client = AIlinkClient(
-    api_key="ailink_v1_...",
-    gateway_url="https://gateway.ailink.dev",
+client = TrueFlowClient(
+    api_key="tf_v1_...",
+    gateway_url="https://gateway.trueflow.dev",
     agent_name="my-agent",
     timeout=30,
     retries=3,
@@ -387,7 +387,7 @@ Create, version, deploy, and render prompt templates with `{{variable}}` substit
 Rendered prompts are cached client-side (default 60s) to reduce latency.
 
 ```python
-admin = AIlinkClient.admin(admin_key="ailink_admin_...")
+admin = TrueFlowClient.admin(admin_key="trueflow_admin_...")
 
 # Create
 prompt = admin.prompts.create(
@@ -436,7 +436,7 @@ admin.prompts.clear_cache()                          # all prompts
 Compare models, prompts, or routing strategies with weighted traffic splitting.
 
 ```python
-admin = AIlinkClient.admin(admin_key="ailink_admin_...")
+admin = TrueFlowClient.admin(admin_key="trueflow_admin_...")
 
 # Create experiment
 exp = admin.experiments.create(
@@ -471,13 +471,13 @@ admin.experiments.stop(exp["id"])
 ## Config-as-Code
 
 ```python
-admin = AIlinkClient.admin(admin_key="ailink_admin_...")
+admin = TrueFlowClient.admin(admin_key="trueflow_admin_...")
 
 yaml_config = admin.config.export()
-with open("ailink_config.yaml", "w") as f:
+with open("trueflow_config.yaml", "w") as f:
     f.write(yaml_config)
 
-with open("ailink_config.yaml", "r") as f:
+with open("trueflow_config.yaml", "r") as f:
     admin.config.import_yaml(f.read())
 ```
 
@@ -495,6 +495,6 @@ admin.services.create(
     credential_id="cred-uuid",
 )
 
-agent = AIlinkClient(api_key="ailink_v1_...", agent_name="billing-bot")
+agent = TrueFlowClient(api_key="tf_v1_...", agent_name="billing-bot")
 charges = agent.post("/v1/proxy/services/stripe/v1/charges", json={...})
 ```

@@ -46,7 +46,7 @@ impl RotationScheduler {
     /// Create a new scheduler.
     ///
     /// `check_interval_secs`: how often (seconds) the scheduler checks for due credentials.
-    /// Default: 3600 (1 hour). Set via `AILINK_ROTATION_CHECK_INTERVAL` env var.
+    /// Default: 3600 (1 hour). Set via `TRUEFLOW_ROTATION_CHECK_INTERVAL` env var.
     pub fn new(
         db: PgStore,
         vault: VaultCrypto,

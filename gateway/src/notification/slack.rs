@@ -31,7 +31,7 @@ impl SlackNotifier {
         };
 
         let message = SlackMessage {
-            text: format!("🚨 *Human Approval Required* 🚨\n\nRequest ID: `{}`\nExpires: {}\nSummary:\n```{}```\n\nRun `ailink approval approve {}` or `ailink approval reject {}`",
+            text: format!("🚨 *Human Approval Required* 🚨\n\nRequest ID: `{}`\nExpires: {}\nSummary:\n```{}```\n\nRun `trueflow approval approve {}` or `trueflow approval reject {}`",
                 approval_id, expires_at, serde_json::to_string_pretty(summary).unwrap_or_default(), approval_id, approval_id
             ),
         };

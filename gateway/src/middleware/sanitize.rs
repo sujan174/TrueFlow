@@ -132,7 +132,7 @@ mod tests {
 
     #[test]
     fn test_sanitize_email() {
-        let input = "Contact us at support@ailink.dev for help.";
+        let input = "Contact us at support@trueflow.dev for help.";
         let res = sanitize_response(input.as_bytes(), "text/plain");
         assert_eq!(
             String::from_utf8(res.body).unwrap(),

@@ -407,7 +407,7 @@ pub async fn create_token(
     use aes_gcm::aead::OsRng;
     use rand::RngCore;
     OsRng.fill_bytes(&mut random_bytes);
-    let token_id = format!("ailink_v1_{}_tok_{}", proj_short, hex::encode(random_bytes));
+    let token_id = format!("tf_v1_{}_tok_{}", proj_short, hex::encode(random_bytes));
 
     let resolved_log_level = payload.resolved_log_level();
     let new_token = crate::store::postgres::NewToken {
@@ -2146,7 +2146,7 @@ pub async fn test_webhook(
         "Test Token",
         "test-project-id",
         "test-policy",
-        "This is a test webhook delivery from AIlink Gateway",
+        "This is a test webhook delivery from TrueFlow Gateway",
     );
 
     match state.webhook.send(&payload.url, &test_event).await {
@@ -2575,7 +2575,7 @@ pub async fn get_cache_stats(
         "default_ttl_secs": crate::proxy::response_cache::DEFAULT_CACHE_TTL_SECS,
         "max_entry_bytes": 256 * 1024,
         "cached_fields": ["model", "messages", "temperature", "max_tokens", "tools", "tool_choice"],
-        "skip_conditions": ["temperature > 0.1", "stream: true", "x-ailink-no-cache: true", "Cache-Control: no-cache/no-store"],
+        "skip_conditions": ["temperature > 0.1", "stream: true", "x-trueflow-no-cache: true", "Cache-Control: no-cache/no-store"],
         "namespace_counts": {
             "llm_cache": key_count,
             "spend_tracking": spend_count,

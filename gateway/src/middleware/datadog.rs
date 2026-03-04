@@ -1,4 +1,4 @@
-//! DataDog StatsD metrics exporter for AILink Gateway.
+//! DataDog StatsD metrics exporter for TrueFlow Gateway.
 //!
 //! Sends metrics via DogStatsD protocol (UDP) to the DataDog Agent.
 //!
@@ -37,7 +37,7 @@ impl DataDogExporter {
             socket,
         )?;
         let queuing_sink = QueuingMetricSink::from(udp_sink);
-        let client = StatsdClient::from_sink("ailink", queuing_sink);
+        let client = StatsdClient::from_sink("trueflow", queuing_sink);
 
         let custom_tag_keys: Vec<String> = std::env::var("DD_CUSTOM_TAGS")
             .unwrap_or_default()

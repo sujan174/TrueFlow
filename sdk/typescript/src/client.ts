@@ -1,11 +1,11 @@
 /**
- * Main AILink client — the entry point for all SDK interactions.
+ * Main TrueFlow client — the entry point for all SDK interactions.
  *
  * @example
  * ```ts
- * import { AILinkClient } from "@ailink/sdk";
+ * import { TrueFlowClient } from "@trueflow/sdk";
  *
- * const client = new AILinkClient({ apiKey: "ailink_v1_..." });
+ * const client = new TrueFlowClient({ apiKey: "tf_v1_..." });
  *
  * // Use the management API
  * const tokens = await client.tokens.list();
@@ -18,7 +18,7 @@
  * });
  *
  * // Admin operations
- * const admin = AILinkClient.admin({ adminKey: "your-admin-key" });
+ * const admin = TrueFlowClient.admin({ adminKey: "your-admin-key" });
  * await admin.policies.list();
  * ```
  *
@@ -76,18 +76,18 @@ function generateUUID(): string {
 // Client options
 // ────────────────────────────────────────────────────────────────────────────
 
-/** Options for constructing an `AILinkClient`. */
-export interface AILinkClientOptions {
+/** Options for constructing an `TrueFlowClient`. */
+export interface TrueFlowClientOptions {
     /**
-     * AILink virtual token.
+     * TrueFlow virtual token.
      *
-     * Falls back to `process.env.AILINK_API_KEY` if not provided.
+     * Falls back to `process.env.TRUEFLOW_API_KEY` if not provided.
      */
     apiKey?: string;
     /**
      * Gateway URL.
      *
-     * Falls back to `process.env.AILINK_GATEWAY_URL`, then `"http://localhost:8443"`.
+     * Falls back to `process.env.TRUEFLOW_GATEWAY_URL`, then `"http://localhost:8443"`.
      */
     gatewayUrl?: string;
     /** Optional name for this agent (appears in audit logs). */
@@ -105,10 +105,10 @@ export interface AdminOptions {
     /**
      * Admin key (`X-Admin-Key` header value).
      *
-     * Falls back to `process.env.AILINK_ADMIN_KEY`.
+     * Falls back to `process.env.TRUEFLOW_ADMIN_KEY`.
      */
     adminKey?: string;
-    /** Gateway URL (same fallback behavior as `AILinkClientOptions.gatewayUrl`). */
+    /** Gateway URL (same fallback behavior as `TrueFlowClientOptions.gatewayUrl`). */
     gatewayUrl?: string;
     /** Request timeout in milliseconds. */
     timeoutMs?: number;
@@ -166,17 +166,17 @@ export class ScopedClient {
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * The official AILink TypeScript client.
+ * The official TrueFlow TypeScript client.
  *
  * @example
  * ```ts
- * import { AILinkClient } from "@ailink/sdk";
+ * import { TrueFlowClient } from "@trueflow/sdk";
  *
- * const client = new AILinkClient({ apiKey: "ailink_v1_..." });
+ * const client = new TrueFlowClient({ apiKey: "tf_v1_..." });
  * const tokens = await client.tokens.list();
  * ```
  */
-export class AILinkClient {
+export class TrueFlowClient {
     /** The gateway URL this client is connected to. */
     readonly gatewayUrl: string;
     /** The API key used for authentication. */
@@ -208,21 +208,21 @@ export class AILinkClient {
     private _prompts?: PromptsResource;
 
     /**
-     * Create a new AILink client.
+     * Create a new TrueFlow client.
      *
      * @example
      * ```ts
-     * const client = new AILinkClient({
-     *   apiKey: "ailink_v1_...",
+     * const client = new TrueFlowClient({
+     *   apiKey: "tf_v1_...",
      *   gatewayUrl: "https://gateway.mycompany.com",
      *   agentName: "research-bot",
      * });
      * ```
      */
-    constructor(options: AILinkClientOptions = {}) {
+    constructor(options: TrueFlowClientOptions = {}) {
         const env = typeof process !== "undefined" ? process.env : ({} as Record<string, string | undefined>);
-        this.apiKey = options.apiKey ?? env["AILINK_API_KEY"] ?? "";
-        this.gatewayUrl = (options.gatewayUrl ?? env["AILINK_GATEWAY_URL"] ?? "http://localhost:8443").replace(/\/+$/, "");
+        this.apiKey = options.apiKey ?? env["TRUEFLOW_API_KEY"] ?? "";
+        this.gatewayUrl = (options.gatewayUrl ?? env["TRUEFLOW_GATEWAY_URL"] ?? "http://localhost:8443").replace(/\/+$/, "");
 
         const headers: Record<string, string> = {
             Authorization: `Bearer ${this.apiKey}`,
@@ -249,17 +249,17 @@ export class AILinkClient {
      *
      * @example
      * ```ts
-     * const admin = AILinkClient.admin({ adminKey: "your-admin-key" });
+     * const admin = TrueFlowClient.admin({ adminKey: "your-admin-key" });
      * const policies = await admin.policies.list();
      * ```
      */
-    static admin(options: AdminOptions = {}): AILinkClient {
+    static admin(options: AdminOptions = {}): TrueFlowClient {
         const env = typeof process !== "undefined" ? process.env : ({} as Record<string, string | undefined>);
-        const adminKey = options.adminKey ?? env["AILINK_ADMIN_KEY"] ?? "";
-        const gatewayUrl = options.gatewayUrl ?? env["AILINK_GATEWAY_URL"] ?? "http://localhost:8443";
+        const adminKey = options.adminKey ?? env["TRUEFLOW_ADMIN_KEY"] ?? "";
+        const gatewayUrl = options.gatewayUrl ?? env["TRUEFLOW_GATEWAY_URL"] ?? "http://localhost:8443";
 
         // Admin clients use X-Admin-Key instead of Bearer token
-        const client = new AILinkClient({ gatewayUrl, timeoutMs: options.timeoutMs, maxRetries: options.maxRetries });
+        const client = new TrueFlowClient({ gatewayUrl, timeoutMs: options.timeoutMs, maxRetries: options.maxRetries });
         // Override the HTTP client to use admin auth
         (client as { _http: HttpClient })._http = new HttpClient({
             baseUrl: gatewayUrl,
@@ -274,7 +274,7 @@ export class AILinkClient {
     // ── Provider wrappers ───────────────────────────────────────────────────
 
     /**
-     * Returns a configured OpenAI client that routes through the AILink gateway.
+     * Returns a configured OpenAI client that routes through the TrueFlow gateway.
      *
      * Requires the `openai` package: `npm install openai`
      *
@@ -292,7 +292,7 @@ export class AILinkClient {
     }
 
     /**
-     * Returns a configured Anthropic client that routes through the AILink gateway.
+     * Returns a configured Anthropic client that routes through the TrueFlow gateway.
      *
      * Requires the `@anthropic-ai/sdk` package: `npm install @anthropic-ai/sdk`
      *
@@ -368,7 +368,7 @@ export class AILinkClient {
      */
     withGuardrails(presets: string[]): ScopedClient {
         if (presets.length === 0) return new ScopedClient(this._http, {});
-        return new ScopedClient(this._http, { "X-AILink-Guardrails": presets.join(",") });
+        return new ScopedClient(this._http, { "X-TrueFlow-Guardrails": presets.join(",") });
     }
 
     // ── Health check ───────────────────────────────────────────────────────
@@ -449,7 +449,7 @@ export class AILinkClient {
             return this.openai();
         }
         console.warn(
-            `AILink gateway at ${this.gatewayUrl} is unreachable — ` +
+            `TrueFlow gateway at ${this.gatewayUrl} is unreachable — ` +
             "using fallback client. Requests will bypass policy enforcement and audit logging.",
         );
         return fallback;

@@ -294,8 +294,8 @@ async fn admin_auth(
         .map(|t| t.trim());
 
     // Load expected SuperAdmin key
-    let expected_env_key = std::env::var("AILINK_ADMIN_KEY")
-        .or_else(|_| std::env::var("AILINK_MASTER_KEY"))
+    let expected_env_key = std::env::var("TRUEFLOW_ADMIN_KEY")
+        .or_else(|_| std::env::var("TRUEFLOW_MASTER_KEY"))
         .unwrap_or_else(|_| "CHANGE_ME_INSECURE_DEFAULT".to_string());
 
     // SEC-08: Refuse insecure default key in non-dev environments

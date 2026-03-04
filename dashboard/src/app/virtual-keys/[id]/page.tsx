@@ -273,7 +273,7 @@ export default function TokenDetailPage() {
   -H "Content-Type: application/json" \\
   -d '{
     "model": "gpt-4o-mini",
-    "messages": [{"role": "user", "content": "Hello AILink!"}]
+    "messages": [{"role": "user", "content": "Hello TrueFlow!"}]
   }'`);
                                         toast.success("Copied cURL");
                                     }}><Copy className="h-3 w-3" /></Button>
@@ -281,7 +281,7 @@ export default function TokenDetailPage() {
                                 <span className="text-violet-400">curl</span> -X POST http://localhost:8443/v1/chat/completions \<br />
                                 &nbsp;&nbsp;-H <span className="text-emerald-400">"Authorization: Bearer {token.id}"</span> \<br />
                                 &nbsp;&nbsp;-H <span className="text-emerald-400">"Content-Type: application/json"</span> \<br />
-                                &nbsp;&nbsp;-d <span className="text-amber-400">'{`\n    "model": "gpt-4o-mini",\n    "messages": [{"role": "user", "content": "Hello AILink!"}]\n  `}'</span>
+                                &nbsp;&nbsp;-d <span className="text-amber-400">'{`\n    "model": "gpt-4o-mini",\n    "messages": [{"role": "user", "content": "Hello TrueFlow!"}]\n  `}'</span>
                             </div>
                         </div>
                         <div>
@@ -289,16 +289,16 @@ export default function TokenDetailPage() {
                             <div className="w-full bg-muted/80 rounded-md p-3 text-left font-mono text-xs relative group overflow-x-auto">
                                 <div className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 transition-opacity">
                                     <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => {
-                                        navigator.clipboard.writeText(`from ailink import AIlinkClient\n\nclient = AIlinkClient(api_key="${token.id}")\noai = client.openai()\nresponse = oai.chat.completions.create(\n    model="gpt-4o-mini",\n    messages=[{"role": "user", "content": "Hello AILink!"}]\n)\nprint(response.choices[0].message.content)`);
+                                        navigator.clipboard.writeText(`from trueflow import TrueFlowClient\n\nclient = TrueFlowClient(api_key="${token.id}")\noai = client.openai()\nresponse = oai.chat.completions.create(\n    model="gpt-4o-mini",\n    messages=[{"role": "user", "content": "Hello TrueFlow!"}]\n)\nprint(response.choices[0].message.content)`);
                                         toast.success("Copied Python snippet");
                                     }}><Copy className="h-3 w-3" /></Button>
                                 </div>
-                                <span className="text-rose-400">from</span> ailink <span className="text-rose-400">import</span> AIlinkClient<br /><br />
-                                client = AIlinkClient(api_key=<span className="text-emerald-400">"{token.id}"</span>)<br />
+                                <span className="text-rose-400">from</span> trueflow <span className="text-rose-400">import</span> TrueFlowClient<br /><br />
+                                client = TrueFlowClient(api_key=<span className="text-emerald-400">"{token.id}"</span>)<br />
                                 oai = client.openai()<br />
                                 response = oai.chat.completions.create(<br />
                                 &nbsp;&nbsp;&nbsp;&nbsp;model=<span className="text-emerald-400">"gpt-4o-mini"</span>,<br />
-                                &nbsp;&nbsp;&nbsp;&nbsp;messages=[{`{`}<span className="text-emerald-400">"role"</span>: <span className="text-emerald-400">"user"</span>, <span className="text-emerald-400">"content"</span>: <span className="text-emerald-400">"Hello AILink!"</span>{`}`}]<br />
+                                &nbsp;&nbsp;&nbsp;&nbsp;messages=[{`{`}<span className="text-emerald-400">"role"</span>: <span className="text-emerald-400">"user"</span>, <span className="text-emerald-400">"content"</span>: <span className="text-emerald-400">"Hello TrueFlow!"</span>{`}`}]<br />
                                 )<br />
                                 <span className="text-blue-400">print</span>(response.choices[0].message.content)
                             </div>
@@ -474,7 +474,7 @@ export default function TokenDetailPage() {
                             <p className="text-[11px] text-muted-foreground">
                                 Automatically opens the circuit after <strong>{cbEdits.failure_threshold ?? cb.failure_threshold}</strong> consecutive failures,
                                 then retries after <strong>{cbEdits.recovery_cooldown_secs ?? cb.recovery_cooldown_secs}s</strong>.
-                                State is reflected in <code className="text-[10px] bg-muted px-1 rounded">X-AILink-CB-State</code> response header.
+                                State is reflected in <code className="text-[10px] bg-muted px-1 rounded">X-TrueFlow-CB-State</code> response header.
                             </p>
                             <div className="grid md:grid-cols-3 gap-4">
                                 <div className="space-y-1">

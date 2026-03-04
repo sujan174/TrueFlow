@@ -33,7 +33,7 @@ describe("TokensResource", () => {
     });
 
     it("create sends correct body with camelCase→snake_case mapping", async () => {
-        http.post.mockResolvedValueOnce(okResponse({ token_id: "ailink_v1_test", id: "uuid" }));
+        http.post.mockResolvedValueOnce(okResponse({ token_id: "tf_v1_test", id: "uuid" }));
         const result = await tokens.create({
             name: "my-agent",
             upstreamUrl: "https://api.openai.com",
@@ -50,7 +50,7 @@ describe("TokensResource", () => {
             policy_ids: ["pol_a"],
             log_level_name: "redacted",
         }));
-        expect(result.tokenId).toBe("ailink_v1_test");
+        expect(result.tokenId).toBe("tf_v1_test");
     });
 
     it("create handles upstream load balancing config", async () => {

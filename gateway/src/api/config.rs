@@ -404,7 +404,7 @@ fn serialize_and_respond(doc: ConfigDocument, format: &str) -> Result<Response, 
             .header(header::CONTENT_TYPE, "application/json; charset=utf-8")
             .header(
                 header::CONTENT_DISPOSITION,
-                "attachment; filename=\"ailink_config.json\"",
+                "attachment; filename=\"trueflow_config.json\"",
             )
             .body(Body::from(body))
             .unwrap())
@@ -415,7 +415,7 @@ fn serialize_and_respond(doc: ConfigDocument, format: &str) -> Result<Response, 
             .header(header::CONTENT_TYPE, "application/yaml; charset=utf-8")
             .header(
                 header::CONTENT_DISPOSITION,
-                "attachment; filename=\"ailink_config.yaml\"",
+                "attachment; filename=\"trueflow_config.yaml\"",
             )
             .body(Body::from(body))
             .unwrap())

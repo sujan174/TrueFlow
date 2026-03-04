@@ -1,6 +1,6 @@
-# AIlink — API Reference
+# TrueFlow — API Reference
 
-> This reference covers the Management API for configuring AIlink. For making requests *through* the gateway, see the [SDK Guide](SDK.md).
+> This reference covers the Management API for configuring TrueFlow. For making requests *through* the gateway, see the [SDK Guide](SDK.md).
 
 ## Management API
 
@@ -9,7 +9,7 @@ Auth: `Authorization: Bearer <api_key>` (create keys via `/auth/keys`)
 
 ### Authentication & Authorization
 
-Every Management API request requires a valid API key in the `Authorization: Bearer` header (or the `AILINK_ADMIN_KEY` env-var key via `X-Admin-Key`).
+Every Management API request requires a valid API key in the `Authorization: Bearer` header (or the `TRUEFLOW_ADMIN_KEY` env-var key via `X-Admin-Key`).
 
 Access is controlled by **role + scopes**:
 
@@ -160,8 +160,8 @@ Per-token circuit breaker configuration for upstream resilience.
 Update at runtime without gateway restart. CB states: `closed` → `open` (after N failures) → `half_open` (cooldown elapsed) → `closed`.
 
 > Response headers on every proxied request:
-> - `X-AILink-CB-State: closed | open | half_open | disabled`
-> - `X-AILink-Upstream: https://api.primary.com`
+> - `X-TrueFlow-CB-State: closed | open | half_open | disabled`
+> - `X-TrueFlow-Upstream: https://api.primary.com`
 
 ---
 
@@ -294,7 +294,7 @@ One-call safety rule bundles (PII, prompt injection, HIPAA, etc.). Backed by 100
 `POST /guardrails/enable`
 ```json
 {
-  "token_id": "ailink_v1_...",
+  "token_id": "tf_v1_...",
   "presets": ["pii_redaction", "prompt_injection", "hipaa"],
   "source": "dashboard",
   "topic_allowlist": ["billing"],
@@ -884,7 +884,7 @@ Export/import your full gateway configuration as version-controlled YAML or JSON
 ```json
 [
   {
-    "token_id": "ailink_v1_proj_abc_tok_xyz",
+    "token_id": "tf_v1_proj_abc_tok_xyz",
     "url": "https://api.openai.com",
     "is_healthy": true,
     "failure_count": 0,
@@ -901,16 +901,16 @@ Export/import your full gateway configuration as version-controlled YAML or JSON
 `GET /metrics` — Prometheus-compatible text exposition format. No authentication required.
 
 Exposes:
-- `ailink_requests_total` — Counter by method, status, token
-- `ailink_request_duration_seconds` — Histogram of proxy latency
-- `ailink_upstream_errors_total` — Counter by upstream URL and error type
-- `ailink_active_tokens` — Gauge of active tokens
-- `ailink_cache_hits_total` / `ailink_cache_misses_total` — Response cache counters
+- `trueflow_requests_total` — Counter by method, status, token
+- `trueflow_request_duration_seconds` — Histogram of proxy latency
+- `trueflow_upstream_errors_total` — Counter by upstream URL and error type
+- `trueflow_active_tokens` — Gauge of active tokens
+- `trueflow_cache_hits_total` / `trueflow_cache_misses_total` — Response cache counters
 
 ---
 
 ### SSO / OIDC
 
-AILink supports OIDC-based SSO authentication. Identity providers are configured at the database level and validated via JWKS-based JWT verification during request authentication.
+TrueFlow supports OIDC-based SSO authentication. Identity providers are configured at the database level and validated via JWKS-based JWT verification during request authentication.
 
 > **Note**: There is no Management API for OIDC provider CRUD. Providers are registered directly in the `oidc_providers` database table. JWT tokens from registered providers are validated automatically against the provider's OIDC discovery document.

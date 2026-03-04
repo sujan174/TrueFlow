@@ -1,17 +1,17 @@
 # Framework Integration Cookbook
 
-AILink integrates natively with popular AI frameworks. All requests are routed through the AILink gateway, giving you policy enforcement, audit logging, spend tracking, and guardrails — with zero code changes to your framework logic.
+TrueFlow integrates natively with popular AI frameworks. All requests are routed through the TrueFlow gateway, giving you policy enforcement, audit logging, spend tracking, and guardrails — with zero code changes to your framework logic.
 
 ## Installation
 
 ```bash
 # Install with specific framework support
-pip install ailink[langchain]
-pip install ailink[crewai]
-pip install ailink[llamaindex]
+pip install trueflow[langchain]
+pip install trueflow[crewai]
+pip install trueflow[llamaindex]
 
 # Install all frameworks at once
-pip install ailink[frameworks]
+pip install trueflow[frameworks]
 ```
 
 ---
@@ -21,10 +21,10 @@ pip install ailink[frameworks]
 ### Basic Chat
 
 ```python
-from ailink import AIlinkClient
-from ailink.integrations import langchain_chat
+from trueflow import TrueFlowClient
+from trueflow.integrations import langchain_chat
 
-client = AIlinkClient(api_key="ailink_v1_...")
+client = TrueFlowClient(api_key="tf_v1_...")
 llm = langchain_chat(client, model="gpt-4o")
 
 # Works with any LangChain chain
@@ -77,7 +77,7 @@ print(result["output"])
 ### Embeddings (for RAG)
 
 ```python
-from ailink.integrations import langchain_embeddings
+from trueflow.integrations import langchain_embeddings
 
 embeddings = langchain_embeddings(client, model="text-embedding-3-small")
 vectors = embeddings.embed_documents(["Hello world", "Goodbye world"])
@@ -100,16 +100,16 @@ with client.trace(session_id="langchain-agent-run-42") as traced:
 ### Basic Agent Setup
 
 ```python
-from ailink import AIlinkClient
-from ailink.integrations import crewai_llm
+from trueflow import TrueFlowClient
+from trueflow.integrations import crewai_llm
 from crewai import Agent, Task, Crew
 
-client = AIlinkClient(api_key="ailink_v1_...")
+client = TrueFlowClient(api_key="tf_v1_...")
 
-# Create an AILink-routed LLM
+# Create an TrueFlow-routed LLM
 llm = crewai_llm(client, model="gpt-4o", temperature=0.7)
 
-# Define agents — all requests go through AILink
+# Define agents — all requests go through TrueFlow
 researcher = Agent(
     role="Senior Researcher",
     goal="Find the latest developments in AI security",
@@ -139,7 +139,7 @@ writing_task = Task(
     agent=writer,
 )
 
-# Run the crew — all LLM calls enforce AILink policies
+# Run the crew — all LLM calls enforce TrueFlow policies
 crew = Crew(
     agents=[researcher, writer],
     tasks=[research_task, writing_task],
@@ -161,7 +161,7 @@ writer_llm = crewai_llm(client, model="gpt-4o-mini", temperature=0.7)
 researcher = Agent(role="Researcher", goal="...", llm=researcher_llm, ...)
 writer = Agent(role="Writer", goal="...", llm=writer_llm, ...)
 
-# AILink spend caps enforce budget regardless of which model each agent uses
+# TrueFlow spend caps enforce budget regardless of which model each agent uses
 ```
 
 ---
@@ -171,13 +171,13 @@ writer = Agent(role="Writer", goal="...", llm=writer_llm, ...)
 ### Basic RAG Pipeline
 
 ```python
-from ailink import AIlinkClient
-from ailink.integrations import llamaindex_llm
+from trueflow import TrueFlowClient
+from trueflow.integrations import llamaindex_llm
 from llama_index.core import VectorStoreIndex, SimpleDirectoryReader, Settings
 
-client = AIlinkClient(api_key="ailink_v1_...")
+client = TrueFlowClient(api_key="tf_v1_...")
 
-# Set AILink as the global LLM for all LlamaIndex operations
+# Set TrueFlow as the global LLM for all LlamaIndex operations
 Settings.llm = llamaindex_llm(client, model="gpt-4o", temperature=0)
 
 # Build an index and query it
@@ -195,14 +195,14 @@ print(response)
 llm = llamaindex_llm(client, model="gpt-4o")
 
 # Simple completion
-response = llm.complete("Explain AILink in one sentence.")
+response = llm.complete("Explain TrueFlow in one sentence.")
 print(response.text)
 
 # Chat
 from llama_index.core.llms import ChatMessage
 messages = [
     ChatMessage(role="system", content="You are a helpful assistant."),
-    ChatMessage(role="user", content="What is AILink?"),
+    ChatMessage(role="user", content="What is TrueFlow?"),
 ]
 response = llm.chat(messages)
 print(response.message.content)
@@ -222,7 +222,7 @@ for chunk in llm.stream_complete("Tell me about AI gateways"):
 ## Advanced: Without the Integration Module
 
 If you prefer not to use the integration helpers, you can configure any framework
-directly using the AILink gateway URL and your virtual token:
+directly using the TrueFlow gateway URL and your virtual token:
 
 ### LangChain (manual)
 
@@ -232,7 +232,7 @@ from langchain_openai import ChatOpenAI
 llm = ChatOpenAI(
     model="gpt-4o",
     base_url="http://localhost:8443",
-    api_key="ailink_v1_...",
+    api_key="tf_v1_...",
 )
 ```
 
@@ -244,7 +244,7 @@ from crewai import LLM
 llm = LLM(
     model="openai/gpt-4o",
     base_url="http://localhost:8443",
-    api_key="ailink_v1_...",
+    api_key="tf_v1_...",
 )
 ```
 
@@ -256,7 +256,7 @@ from llama_index.llms.openai_like import OpenAILike
 llm = OpenAILike(
     model="gpt-4o",
     api_base="http://localhost:8443",
-    api_key="ailink_v1_...",
+    api_key="tf_v1_...",
     is_chat_model=True,
 )
 ```
@@ -264,9 +264,9 @@ llm = OpenAILike(
 ### OpenAI SDK (already built-in)
 
 ```python
-from ailink import AIlinkClient
+from trueflow import TrueFlowClient
 
-client = AIlinkClient(api_key="ailink_v1_...")
+client = TrueFlowClient(api_key="tf_v1_...")
 oai = client.openai()  # Returns a configured openai.Client
 
 response = oai.chat.completions.create(
@@ -282,12 +282,12 @@ response = oai.chat.completions.create(
 All examples work with environment variables to avoid hardcoding keys:
 
 ```bash
-export AILINK_API_KEY="ailink_v1_..."
-export AILINK_GATEWAY_URL="http://localhost:8443"
+export TRUEFLOW_API_KEY="tf_v1_..."
+export TRUEFLOW_GATEWAY_URL="http://localhost:8443"
 ```
 
 ```python
-# No api_key needed — reads from AILINK_API_KEY
-client = AIlinkClient()
+# No api_key needed — reads from TRUEFLOW_API_KEY
+client = TrueFlowClient()
 llm = langchain_chat(client, model="gpt-4o")
 ```

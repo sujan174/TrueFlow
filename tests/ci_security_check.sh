@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # scripts/ci_security_check.sh
 # ------------------------------------------------------------
-# AILink CI Security Check
+# TrueFlow CI Security Check
 # Runs cargo audit + npm audit and fails the build on HIGH/CRITICAL issues.
 # Add to your CI pipeline: bash scripts/ci_security_check.sh
 # ------------------------------------------------------------
@@ -17,7 +17,7 @@ GREEN='\033[0;32m'
 NC='\033[0m'
 
 echo "═══════════════════════════════════════════════════════"
-echo "  AILink Security Audit — CI Check"
+echo "  TrueFlow Security Audit — CI Check"
 echo "═══════════════════════════════════════════════════════"
 echo ""
 

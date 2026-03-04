@@ -23,13 +23,13 @@ use crate::models::policy::ExternalVendor;
 /// Default wall-clock budget for any single external guardrail vendor call.
 ///
 /// This caps latency added to the hot path by slow or unreachable vendors.
-/// Operators can override this via the `AILINK_GUARDRAIL_TIMEOUT_SECS` env var.
+/// Operators can override this via the `TRUEFLOW_GUARDRAIL_TIMEOUT_SECS` env var.
 pub const DEFAULT_GUARDRAIL_TIMEOUT_SECS: u64 = 5;
 
-/// Return the configured guardrail timeout, reading `AILINK_GUARDRAIL_TIMEOUT_SECS`
+/// Return the configured guardrail timeout, reading `TRUEFLOW_GUARDRAIL_TIMEOUT_SECS`
 /// from the environment if set.
 fn guardrail_timeout() -> Duration {
-    let secs = std::env::var("AILINK_GUARDRAIL_TIMEOUT_SECS")
+    let secs = std::env::var("TRUEFLOW_GUARDRAIL_TIMEOUT_SECS")
         .ok()
         .and_then(|v| v.parse::<u64>().ok())
         .unwrap_or(DEFAULT_GUARDRAIL_TIMEOUT_SECS);

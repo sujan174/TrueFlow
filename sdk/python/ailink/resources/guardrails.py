@@ -1,11 +1,11 @@
-"""Guardrails management resource for the AIlink admin client.
+"""Guardrails management resource for the TrueFlow admin client.
 
 Enables developers to configure safety, privacy, and compliance guardrails
 on API tokens — without touching the gateway config directly.
 
 Example::
 
-    admin = AIlinkClient.admin(admin_key="...")
+    admin = TrueFlowClient.admin(admin_key="...")
 
     # See what guardrails are available
     presets = admin.guardrails.list_presets()
@@ -66,7 +66,7 @@ class GuardrailsResource:
 
     Access via ``admin.guardrails``::
 
-        admin = AIlinkClient.admin(admin_key="...")
+        admin = TrueFlowClient.admin(admin_key="...")
         admin.guardrails.enable("tok_abc123", ["prompt_injection", "pii_enterprise"])
     """
 
@@ -153,8 +153,8 @@ class GuardrailsResource:
             - ``skipped`` (list[str])
 
         Raises:
-            :class:`~ailink.ValidationError`: if a preset name is invalid.
-            :class:`~ailink.AuthenticationError`: if the admin key is missing/wrong.
+            :class:`~trueflow.ValidationError`: if a preset name is invalid.
+            :class:`~trueflow.AuthenticationError`: if the admin key is missing/wrong.
 
         Examples::
 

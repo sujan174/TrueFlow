@@ -1,5 +1,5 @@
 /**
- * Low-level HTTP client for the AILink gateway.
+ * Low-level HTTP client for the TrueFlow gateway.
  *
  * Built on native `fetch` — zero dependencies. Handles:
  * - Automatic retries with exponential backoff on 429 / 5xx
@@ -37,7 +37,7 @@ export interface FetchOptions {
 }
 
 /**
- * Internal HTTP client used by `AILinkClient`. Thin wrapper over `fetch`
+ * Internal HTTP client used by `TrueFlowClient`. Thin wrapper over `fetch`
  * with retry logic, timeout, and automatic error handling.
  */
 export class HttpClient {
@@ -51,7 +51,7 @@ export class HttpClient {
         this.baseUrl = options.baseUrl.replace(/\/+$/, "");
         this.defaultHeaders = {
             ...options.headers,
-            "X-AILink-SDK-Version": VERSION,
+            "X-TrueFlow-SDK-Version": VERSION,
             "Content-Type": "application/json",
         };
         this.timeoutMs = options.timeoutMs ?? 30_000;
@@ -97,7 +97,7 @@ export class HttpClient {
                 return response;
             } catch (error) {
                 lastError = error;
-                // Retry on network errors and rate limits, but not on typed AILink errors
+                // Retry on network errors and rate limits, but not on typed TrueFlow errors
                 // (those were already thrown by raiseForStatus)
                 if (error instanceof RateLimitError && attempt < this.maxRetries) {
                     const backoff = error.retryAfter

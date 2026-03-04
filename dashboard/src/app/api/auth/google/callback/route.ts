@@ -91,7 +91,7 @@ export async function GET(request: NextRequest) {
         const response = NextResponse.redirect(`${baseUrl}/`);
 
         // Set session cookie
-        response.cookies.set("ailink_session", sessionToken, {
+        response.cookies.set("trueflow_session", sessionToken, {
             httpOnly: true,
             sameSite: "lax",
             secure: process.env.NODE_ENV === "production",

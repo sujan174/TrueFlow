@@ -6,7 +6,7 @@ import type { JsonObject } from "../types.js";
  *
  * @example
  * ```ts
- * const admin = AILinkClient.admin({ adminKey: "..." });
+ * const admin = TrueFlowClient.admin({ adminKey: "..." });
  *
  * // Create an experiment
  * const exp = await admin.experiments.create({

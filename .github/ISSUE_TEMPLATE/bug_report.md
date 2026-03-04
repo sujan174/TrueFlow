@@ -17,7 +17,7 @@ Steps to reproduce the behavior:
 What you expected to happen.
 
 **Environment**
-- AILink version: [e.g. v0.8.0]
+- TrueFlow version: [e.g. v0.8.0]
 - OS: [e.g. macOS 15, Ubuntu 24.04]
 - Docker version: [if applicable]
 - Browser: [if dashboard bug]

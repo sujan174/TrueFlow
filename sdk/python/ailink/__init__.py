@@ -1,19 +1,19 @@
 """
-AIlink Python SDK — Official client for the AIlink Gateway.
+TrueFlow Python SDK — Official client for the TrueFlow Gateway.
 
 Usage:
 
     # Agent proxy client
-    from ailink import AIlinkClient
-    client = AIlinkClient(api_key="ailink_v1_...")
+    from trueflow import TrueFlowClient
+    client = TrueFlowClient(api_key="tf_v1_...")
     oai = client.openai()
 
     # Admin management client
-    admin = AIlinkClient.admin(admin_key="...")
+    admin = TrueFlowClient.admin(admin_key="...")
     tokens = admin.tokens.list()
 """
 
-from .client import AIlinkClient, AsyncClient, HealthPoller, AsyncHealthPoller
+from .client import TrueFlowClient, AsyncClient, HealthPoller, AsyncHealthPoller
 from .resources.guardrails import (
     PRESET_PROMPT_INJECTION,
     PRESET_CODE_INJECTION,
@@ -40,7 +40,7 @@ from .types import (
     Response,
 )
 from .exceptions import (
-    AIlinkError,
+    TrueFlowError,
     AuthenticationError,
     NotFoundError,
     RateLimitError,
@@ -55,13 +55,13 @@ from .exceptions import (
 )
 
 # Backward-compatible alias
-Client = AIlinkClient
+Client = TrueFlowClient
 
 __version__ = "0.1.0"
 
 __all__ = [
     # Clients
-    "AIlinkClient",
+    "TrueFlowClient",
     "AsyncClient",
     "Client",
     # Health monitoring
@@ -81,7 +81,7 @@ __all__ = [
     "RequestSummary",
     "Response",
     # Exceptions
-    "AIlinkError",
+    "TrueFlowError",
     "AuthenticationError",
     "NotFoundError",
     "RateLimitError",

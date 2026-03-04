@@ -235,7 +235,7 @@ pub fn translate_response(provider: Provider, body: &Value, model: &str) -> Opti
 ///   - false → `:generateContent`
 ///   - true  → `:streamGenerateContent`
 pub fn rewrite_upstream_url(provider: Provider, base_url: &str, model: &str, is_streaming: bool) -> String {
-    // Strip the proxy path if the router attached it (e.g. AILink added /v1/chat/completions)
+    // Strip the proxy path if the router attached it (e.g. TrueFlow added /v1/chat/completions)
     let sanitized_base = base_url
         .strip_suffix("/v1/chat/completions")
         .unwrap_or(base_url)

@@ -9,6 +9,6 @@ export async function POST(request: NextRequest) {
         `${request.nextUrl.protocol}//${request.nextUrl.host}`;
 
     const response = NextResponse.redirect(`${baseUrl}/login`);
-    response.cookies.delete("ailink_session");
+    response.cookies.delete("trueflow_session");
     return response;
 }

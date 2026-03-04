@@ -171,7 +171,7 @@ async fn relay(
         .uri(upstream_url)
         .header("Authorization", format!("Bearer {}", api_key))
         .header("OpenAI-Beta", "realtime=v1")
-        .header("User-Agent", "AILink-Gateway/1.0")
+        .header("User-Agent", "TrueFlow-Gateway/1.0")
         .body(())?;
 
     // Use the native-tls connector bundled with tokio-tungstenite

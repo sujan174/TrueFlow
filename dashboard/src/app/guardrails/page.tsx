@@ -766,7 +766,7 @@ client.guardrails.enable(
 )
 
 # Or via header (per-request)
-headers["X-AILink-Guardrails"] = "prompt_injection,pii_redaction"`}
+headers["X-TrueFlow-Guardrails"] = "prompt_injection,pii_redaction"`}
                     </pre>
                 </div>
             </div>

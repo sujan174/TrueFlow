@@ -1,4 +1,4 @@
-//! Prometheus metrics recorder for AILink Gateway.
+//! Prometheus metrics recorder for TrueFlow Gateway.
 //!
 //! Exposes a standard `/metrics` endpoint that Prometheus can scrape.
 //! Metrics are updated on every proxied request via `record()`.
@@ -39,55 +39,55 @@ impl PrometheusRecorder {
     /// Create and register all metrics in the global Prometheus registry.
     pub fn new() -> Self {
         let requests_total = register_counter_vec!(
-            opts!("ailink_requests_total", "Total number of proxied requests"),
+            opts!("trueflow_requests_total", "Total number of proxied requests"),
             &["model", "status_code", "cache_hit", "is_streaming"]
         )
-        .expect("failed to register ailink_requests_total");
+        .expect("failed to register trueflow_requests_total");
 
         let tokens_total = register_counter_vec!(
-            opts!("ailink_tokens_total", "Total tokens consumed"),
+            opts!("trueflow_tokens_total", "Total tokens consumed"),
             &["model", "type"]
         )
-        .expect("failed to register ailink_tokens_total");
+        .expect("failed to register trueflow_tokens_total");
 
         let cost_usd_total = register_counter_vec!(
-            opts!("ailink_cost_usd_total", "Total estimated cost in USD"),
+            opts!("trueflow_cost_usd_total", "Total estimated cost in USD"),
             &["model"]
         )
-        .expect("failed to register ailink_cost_usd_total");
+        .expect("failed to register trueflow_cost_usd_total");
 
         let errors_total = register_counter_vec!(
-            opts!("ailink_errors_total", "Total errors by type"),
+            opts!("trueflow_errors_total", "Total errors by type"),
             &["model", "error_type"]
         )
-        .expect("failed to register ailink_errors_total");
+        .expect("failed to register trueflow_errors_total");
 
         let request_duration_seconds = register_histogram_vec!(
             prometheus::histogram_opts!(
-                "ailink_request_duration_seconds",
+                "trueflow_request_duration_seconds",
                 "Request latency in seconds",
                 // LLM-optimized buckets: 100ms to 120s
                 vec![0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0, 60.0, 120.0]
             ),
             &["model", "status_code"]
         )
-        .expect("failed to register ailink_request_duration_seconds");
+        .expect("failed to register trueflow_request_duration_seconds");
 
         let ttft_seconds = register_histogram_vec!(
             prometheus::histogram_opts!(
-                "ailink_ttft_seconds",
+                "trueflow_ttft_seconds",
                 "Time to first token in seconds (streaming only)",
                 vec![0.05, 0.1, 0.25, 0.5, 1.0, 2.0, 5.0, 10.0]
             ),
             &["model"]
         )
-        .expect("failed to register ailink_ttft_seconds");
+        .expect("failed to register trueflow_ttft_seconds");
 
         let cache_hit_total = register_counter_vec!(
-            opts!("ailink_cache_hits_total", "Total cache hits"),
+            opts!("trueflow_cache_hits_total", "Total cache hits"),
             &["model"]
         )
-        .expect("failed to register ailink_cache_hits_total");
+        .expect("failed to register trueflow_cache_hits_total");
 
         Self {
             requests_total,

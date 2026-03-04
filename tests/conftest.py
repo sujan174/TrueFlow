@@ -2,18 +2,18 @@ import os
 import time
 import pytest
 import requests
-from ailink import AIlinkClient, AsyncClient
+from trueflow import TrueFlowClient, AsyncClient
 
 @pytest.fixture(autouse=True)
 def _cleanup_clients(monkeypatch):
     created_clients = []
-    original_init = AIlinkClient.__init__
+    original_init = TrueFlowClient.__init__
     
     def new_init(self, *args, **kwargs):
         original_init(self, *args, **kwargs)
         created_clients.append(self)
         
-    monkeypatch.setattr(AIlinkClient, "__init__", new_init)
+    monkeypatch.setattr(TrueFlowClient, "__init__", new_init)
     yield
     for client in created_clients:
         try:
@@ -23,7 +23,7 @@ def _cleanup_clients(monkeypatch):
  
 # ── Global Config ─────────────────────────────────────────────────────────────
 GATEWAY_URL = os.getenv("GATEWAY_URL", "http://127.0.0.1:8443")
-ADMIN_KEY = os.getenv("ADMIN_KEY", "ailink-admin-test")
+ADMIN_KEY = os.getenv("ADMIN_KEY", "trueflow-admin-test")
 MOCK_UPSTREAM_URL = os.getenv("MOCK_UPSTREAM_URL", "http://mock-upstream:80")
 PROJECT_ID = "00000000-0000-0000-0000-000000000001"
 
@@ -73,12 +73,12 @@ def gateway_up(gateway_url):
 @pytest.fixture(scope="session")
 def admin_client(gateway_up, gateway_url, admin_key):
     """
-    Return a configured AIlinkClient with admin privileges.
-    Uses the AIlinkClient.admin() factory — the intended way to create admin clients.
+    Return a configured TrueFlowClient with admin privileges.
+    Uses the TrueFlowClient.admin() factory — the intended way to create admin clients.
     """
     if not gateway_up:
         pytest.skip(f"Gateway not reachable at {gateway_url}")
-    return AIlinkClient.admin(admin_key=admin_key, gateway_url=gateway_url)
+    return TrueFlowClient.admin(admin_key=admin_key, gateway_url=gateway_url)
 
 
 @pytest.fixture(scope="session")

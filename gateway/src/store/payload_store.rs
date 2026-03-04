@@ -17,7 +17,7 @@
 //! PAYLOAD_STORE_URL=s3://my-bucket?endpoint=http://minio:9000&region=us-east-1
 //!
 //! # Local filesystem (great for dev/testing)
-//! PAYLOAD_STORE_URL=file:///tmp/ailink-payloads
+//! PAYLOAD_STORE_URL=file:///tmp/trueflow-payloads
 //!
 //! # Unset or empty → Postgres fallback (default)
 //! ```

@@ -6,7 +6,7 @@ Matches the gateway API at ``/api/v1/prompts/*``.
 
 ::
 
-    admin = AIlinkClient.admin(admin_key="...")
+    admin = TrueFlowClient.admin(admin_key="...")
 
     # Create a prompt
     prompt = admin.prompts.create(name="Customer Support Agent")

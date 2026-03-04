@@ -1,6 +1,6 @@
 # Docker Deployment
 
-Run the full AILink stack (Gateway + Dashboard + PostgreSQL + Redis) with Docker Compose.
+Run the full TrueFlow stack (Gateway + Dashboard + PostgreSQL + Redis) with Docker Compose.
 
 ---
 
@@ -17,8 +17,8 @@ Run the full AILink stack (Gateway + Dashboard + PostgreSQL + Redis) with Docker
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/sujan174/ailink.git
-cd ailink
+git clone https://github.com/sujan174/trueflow.git
+cd trueflow
 ```
 
 ### 2. Start the Stack
@@ -33,7 +33,7 @@ docker compose up -d --build
 
 Open **[http://localhost:3000](http://localhost:3000)**
 
-- **Default Admin Key**: `ailink-admin-test` (set in `docker-compose.yml`)
+- **Default Admin Key**: `trueflow-admin-test` (set in `docker-compose.yml`)
 
 ---
 
@@ -75,15 +75,15 @@ Open **[http://localhost:3000](http://localhost:3000)**
 
 | Variable | What It Does | Default |
 |----------|-------------|---------|
-| `AILINK_MASTER_KEY` | 32-byte hex key for vault encryption. **Change for production** | dev key |
-| `AILINK_ADMIN_KEY` | Root admin API key | `ailink-admin-test` |
-| `DASHBOARD_SECRET` | Dashboard ↔ gateway auth secret | `ailink-dashboard-dev-secret` |
+| `TRUEFLOW_MASTER_KEY` | 32-byte hex key for vault encryption. **Change for production** | dev key |
+| `TRUEFLOW_ADMIN_KEY` | Root admin API key | `trueflow-admin-test` |
+| `DASHBOARD_SECRET` | Dashboard ↔ gateway auth secret | `trueflow-dashboard-dev-secret` |
 | `DASHBOARD_ORIGIN` | CORS origin for dashboard | `http://localhost:3000` |
-| `AILINK_ENV` | Set to `production` for secure startup checks | `development` |
+| `TRUEFLOW_ENV` | Set to `production` for secure startup checks | `development` |
 | `RUST_LOG` | Log level: `info`, `debug`, `trace` | `info` |
-| `AILINK_PORT` | Gateway bind port | `8443` |
-| `AILINK_SLACK_WEBHOOK_URL` | Slack webhook for HITL notifications | — |
-| `AILINK_ENABLE_TEST_HOOKS` | Enable test headers. **Never in production** | `0` |
+| `TRUEFLOW_PORT` | Gateway bind port | `8443` |
+| `TRUEFLOW_SLACK_WEBHOOK_URL` | Slack webhook for HITL notifications | — |
+| `TRUEFLOW_ENABLE_TEST_HOOKS` | Enable test headers. **Never in production** | `0` |
 
 ---
 
@@ -93,8 +93,8 @@ Open **[http://localhost:3000](http://localhost:3000)**
 
 | Variable | What to do |
 |----------|-----------|
-| `AILINK_MASTER_KEY` | Generate a cryptographically random 32-byte hex key |
-| `AILINK_ADMIN_KEY` | Set to a strong random string |
+| `TRUEFLOW_MASTER_KEY` | Generate a cryptographically random 32-byte hex key |
+| `TRUEFLOW_ADMIN_KEY` | Set to a strong random string |
 | `DASHBOARD_SECRET` | Set to a strong random string |
 | `POSTGRES_PASSWORD` | Use a strong password or managed database with IAM auth |
 
@@ -135,13 +135,13 @@ curl http://localhost:8443/readyz
 
 ### Prometheus
 
-Point your Prometheus scrape config at `http://ailink-gateway:8443/metrics`.
+Point your Prometheus scrape config at `http://trueflow-gateway:8443/metrics`.
 
 ### Recommended Alerts
 
 - Gateway readiness failing (`/readyz` returning non-200)
-- Error rate > 5% (`ailink_requests_total{status=~"5.."}`)
-- Latency P99 > 5s (`ailink_request_duration_seconds`)
+- Error rate > 5% (`trueflow_requests_total{status=~"5.."}`)
+- Latency P99 > 5s (`trueflow_request_duration_seconds`)
 - Circuit breaker open (`/health/upstreams` with `is_healthy: false`)
 
 ---
@@ -171,7 +171,7 @@ docker compose down -v
 Ensure Docker is running. Check `docker compose ps` — all containers should show `healthy`.
 
 ### "Gateway container keeps restarting"
-Check logs: `docker logs ailink-gateway-1`. Usually indicates a database connection issue.
+Check logs: `docker logs trueflow-gateway-1`. Usually indicates a database connection issue.
 
 ### "Dashboard shows Network Error"
 The dashboard makes browser-side requests to `NEXT_PUBLIC_API_URL` (default: `http://localhost:8443/api/v1`). Ensure:

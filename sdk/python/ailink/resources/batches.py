@@ -1,7 +1,7 @@
 """
 Feature 10: Batches API resource.
 
-Proxies requests to OpenAI's /v1/batches endpoint through the AILink gateway,
+Proxies requests to OpenAI's /v1/batches endpoint through the TrueFlow gateway,
 with full credential injection, audit logging, and token-based access control.
 """
 
@@ -12,14 +12,14 @@ from typing import TYPE_CHECKING, Any, Dict, Optional
 from ..exceptions import raise_for_status
 
 if TYPE_CHECKING:
-    from ..client import AIlinkClient, AsyncClient
+    from ..client import TrueFlowClient, AsyncClient
 
 
 class BatchesResource:
     """Synchronous Batches API resource.
 
     Exposes the same interface as the OpenAI SDK's `client.batches` resource.
-    All requests are routed through the AILink gateway for auditability and
+    All requests are routed through the TrueFlow gateway for auditability and
     policy enforcement.
 
     Example::
@@ -32,7 +32,7 @@ class BatchesResource:
         print(batch["id"], batch["status"])
     """
 
-    def __init__(self, client: "AIlinkClient") -> None:
+    def __init__(self, client: "TrueFlowClient") -> None:
         self._client = client
 
     def create(

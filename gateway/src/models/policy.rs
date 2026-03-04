@@ -500,7 +500,7 @@ pub struct RouteCondition {
     ///   - `"body.model"` — request body field `model`
     ///   - `"body.messages.0.content"` — first message content
     ///   - `"header.x-user-tier"` — request header value
-    ///   - `"metadata.env"` — `x-ailink-metadata` JSON field
+    ///   - `"metadata.env"` — `x-trueflow-metadata` JSON field
     pub field: String,
     /// Comparison operator: `eq`, `neq`, `contains`, `starts_with`, `ends_with`, `exists`, `regex`
     pub op: String,

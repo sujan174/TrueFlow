@@ -1,4 +1,4 @@
-"""Pydantic models for AIlink API responses."""
+"""Pydantic models for TrueFlow API responses."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field as dataclass_field
@@ -13,7 +13,7 @@ class Upstream:
 
     Usage::
 
-        from ailink.types import Upstream
+        from trueflow.types import Upstream
 
         admin.tokens.create(
             name="my-token",
@@ -42,7 +42,7 @@ class Upstream:
 
 
 
-class AIlinkModel(BaseModel):
+class TrueFlowModel(BaseModel):
     """Base model with dict-access compatibility for backward compatibility."""
     model_config = ConfigDict(extra="allow", populate_by_name=True)
 
@@ -53,7 +53,7 @@ class AIlinkModel(BaseModel):
         return item in self.model_dump()
 
 
-class Token(AIlinkModel):
+class Token(TrueFlowModel):
     """A virtual token that maps an agent to a credential and upstream endpoint."""
     id: str
     name: str
@@ -69,7 +69,7 @@ class Token(AIlinkModel):
         return f"Token(id={self.id!r}, name={self.name!r}, active={self.is_active})"
 
 
-class Credential(AIlinkModel):
+class Credential(TrueFlowModel):
     """An encrypted credential (API key) for an upstream provider."""
     id: str
     name: str
@@ -80,7 +80,7 @@ class Credential(AIlinkModel):
         return f"Credential(id={self.id!r}, name={self.name!r}, provider={self.provider!r})"
 
 
-class Service(AIlinkModel):
+class Service(TrueFlowModel):
     """A registered external service for the Action Gateway."""
     id: str
     name: str
@@ -96,7 +96,7 @@ class Service(AIlinkModel):
         return f"Service(id={self.id!r}, name={self.name!r}, type={self.service_type!r})"
 
 
-class Policy(AIlinkModel):
+class Policy(TrueFlowModel):
     """A security policy applied to token requests."""
     id: str
     name: str
@@ -108,7 +108,7 @@ class Policy(AIlinkModel):
         return f"Policy(id={self.id!r}, name={self.name!r}, mode={self.mode!r}, phase={self.phase!r})"
 
 
-class AuditLog(AIlinkModel):
+class AuditLog(TrueFlowModel):
     """A single audit log entry for a proxied request."""
     id: str
     created_at: datetime
@@ -136,7 +136,7 @@ class AuditLog(AIlinkModel):
         return f"AuditLog(id={self.id!r}, method={self.method!r}, path={self.path!r}, status={self.upstream_status})"
 
 
-class RequestSummary(AIlinkModel):
+class RequestSummary(TrueFlowModel):
     """Summary of the original request, embedded in approval requests."""
     method: str
     path: str
@@ -147,7 +147,7 @@ class RequestSummary(AIlinkModel):
         return f"RequestSummary({self.method} {self.path})"
 
 
-class ApprovalRequest(AIlinkModel):
+class ApprovalRequest(TrueFlowModel):
     """A HITL approval request pending admin review."""
     id: str
     token_id: str
@@ -160,7 +160,7 @@ class ApprovalRequest(AIlinkModel):
         return f"ApprovalRequest(id={self.id!r}, status={self.status!r})"
 
 
-class ApprovalDecision(AIlinkModel):
+class ApprovalDecision(TrueFlowModel):
     """The result of an admin approval decision."""
     id: str
     status: str
@@ -170,15 +170,15 @@ class ApprovalDecision(AIlinkModel):
         return f"ApprovalDecision(id={self.id!r}, status={self.status!r})"
 
 
-class Response(AIlinkModel):
+class Response(TrueFlowModel):
     """Generic API response wrapper."""
     message: Optional[str] = None
     data: Optional[Dict[str, Any]] = None
 
 
-class TokenCreateResponse(AIlinkModel):
+class TokenCreateResponse(TrueFlowModel):
     """Response from creating a new token."""
-    token_id: Optional[str] = None   # the ailink_v1_... key (only returned once)
+    token_id: Optional[str] = None   # the tf_v1_... key (only returned once)
     id: Optional[str] = None         # internal UUID
     name: Optional[str] = None
     upstream_url: Optional[str] = None
@@ -186,14 +186,14 @@ class TokenCreateResponse(AIlinkModel):
     project_id: Optional[str] = None
 
 
-class CredentialCreateResponse(AIlinkModel):
+class CredentialCreateResponse(TrueFlowModel):
     """Response from creating a credential."""
     id: Optional[str] = None
     name: Optional[str] = None
     provider: Optional[str] = None
 
 
-class PolicyCreateResponse(AIlinkModel):
+class PolicyCreateResponse(TrueFlowModel):
     """Response from creating a policy."""
     id: Optional[str] = None
     name: Optional[str] = None

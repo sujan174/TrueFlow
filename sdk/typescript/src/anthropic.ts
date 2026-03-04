@@ -1,11 +1,11 @@
 /**
- * Anthropic drop-in wrapper — point your existing Anthropic client at the AILink gateway.
+ * Anthropic drop-in wrapper — point your existing Anthropic client at the TrueFlow gateway.
  *
  * @example
  * ```ts
- * import { AILinkClient } from "@ailink/sdk";
+ * import { TrueFlowClient } from "@trueflow/sdk";
  *
- * const client = new AILinkClient({ apiKey: "ailink_v1_..." });
+ * const client = new TrueFlowClient({ apiKey: "tf_v1_..." });
  * const anthropic = client.anthropic();
  *
  * const msg = await anthropic.messages.create({
@@ -21,12 +21,12 @@
 import { VERSION } from "./version.js";
 
 /**
- * Create a configured Anthropic client that routes through the AILink gateway.
+ * Create a configured Anthropic client that routes through the TrueFlow gateway.
  *
  * Requires the `@anthropic-ai/sdk` package as a peer dependency.
  *
- * @param gatewayUrl - The AILink gateway URL.
- * @param apiKey - The AILink virtual token.
+ * @param gatewayUrl - The TrueFlow gateway URL.
+ * @param apiKey - The TrueFlow virtual token.
  * @returns A configured Anthropic client instance.
  */
 export function createAnthropicClient(gatewayUrl: string, apiKey: string): AnthropicClientLike {
@@ -45,7 +45,7 @@ export function createAnthropicClient(gatewayUrl: string, apiKey: string): Anthr
         apiKey,
         baseURL: `${gatewayUrl.replace(/\/+$/, "")}/anthropic`,
         defaultHeaders: {
-            "X-AILink-SDK": `typescript/${VERSION}`,
+            "X-TrueFlow-SDK": `typescript/${VERSION}`,
         },
     });
 }

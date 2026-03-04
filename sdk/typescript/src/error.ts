@@ -1,5 +1,5 @@
 /**
- * Typed error hierarchy for the AILink SDK.
+ * Typed error hierarchy for the TrueFlow SDK.
  *
  * Every gateway failure mode maps to a specific error class with typed
  * properties. Users can catch specific classes and act on structured data
@@ -7,7 +7,7 @@
  *
  * @example
  * ```ts
- * import { AILinkError, RateLimitError } from "@ailink/sdk";
+ * import { TrueFlowError, RateLimitError } from "@trueflow/sdk";
  *
  * try {
  *   await client.tokens.list();
@@ -25,8 +25,8 @@
 // Base
 // ────────────────────────────────────────────────────────────────────────────
 
-/** Base error for all AILink SDK errors. */
-export class AILinkError extends Error {
+/** Base error for all TrueFlow SDK errors. */
+export class TrueFlowError extends Error {
     /** HTTP status code from the gateway (undefined for client-side errors). */
     readonly statusCode: number | undefined;
     /** Machine-readable error type from the gateway body (e.g. `"rate_limit_error"`). */
@@ -46,7 +46,7 @@ export class AILinkError extends Error {
         } = {},
     ) {
         super(message);
-        this.name = "AILinkError";
+        this.name = "TrueFlowError";
         this.statusCode = options.statusCode;
         this.errorType = options.errorType ?? "";
         this.code = options.code ?? "";
@@ -59,10 +59,10 @@ export class AILinkError extends Error {
 // ────────────────────────────────────────────────────────────────────────────
 
 /** Invalid or missing API key / admin key (HTTP 401). */
-export class AuthenticationError extends AILinkError {
+export class AuthenticationError extends TrueFlowError {
     constructor(
         message: string,
-        options: ConstructorParameters<typeof AILinkError>[1] = {},
+        options: ConstructorParameters<typeof TrueFlowError>[1] = {},
     ) {
         super(message, options);
         this.name = "AuthenticationError";
@@ -74,10 +74,10 @@ export class AuthenticationError extends AILinkError {
 // ────────────────────────────────────────────────────────────────────────────
 
 /** Valid credentials but insufficient permissions (HTTP 403). */
-export class AccessDeniedError extends AILinkError {
+export class AccessDeniedError extends TrueFlowError {
     constructor(
         message: string,
-        options: ConstructorParameters<typeof AILinkError>[1] = {},
+        options: ConstructorParameters<typeof TrueFlowError>[1] = {},
     ) {
         super(message, options);
         this.name = "AccessDeniedError";
@@ -88,7 +88,7 @@ export class AccessDeniedError extends AILinkError {
 export class PolicyDeniedError extends AccessDeniedError {
     constructor(
         message: string,
-        options: ConstructorParameters<typeof AILinkError>[1] = {},
+        options: ConstructorParameters<typeof TrueFlowError>[1] = {},
     ) {
         super(message, options);
         this.name = "PolicyDeniedError";
@@ -104,7 +104,7 @@ export class ContentBlockedError extends AccessDeniedError {
 
     constructor(
         message: string,
-        options: ConstructorParameters<typeof AILinkError>[1] & {
+        options: ConstructorParameters<typeof TrueFlowError>[1] & {
             matchedPatterns?: string[];
             confidence?: number;
         } = {},
@@ -121,10 +121,10 @@ export class ContentBlockedError extends AccessDeniedError {
 // ────────────────────────────────────────────────────────────────────────────
 
 /** Requested resource does not exist (HTTP 404). */
-export class NotFoundError extends AILinkError {
+export class NotFoundError extends TrueFlowError {
     constructor(
         message: string,
-        options: ConstructorParameters<typeof AILinkError>[1] = {},
+        options: ConstructorParameters<typeof TrueFlowError>[1] = {},
     ) {
         super(message, options);
         this.name = "NotFoundError";
@@ -136,13 +136,13 @@ export class NotFoundError extends AILinkError {
  *
  * Check `retryAfter` for the number of seconds to wait before retrying.
  */
-export class RateLimitError extends AILinkError {
+export class RateLimitError extends TrueFlowError {
     /** Seconds to wait before retrying, from the `Retry-After` header. */
     readonly retryAfter: number | undefined;
 
     constructor(
         message: string,
-        options: ConstructorParameters<typeof AILinkError>[1] & {
+        options: ConstructorParameters<typeof TrueFlowError>[1] & {
             retryAfter?: number;
         } = {},
     ) {
@@ -153,10 +153,10 @@ export class RateLimitError extends AILinkError {
 }
 
 /** Request payload failed server-side validation (HTTP 422). */
-export class ValidationError extends AILinkError {
+export class ValidationError extends TrueFlowError {
     constructor(
         message: string,
-        options: ConstructorParameters<typeof AILinkError>[1] = {},
+        options: ConstructorParameters<typeof TrueFlowError>[1] = {},
     ) {
         super(message, options);
         this.name = "ValidationError";
@@ -164,10 +164,10 @@ export class ValidationError extends AILinkError {
 }
 
 /** Request body exceeds the gateway's 25 MB size limit (HTTP 413). */
-export class PayloadTooLargeError extends AILinkError {
+export class PayloadTooLargeError extends TrueFlowError {
     constructor(
         message: string,
-        options: ConstructorParameters<typeof AILinkError>[1] = {},
+        options: ConstructorParameters<typeof TrueFlowError>[1] = {},
     ) {
         super(message, options);
         this.name = "PayloadTooLargeError";
@@ -175,10 +175,10 @@ export class PayloadTooLargeError extends AILinkError {
 }
 
 /** Token spend cap reached (HTTP 402). */
-export class SpendCapError extends AILinkError {
+export class SpendCapError extends TrueFlowError {
     constructor(
         message: string,
-        options: ConstructorParameters<typeof AILinkError>[1] = {},
+        options: ConstructorParameters<typeof TrueFlowError>[1] = {},
     ) {
         super(message, options);
         this.name = "SpendCapError";
@@ -186,10 +186,10 @@ export class SpendCapError extends AILinkError {
 }
 
 /** Gateway returned a 5xx error. */
-export class GatewayError extends AILinkError {
+export class GatewayError extends TrueFlowError {
     constructor(
         message: string,
-        options: ConstructorParameters<typeof AILinkError>[1] = {},
+        options: ConstructorParameters<typeof TrueFlowError>[1] = {},
     ) {
         super(message, options);
         this.name = "GatewayError";
@@ -236,7 +236,7 @@ function parseErrorBody(body: string): ParsedError {
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * Inspect a `Response` and throw a typed `AILinkError` subclass if it
+ * Inspect a `Response` and throw a typed `TrueFlowError` subclass if it
  * indicates failure. Does nothing if the response is 2xx.
  *
  * @example
@@ -293,7 +293,7 @@ export async function raiseForStatus(response: Response): Promise<void> {
         });
     }
     if (status >= 400 && status < 500) {
-        throw new AILinkError(`Client error (${status}): ${message}`, opts);
+        throw new TrueFlowError(`Client error (${status}): ${message}`, opts);
     }
     if (status >= 500) {
         throw new GatewayError(`Gateway error (${status}): ${message}`, opts);

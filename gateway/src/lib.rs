@@ -1,4 +1,4 @@
-//! AIlink Gateway — library crate for integration testing.
+//! TrueFlow Gateway — library crate for integration testing.
 //!
 //! Re-exports modules needed by integration tests in `tests/`.
 

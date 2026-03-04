@@ -6,7 +6,7 @@ async function api<T>(path: string, options?: RequestInit): Promise<T> {
 
   // Inject project_id if present (client-side only)
   if (typeof window !== "undefined") {
-    const projectId = localStorage.getItem("ailink_project_id");
+    const projectId = localStorage.getItem("trueflow_project_id");
     if (projectId) {
       const separator = url.includes("?") ? "&" : "?";
       url = `${url}${separator}project_id=${projectId}`;
@@ -198,7 +198,7 @@ export const getToken = (id: string) => api<Token>(`/tokens/${id}`);
 
 export const createToken = (data: CreateTokenRequest) => {
   if (!data.project_id && typeof window !== "undefined") {
-    const pid = localStorage.getItem("ailink_project_id");
+    const pid = localStorage.getItem("trueflow_project_id");
     if (pid) data.project_id = pid;
   }
   return api<CreateTokenResponse>("/tokens", {
@@ -305,7 +305,7 @@ export const listPolicies = () => api<Policy[]>("/policies");
 
 export const createPolicy = (data: CreatePolicyRequest) => {
   if (!data.project_id && typeof window !== "undefined") {
-    const pid = localStorage.getItem("ailink_project_id");
+    const pid = localStorage.getItem("trueflow_project_id");
     if (pid) data.project_id = pid;
   }
   return api<{ id: string; name: string; message: string }>("/policies", {
@@ -500,7 +500,7 @@ export const createService = (data: {
 }) => {
   const payload = { ...data, project_id: undefined };
   if (typeof window !== "undefined") {
-    const pid = localStorage.getItem("ailink_project_id");
+    const pid = localStorage.getItem("trueflow_project_id");
     if (pid) (payload as any).project_id = pid;
   }
   return api<Service>("/services", {
@@ -518,7 +518,7 @@ export const deleteService = (id: string) =>
 // If the dashboard is ever served from a different origin than the API proxy,
 // SSE will fail silently. In that case, switch to fetch-based polling.
 export const streamAuditLogs = (onEvent: (log: AuditLog) => void) => {
-  const projectId = typeof window !== "undefined" ? localStorage.getItem("ailink_project_id") : null;
+  const projectId = typeof window !== "undefined" ? localStorage.getItem("trueflow_project_id") : null;
   const url = `${BASE_URL}/audit/stream${projectId ? `?project_id=${projectId}` : ""}`;
   const evtSource = new EventSource(url);
 

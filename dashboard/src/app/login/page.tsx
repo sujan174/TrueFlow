@@ -28,7 +28,7 @@ function LoginContent() {
                         <span className="text-white font-bold text-xl tracking-tight">A</span>
                     </div>
                     <div className="text-center">
-                        <h1 className="text-2xl font-bold tracking-tight">AILink</h1>
+                        <h1 className="text-2xl font-bold tracking-tight">TrueFlow</h1>
                         <p className="text-sm text-muted-foreground mt-1">
                             Sign in to your dashboard
                         </p>
@@ -58,7 +58,7 @@ function LoginContent() {
 
                 {/* Footer */}
                 <p className="text-center text-[11px] text-muted-foreground">
-                    By signing in, you agree to the AILink Terms of Service and Privacy Policy.
+                    By signing in, you agree to the TrueFlow Terms of Service and Privacy Policy.
                 </p>
             </div>
         </div>

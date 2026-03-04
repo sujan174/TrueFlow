@@ -1,5 +1,5 @@
 /**
- * Realtime WebSocket sessions proxied through the AILink gateway.
+ * Realtime WebSocket sessions proxied through the TrueFlow gateway.
  *
  * @example
  * ```ts
@@ -90,7 +90,7 @@ export class RealtimeResource {
     }
 
     /**
-     * Open a Realtime WebSocket session through the AILink gateway.
+     * Open a Realtime WebSocket session through the TrueFlow gateway.
      *
      * @example
      * ```ts

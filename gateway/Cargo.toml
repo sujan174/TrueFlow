@@ -2,10 +2,10 @@
 name = "gateway"
 version = "0.1.0"
 edition = "2021"
-description = "AIlink — Secure API Gateway for AI Agents"
+description = "TrueFlow — Secure API Gateway for AI Agents"
 
 [features]
-# Enable test-only backdoor headers (X-AIlink-Test-Cost etc.)
+# Enable test-only backdoor headers (X-TrueFlow-Test-Cost etc.)
 # NEVER enable this in production. Build with: cargo build --features test-hooks
 test-hooks = []
 
@@ -14,7 +14,7 @@ name = "gateway"
 path = "src/lib.rs"
 
 [[bin]]
-name = "ailink"
+name = "trueflow"
 path = "src/main.rs"
 
 [dependencies]

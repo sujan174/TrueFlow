@@ -49,7 +49,7 @@ export function CommandPalette() {
         {
             heading: "Actions",
             items: [
-                { icon: FileText, name: "View Documentation", action: () => window.open("https://docs.ailink.app", "_blank") },
+                { icon: FileText, name: "View Documentation", action: () => window.open("https://docs.trueflow.app", "_blank") },
             ]
         }
     ];

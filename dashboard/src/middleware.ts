@@ -6,7 +6,7 @@ import { NextRequest, NextResponse } from "next/server";
  * Two auth modes (determined by env vars):
  *
  * 1. **Google SSO** (GOOGLE_CLIENT_ID is set):
- *    Checks for a valid `ailink_session` cookie. If missing, redirects to /login.
+ *    Checks for a valid `trueflow_session` cookie. If missing, redirects to /login.
  *    The login page initiates the Google OAuth flow.
  *
  * 2. **Shared Secret** (DASHBOARD_SECRET is set, no GOOGLE_CLIENT_ID):
@@ -33,7 +33,7 @@ export function middleware(request: NextRequest) {
         if (isPublicRoute) return response;
 
         // Check for session cookie
-        const session = request.cookies.get("ailink_session")?.value;
+        const session = request.cookies.get("trueflow_session")?.value;
         if (!session) {
             const loginUrl = new URL("/login", request.url);
             return NextResponse.redirect(loginUrl);
@@ -48,8 +48,8 @@ export function middleware(request: NextRequest) {
                 const loginUrl = new URL("/login", request.url);
                 loginUrl.searchParams.set("error", "Session expired — please sign in again");
                 const redirect = NextResponse.redirect(loginUrl);
-                redirect.cookies.delete("ailink_session");
-                redirect.cookies.delete("ailink_user");
+                redirect.cookies.delete("trueflow_session");
+                redirect.cookies.delete("trueflow_user");
                 return redirect;
             }
 
@@ -59,9 +59,9 @@ export function middleware(request: NextRequest) {
                 name: payload.name,
                 picture: payload.picture,
             });
-            const existing_user = request.cookies.get("ailink_user")?.value;
+            const existing_user = request.cookies.get("trueflow_user")?.value;
             if (!existing_user) {
-                response.cookies.set("ailink_user", btoa(userInfo), {
+                response.cookies.set("trueflow_user", btoa(userInfo), {
                     httpOnly: false,
                     sameSite: "lax",
                     secure: process.env.NODE_ENV === "production",
@@ -73,8 +73,8 @@ export function middleware(request: NextRequest) {
             // Malformed session — redirect to login
             const loginUrl = new URL("/login", request.url);
             const redirect = NextResponse.redirect(loginUrl);
-            redirect.cookies.delete("ailink_session");
-            redirect.cookies.delete("ailink_user");
+            redirect.cookies.delete("trueflow_session");
+            redirect.cookies.delete("trueflow_user");
             return redirect;
         }
 

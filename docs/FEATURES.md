@@ -1,4 +1,4 @@
-# AILink — Complete Feature Inventory
+# TrueFlow — Complete Feature Inventory
 
 > Every feature across the Gateway (Rust), Dashboard (Next.js), and SDKs (Python/TypeScript), ordered by business criticality.
 
@@ -7,7 +7,7 @@
 ## Tier 1 — Core Identity (Gateway Can't Function Without These)
 
 ### 1.1 Virtual Token System ✅ TESTED
-- Issue virtual API keys (`ailink_v1_proj_XXX_tok_YYY`) to agents — real provider keys never exposed
+- Issue virtual API keys (`tf_v1_proj_XXX_tok_YYY`) to agents — real provider keys never exposed
 - Token creation with name, upstream URL, credential binding, policy attachments, log level
 - Token revocation (soft-delete, immediate effect)
 - Per-token usage stats (request count, cost, tokens)
@@ -30,7 +30,7 @@
 - `ANY /v1/*` and `ANY /*` via axum catch-all
 
 ### 1.4 Authentication & RBAC ✅ TESTED
-- **SuperAdmin key** (env var `AILINK_ADMIN_KEY`) — constant-time SHA-256 comparison, refuses insecure default in non-dev
+- **SuperAdmin key** (env var `TRUEFLOW_ADMIN_KEY`) — constant-time SHA-256 comparison, refuses insecure default in non-dev
 - **API keys** (`ak_live_...`) — scoped, expiry-aware, SHA-256 hashed in DB, last-used tracking
 - **OIDC/SSO** — JWT Bearer tokens: JWKS crypto verification, issuer lookup, claim mapping to RBAC roles
 - **Roles**: `SuperAdmin`, `Admin`, `Member`, `ReadOnly`
@@ -125,7 +125,7 @@
 ### 4.2 Circuit Breaker ✅ TESTED
 - Per-token failure tracking: `closed` → `open` → `half_open` → `closed`
 - Configurable: `failure_threshold`, `recovery_cooldown_secs`, `half_open_max_requests`
-- State changes reflected in `X-AILink-CB-State` response header
+- State changes reflected in `X-TrueFlow-CB-State` response header
 - Runtime update without gateway restart
 - `GET /tokens/:id/circuit-breaker`, `PATCH /tokens/:id/circuit-breaker`
 - `GET /health/upstreams` — live circuit breaker status for all upstreams
@@ -139,8 +139,8 @@
 ### 4.4 Response Caching ✅ TESTED
 - Deterministic cache keys based on request body (model, messages, temperature, etc.)
 - Skip cache for streaming responses and non-idempotent requests
-- Cache bypass via `X-AILink-No-Cache: true`
-- Cache hit: `X-AILink-Cache: HIT` response header
+- Cache bypass via `X-TrueFlow-No-Cache: true`
+- Cache hit: `X-TrueFlow-Cache: HIT` response header
 - Redis-backed (configurable TTL)
 
 ### 4.5 Model Aliases ❌ CANNOT TEST
@@ -346,10 +346,10 @@
 
 ## Tier 17 — SDKs
 
-### Python SDK (`ailink`) ❌ CANNOT TEST
+### Python SDK (`trueflow`) ❌ CANNOT TEST
 - SDK methods are client-side library code — requires Python unit tests, not gateway E2E.
 
-### TypeScript SDK (`@ailink/sdk`) ❌ CANNOT TEST
+### TypeScript SDK (`@trueflow/sdk`) ❌ CANNOT TEST
 - SDK methods are client-side library code — requires TypeScript unit tests.
 
 ---

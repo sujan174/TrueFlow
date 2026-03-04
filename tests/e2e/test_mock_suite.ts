@@ -1,6 +1,6 @@
 // @ts-nocheck
 /**
- * AILink Mock-Based Integration Test Suite (TypeScript)
+ * TrueFlow Mock-Based Integration Test Suite (TypeScript)
  * =====================================================
  * TypeScript port of tests/e2e/test_mock_suite.py — mirrors all 30 phases.
  *
@@ -10,13 +10,13 @@
  *     npx tsx tests/e2e/test_mock_suite.ts
  */
 
-import { AILinkClient } from "../../sdk/typescript/src/index.js";
+import { TrueFlowClient } from "../../sdk/typescript/src/index.js";
 
 // ── Config ────────────────────────────────────────────────────
-const GATEWAY_URL = process.env.AILINK_GATEWAY_URL ?? "http://localhost:8443";
-const ADMIN_KEY = process.env.AILINK_ADMIN_KEY ?? "ailink-admin-test";
-const MOCK_GATEWAY = process.env.AILINK_MOCK_URL ?? "http://host.docker.internal:9000";
-const MOCK_LOCAL = process.env.AILINK_MOCK_LOCAL ?? "http://localhost:9000";
+const GATEWAY_URL = process.env.TRUEFLOW_GATEWAY_URL ?? "http://localhost:8443";
+const ADMIN_KEY = process.env.TRUEFLOW_ADMIN_KEY ?? "trueflow-admin-test";
+const MOCK_GATEWAY = process.env.TRUEFLOW_MOCK_URL ?? "http://host.docker.internal:9000";
+const MOCK_LOCAL = process.env.TRUEFLOW_MOCK_LOCAL ?? "http://localhost:9000";
 const RUN_ID = crypto.randomUUID().slice(0, 8);
 
 // ── Harness ───────────────────────────────────────────────────
@@ -88,7 +88,7 @@ async function gw(
     }
     const headers: Record<string, string> = {
         "Content-Type": "application/json",
-        "User-Agent": "AILink-MockTest-TS/1.0",
+        "User-Agent": "TrueFlow-MockTest-TS/1.0",
         ...opts?.headers,
     };
     if (opts?.token) headers["Authorization"] = `Bearer ${opts.token}`;
@@ -104,7 +104,7 @@ async function gw(
     }
 }
 
-/** Direct call to mock upstream (bypasses AILink) */
+/** Direct call to mock upstream (bypasses TrueFlow) */
 async function mock(method: string, path: string, opts?: { json?: unknown; headers?: Record<string, string> }): Promise<Response> {
     const headers: Record<string, string> = { "Content-Type": "application/json", ...opts?.headers };
     const init: RequestInit = { method, headers };
@@ -131,7 +131,7 @@ function collectSSE(text: string): Record<string, unknown>[] {
 }
 
 // ── Shared setup ─────────────────────────────────────────────
-const admin = AILinkClient.admin({ adminKey: ADMIN_KEY, gatewayUrl: GATEWAY_URL });
+const admin = TrueFlowClient.admin({ adminKey: ADMIN_KEY, gatewayUrl: GATEWAY_URL });
 let _mockCredId = "";
 let _openaiTok = "";
 let _anthropicTok = "";
@@ -158,7 +158,7 @@ async function setupTokens(): Promise<void> {
 // ── MAIN ─────────────────────────────────────────────────────
 async function main(): Promise<void> {
     console.log("╔══════════════════════════════════════════════════════════════════╗");
-    console.log("║     AILink Mock-Based Integration Test Suite v1 (TypeScript)    ║");
+    console.log("║     TrueFlow Mock-Based Integration Test Suite v1 (TypeScript)    ║");
     console.log(`║     Run: ${RUN_ID}   Gateway: ${GATEWAY_URL.padEnd(28)} ║`);
     console.log(`║     Mock: ${MOCK_GATEWAY.padEnd(51)} ║`);
     console.log("╚══════════════════════════════════════════════════════════════════╝");
@@ -581,13 +581,13 @@ async function runPhase9to12(): Promise<void> {
     }
 
     await test("Transform: AppendSystemPrompt", async () => {
-        const tok = await transformTok([{ type: "append_system_prompt", text: "Always reply with AILINK." }]);
+        const tok = await transformTok([{ type: "append_system_prompt", text: "Always reply with TRUEFLOW." }]);
         const r = await chat(tok, "Say hello.", "gpt-4o");
         assert(r.status === 200, `${r.status}`);
         const d = await r.json() as Record<string, Record<string, Record<string, unknown>>>;
         const msgs = (d._debug?.received_body?.messages ?? []) as Array<Record<string, string>>;
         const sysMsgs = msgs.filter((m) => m.role === "system");
-        assert(sysMsgs.some((m) => (m.content ?? "").includes("AILINK")), `AILINK not in system msgs: ${JSON.stringify(sysMsgs)}`);
+        assert(sysMsgs.some((m) => (m.content ?? "").includes("TRUEFLOW")), `TRUEFLOW not in system msgs: ${JSON.stringify(sysMsgs)}`);
         return "AppendSystemPrompt verified ✓";
     });
 
@@ -603,12 +603,12 @@ async function runPhase9to12(): Promise<void> {
     });
 
     await test("Transform: SetHeader", async () => {
-        const tok = await transformTok([{ type: "set_header", name: "X-Custom-Header", value: "ailink-test" }]);
+        const tok = await transformTok([{ type: "set_header", name: "X-Custom-Header", value: "trueflow-test" }]);
         const r = await chat(tok, "header test", "gpt-4o");
         assert(r.status === 200, `${r.status}`);
         const d = await r.json() as Record<string, Record<string, Record<string, string>>>;
         const val = d._debug?.received_headers?.["x-custom-header"] ?? "";
-        assert(val === "ailink-test", `Expected 'ailink-test', got '${val}'`);
+        assert(val === "trueflow-test", `Expected 'trueflow-test', got '${val}'`);
         return "SetHeader verified ✓";
     });
 
@@ -811,9 +811,9 @@ async function runPhase13to19(): Promise<void> {
         return "Cache bypass ✓";
     });
 
-    await test("Response cache: x-ailink-no-cache opt-out", async () => {
+    await test("Response cache: x-trueflow-no-cache opt-out", async () => {
         const payload = { model: "gpt-4o", messages: [{ role: "user", content: `no-cache-${RUN_ID}` }], temperature: 0 };
-        const hdrs = { "x-ailink-no-cache": "true" };
+        const hdrs = { "x-trueflow-no-cache": "true" };
         const r1 = await gw("POST", "/v1/chat/completions", { token: _openaiTok, json: payload, headers: hdrs });
         await sleep(200);
         const r2 = await gw("POST", "/v1/chat/completions", { token: _openaiTok, json: payload, headers: hdrs });
@@ -1141,7 +1141,7 @@ async function runPhase20to30(): Promise<void> {
     await test("Prometheus: has request counter", async () => {
         const r = await fetch(`${GATEWAY_URL}/metrics`);
         const text = await r.text();
-        const has = ["ailink_requests_total", "http_requests_total", "requests_total", "proxy_requests"].some((kw) => text.includes(kw));
+        const has = ["trueflow_requests_total", "http_requests_total", "requests_total", "proxy_requests"].some((kw) => text.includes(kw));
         assert(has, "No request counter found");
         return "Request counter ✓";
     });

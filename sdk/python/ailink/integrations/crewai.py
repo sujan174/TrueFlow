@@ -1,14 +1,14 @@
 """
-CrewAI integration for AILink Gateway.
+CrewAI integration for TrueFlow Gateway.
 
 Provides a factory function that returns a CrewAI-native ``LLM`` object
-pre-configured to route through the AILink gateway.
+pre-configured to route through the TrueFlow gateway.
 
 Usage:
-    from ailink import AIlinkClient
-    from ailink.integrations import crewai_llm
+    from trueflow import TrueFlowClient
+    from trueflow.integrations import crewai_llm
 
-    client = AIlinkClient(api_key="ailink_v1_...")
+    client = TrueFlowClient(api_key="tf_v1_...")
 
     # Create a CrewAI-compatible LLM
     llm = crewai_llm(client, model="gpt-4o")
@@ -26,11 +26,11 @@ from __future__ import annotations
 from typing import Optional, Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from ailink.client import AIlinkClient
+    from trueflow.client import TrueFlowClient
 
 
 def crewai_llm(
-    client: "AIlinkClient",
+    client: "TrueFlowClient",
     model: str = "gpt-4o",
     *,
     temperature: Optional[float] = None,
@@ -38,15 +38,15 @@ def crewai_llm(
     **kwargs: Any,
 ):
     """
-    Create a CrewAI LLM instance routed through AILink.
+    Create a CrewAI LLM instance routed through TrueFlow.
 
     CrewAI uses LiteLLM under the hood, which supports OpenAI-compatible
     endpoints via the ``base_url`` parameter. This function creates a
-    CrewAI ``LLM`` object that routes all requests through the AILink
+    CrewAI ``LLM`` object that routes all requests through the TrueFlow
     gateway.
 
     Args:
-        client:      An initialized AIlinkClient instance.
+        client:      An initialized TrueFlowClient instance.
         model:       Model name (e.g. "gpt-4o", "gpt-4o-mini").
                      Use "openai/<model>" format for explicit provider prefix.
         temperature: Sampling temperature.
@@ -61,11 +61,11 @@ def crewai_llm(
 
     Example::
 
-        from ailink import AIlinkClient
-        from ailink.integrations import crewai_llm
+        from trueflow import TrueFlowClient
+        from trueflow.integrations import crewai_llm
         from crewai import Agent, Task, Crew
 
-        client = AIlinkClient(api_key="ailink_v1_...")
+        client = TrueFlowClient(api_key="tf_v1_...")
 
         llm = crewai_llm(client, model="gpt-4o", temperature=0.7)
 
@@ -91,7 +91,7 @@ def crewai_llm(
     except ImportError:
         raise ImportError(
             "CrewAI integration requires the 'crewai' package.\n"
-            "Install it with: pip install ailink[crewai]\n"
+            "Install it with: pip install trueflow[crewai]\n"
             "Or standalone:   pip install crewai"
         ) from None
 

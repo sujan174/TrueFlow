@@ -65,7 +65,7 @@ async fn main() -> anyhow::Result<()> {
             .tracing()
             .with_exporter(opentelemetry_otlp::new_exporter().tonic())
             .with_trace_config(sdktrace::config().with_resource(Resource::new(vec![
-                KeyValue::new("service.name", "ailink-gateway"),
+                KeyValue::new("service.name", "trueflow-gateway"),
             ])))
             .install_batch(opentelemetry_sdk::runtime::Tokio)
             .expect("failed to install OpenTelemetry tracer");
@@ -78,9 +78,9 @@ async fn main() -> anyhow::Result<()> {
         std::env::var("RUST_LOG").unwrap_or_else(|_| "gateway=debug,tower_http=debug".into()),
     );
 
-    // SIEM-ready JSON logs: set AILINK_LOG_FORMAT=json for structured output
+    // SIEM-ready JSON logs: set TRUEFLOW_LOG_FORMAT=json for structured output
     // compatible with Splunk, Datadog, ELK, CloudWatch.
-    let use_json = std::env::var("AILINK_LOG_FORMAT")
+    let use_json = std::env::var("TRUEFLOW_LOG_FORMAT")
         .map(|v| v.eq_ignore_ascii_case("json"))
         .unwrap_or(false);
 
@@ -252,12 +252,12 @@ async fn run_server(cfg: config::Config, port: u16) -> anyhow::Result<()> {
     }
 
     // ── Key Rotation Scheduler ──────────────────────────────────────────────
-    // Opt-in: set AILINK_ROTATION_ENABLED=true to enable background key rotation.
-    if std::env::var("AILINK_ROTATION_ENABLED")
+    // Opt-in: set TRUEFLOW_ROTATION_ENABLED=true to enable background key rotation.
+    if std::env::var("TRUEFLOW_ROTATION_ENABLED")
         .map(|v| v.eq_ignore_ascii_case("true") || v == "1")
         .unwrap_or(false)
     {
-        let rotation_interval: u64 = std::env::var("AILINK_ROTATION_CHECK_INTERVAL")
+        let rotation_interval: u64 = std::env::var("TRUEFLOW_ROTATION_CHECK_INTERVAL")
             .ok()
             .and_then(|v| v.parse().ok())
             .unwrap_or(3600); // default: check every hour
@@ -300,13 +300,13 @@ async fn run_server(cfg: config::Config, port: u16) -> anyhow::Result<()> {
         .layer(tower_http::trace::TraceLayer::new_for_http())
         // SEC-06: Restrict CORS origins.
         // - Dev: allows any localhost:* for convenience
-        // - Production (AILINK_ENV=production): only the explicit DASHBOARD_ORIGIN is permitted
+        // - Production (TRUEFLOW_ENV=production): only the explicit DASHBOARD_ORIGIN is permitted
         .layer({
             use tower_http::cors::AllowOrigin;
             use axum::http::{HeaderName, Method};
             let dashboard_origin = std::env::var("DASHBOARD_ORIGIN")
                 .unwrap_or_else(|_| "http://localhost:3000".to_string());
-            let is_production = std::env::var("AILINK_ENV")
+            let is_production = std::env::var("TRUEFLOW_ENV")
                 .map(|v| v == "production")
                 .unwrap_or(false);
             CorsLayer::new()
@@ -395,7 +395,7 @@ async fn run_server(cfg: config::Config, port: u16) -> anyhow::Result<()> {
 
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
     let listener = tokio::net::TcpListener::bind(addr).await?;
-    tracing::info!("AIlink gateway listening on {}", addr);
+    tracing::info!("TrueFlow gateway listening on {}", addr);
     axum::serve(listener, app).await?;
 
     Ok(())
@@ -468,7 +468,7 @@ async fn security_headers_middleware(
     // Currently set to max-age=0 (no-op) for HTTP dev environments.
     // When TLS is enabled in production, change to:
     //   "max-age=63072000; includeSubDomains; preload"
-    let is_production = std::env::var("AILINK_ENV")
+    let is_production = std::env::var("TRUEFLOW_ENV")
         .map(|v| v == "production")
         .unwrap_or(false);
     let hsts_value = if is_production {
@@ -618,7 +618,7 @@ async fn handle_token_command(
                 }
             }
 
-            let token_id = format!("ailink_v1_{}", uuid::Uuid::new_v4().simple());
+            let token_id = format!("tf_v1_{}", uuid::Uuid::new_v4().simple());
 
             let new_token = crate::store::postgres::NewToken {
                 id: token_id.clone(),

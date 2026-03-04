@@ -1,14 +1,14 @@
 """
-LangChain integration for AILink Gateway.
+LangChain integration for TrueFlow Gateway.
 
 Provides factory functions that return LangChain-native LLM objects
-pre-configured to route through the AILink gateway.
+pre-configured to route through the TrueFlow gateway.
 
 Usage:
-    from ailink import AIlinkClient
-    from ailink.integrations import langchain_chat
+    from trueflow import TrueFlowClient
+    from trueflow.integrations import langchain_chat
 
-    client = AIlinkClient(api_key="ailink_v1_...")
+    client = TrueFlowClient(api_key="tf_v1_...")
 
     # Drop-in replacement for ChatOpenAI
     llm = langchain_chat(client, model="gpt-4o")
@@ -26,11 +26,11 @@ from __future__ import annotations
 from typing import Optional, Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from ailink.client import AIlinkClient
+    from trueflow.client import TrueFlowClient
 
 
 def langchain_chat(
-    client: "AIlinkClient",
+    client: "TrueFlowClient",
     model: str = "gpt-4o",
     *,
     temperature: Optional[float] = None,
@@ -40,19 +40,19 @@ def langchain_chat(
     **kwargs: Any,
 ):
     """
-    Create a LangChain ChatOpenAI instance routed through AILink.
+    Create a LangChain ChatOpenAI instance routed through TrueFlow.
 
     This is a drop-in replacement for ChatOpenAI that routes all requests
-    through the AILink gateway, giving you:
+    through the TrueFlow gateway, giving you:
     - Policy enforcement (rate limits, spend caps, content filtering)
     - Audit logging (every request logged with cost tracking)
     - Credential injection (no API keys in your code)
     - Guardrails (PII redaction, jailbreak protection)
 
     Args:
-        client:     An initialized AIlinkClient instance.
+        client:     An initialized TrueFlowClient instance.
         model:      Model name (e.g. "gpt-4o", "gpt-4o-mini").
-                    Can also use AILink model aliases.
+                    Can also use TrueFlow model aliases.
         temperature: Sampling temperature (0-2).
         max_tokens:  Maximum tokens in the response.
         streaming:   Enable streaming responses.
@@ -67,10 +67,10 @@ def langchain_chat(
 
     Example::
 
-        from ailink import AIlinkClient
-        from ailink.integrations import langchain_chat
+        from trueflow import TrueFlowClient
+        from trueflow.integrations import langchain_chat
 
-        client = AIlinkClient(api_key="ailink_v1_...")
+        client = TrueFlowClient(api_key="tf_v1_...")
         llm = langchain_chat(client, model="gpt-4o", temperature=0)
 
         # Use in a chain
@@ -80,20 +80,20 @@ def langchain_chat(
             ("user", "{input}"),
         ])
         chain = prompt | llm
-        response = chain.invoke({"input": "What is AILink?"})
+        response = chain.invoke({"input": "What is TrueFlow?"})
     """
     try:
         from langchain_openai import ChatOpenAI
     except ImportError:
         raise ImportError(
             "LangChain integration requires the 'langchain-openai' package.\n"
-            "Install it with: pip install ailink[langchain]\n"
+            "Install it with: pip install trueflow[langchain]\n"
             "Or standalone:   pip install langchain-openai"
         ) from None
 
     headers = {"Authorization": f"Bearer {client.api_key}"}
     if client._agent_name:
-        headers["X-AIlink-Agent-Name"] = client._agent_name
+        headers["X-TrueFlow-Agent-Name"] = client._agent_name
     if default_headers:
         headers.update(default_headers)
 
@@ -114,15 +114,15 @@ def langchain_chat(
 
 
 def langchain_embeddings(
-    client: "AIlinkClient",
+    client: "TrueFlowClient",
     model: str = "text-embedding-3-small",
     **kwargs: Any,
 ):
     """
-    Create a LangChain OpenAIEmbeddings instance routed through AILink.
+    Create a LangChain OpenAIEmbeddings instance routed through TrueFlow.
 
     Args:
-        client:  An initialized AIlinkClient instance.
+        client:  An initialized TrueFlowClient instance.
         model:   Embedding model name.
         **kwargs: Passed through to OpenAIEmbeddings constructor.
 
@@ -134,7 +134,7 @@ def langchain_embeddings(
 
     Example::
 
-        from ailink.integrations import langchain_embeddings
+        from trueflow.integrations import langchain_embeddings
         embeddings = langchain_embeddings(client, model="text-embedding-3-small")
 
         # Use with a vector store
@@ -145,13 +145,13 @@ def langchain_embeddings(
     except ImportError:
         raise ImportError(
             "LangChain integration requires the 'langchain-openai' package.\n"
-            "Install it with: pip install ailink[langchain]\n"
+            "Install it with: pip install trueflow[langchain]\n"
             "Or standalone:   pip install langchain-openai"
         ) from None
 
     headers = {"Authorization": f"Bearer {client.api_key}"}
     if client._agent_name:
-        headers["X-AIlink-Agent-Name"] = client._agent_name
+        headers["X-TrueFlow-Agent-Name"] = client._agent_name
 
     return OpenAIEmbeddings(
         model=model,
@@ -162,10 +162,10 @@ def langchain_embeddings(
     )
 
 
-class AILinkCallbackHandler:
+class TrueFlowCallbackHandler:
     """
     LangChain callback handler that captures chain, tool, and agent metadata
-    and injects it into AILink's X-Properties header for per-step observability.
+    and injects it into TrueFlow's X-Properties header for per-step observability.
 
     This enables:
     - Spend breakdown by chain name (``group_by=tag:chain``)
@@ -175,11 +175,11 @@ class AILinkCallbackHandler:
 
     Usage::
 
-        from ailink import AIlinkClient
-        from ailink.integrations.langchain import langchain_chat, AILinkCallbackHandler
+        from trueflow import TrueFlowClient
+        from trueflow.integrations.langchain import langchain_chat, TrueFlowCallbackHandler
 
-        client = AIlinkClient()
-        handler = AILinkCallbackHandler(tags={"team": "billing", "env": "prod"})
+        client = TrueFlowClient()
+        handler = TrueFlowCallbackHandler(tags={"team": "billing", "env": "prod"})
 
         llm = langchain_chat(client, model="gpt-4o", callbacks=[handler])
 
@@ -187,7 +187,7 @@ class AILinkCallbackHandler:
         chain = prompt | llm
         chain.invoke({"input": "Hello"})
 
-        # In the AILink dashboard, you can now:
+        # In the TrueFlow dashboard, you can now:
         # - See which chain triggered each LLM call
         # - Track spend per tool or chain name
         # - Filter audit logs by custom tags

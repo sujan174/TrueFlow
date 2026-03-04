@@ -51,7 +51,7 @@ export default function ConfigPage() {
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
             const text = await res.text();
             const ext = format === "json" ? "json" : "yaml";
-            const filename = `ailink-${type}-${new Date().toISOString().slice(0, 10)}.${ext}`;
+            const filename = `trueflow-${type}-${new Date().toISOString().slice(0, 10)}.${ext}`;
             downloadBlob(text, filename, format === "json" ? "application/json" : "text/yaml");
             setPreviewContent(text);
             setPreviewTitle(filename);

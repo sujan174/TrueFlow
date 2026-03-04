@@ -1,4 +1,4 @@
-"""Config-as-Code: export and import AILink configuration as YAML/JSON."""
+"""Config-as-Code: export and import TrueFlow configuration as YAML/JSON."""
 
 from __future__ import annotations
 
@@ -10,18 +10,18 @@ from ..exceptions import raise_for_status
 
 
 class ConfigResource:
-    """Export and import complete AILink configuration (policies + tokens) as YAML or JSON.
+    """Export and import complete TrueFlow configuration (policies + tokens) as YAML or JSON.
 
-    This enables GitOps and infrastructure-as-code workflows where your AILink
+    This enables GitOps and infrastructure-as-code workflows where your TrueFlow
     configuration lives in version control alongside your application code.
 
     Example usage::
 
         # Export current config to a YAML file
-        client.config.export_to_file("ailink_config.yaml")
+        client.config.export_to_file("trueflow_config.yaml")
 
         # Edit the file, then re-import:
-        client.config.import_from_file("ailink_config.yaml")
+        client.config.import_from_file("trueflow_config.yaml")
 
         # Or work with the raw dict
         cfg = client.config.export(format="json")

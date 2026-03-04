@@ -251,7 +251,7 @@ fn select_weighted_random(candidates: Vec<&RouteTarget>) -> Option<RouteDecision
 /// - `"body.<key>"` — top-level request body field (e.g. `"body.model"`)
 /// - `"body.<key>.<subkey>"` — nested body field
 /// - `"header.<name>"` — request header (lowercase)
-/// - `"metadata.<key>"` — `x-ailink-metadata` JSON field
+/// - `"metadata.<key>"` — `x-trueflow-metadata` JSON field
 pub fn evaluate_conditional_route_branches(
     branches: &[crate::models::policy::RouteBranch],
     body: &serde_json::Value,
@@ -337,9 +337,9 @@ fn resolve_condition_field(
             .and_then(|v| v.to_str().ok())
             .map(|s| serde_json::Value::String(s.to_owned()))
     } else if let Some(rest) = field.strip_prefix("metadata.") {
-        // metadata is sent as x-ailink-metadata JSON header
+        // metadata is sent as x-trueflow-metadata JSON header
         headers
-            .get("x-ailink-metadata")
+            .get("x-trueflow-metadata")
             .and_then(|v| v.to_str().ok())
             .and_then(|s| serde_json::from_str::<serde_json::Value>(s).ok())
             .and_then(|m| m.get(rest).cloned())

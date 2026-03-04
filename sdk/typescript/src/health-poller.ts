@@ -1,11 +1,11 @@
 /**
- * Background health poller — continuously monitors the AILink gateway health.
+ * Background health poller — continuously monitors the TrueFlow gateway health.
  *
  * @example
  * ```ts
- * import { AILinkClient, HealthPoller } from "@ailink/sdk";
+ * import { TrueFlowClient, HealthPoller } from "@trueflow/sdk";
  *
- * const client = new AILinkClient({ apiKey: "ailink_v1_..." });
+ * const client = new TrueFlowClient({ apiKey: "tf_v1_..." });
  * const poller = new HealthPoller(client, { intervalMs: 10_000 });
  * poller.start();
  *
@@ -22,7 +22,7 @@
  * @module
  */
 
-import type { AILinkClient } from "./client.js";
+import type { TrueFlowClient } from "./client.js";
 
 /** Options for configuring the health poller. */
 export interface HealthPollerOptions {
@@ -38,13 +38,13 @@ export interface HealthPollerOptions {
  * path without paying an HTTP round-trip per request.
  */
 export class HealthPoller {
-    private readonly client: AILinkClient;
+    private readonly client: TrueFlowClient;
     private readonly intervalMs: number;
     private readonly timeoutMs: number;
     private healthy = true; // optimistic default
     private timer: ReturnType<typeof setInterval> | undefined;
 
-    constructor(client: AILinkClient, options: HealthPollerOptions = {}) {
+    constructor(client: TrueFlowClient, options: HealthPollerOptions = {}) {
         this.client = client;
         this.intervalMs = options.intervalMs ?? 15_000;
         this.timeoutMs = options.timeoutMs ?? 3_000;

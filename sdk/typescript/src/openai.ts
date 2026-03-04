@@ -1,14 +1,14 @@
 /**
- * OpenAI drop-in wrapper — point your existing OpenAI client at the AILink gateway.
+ * OpenAI drop-in wrapper — point your existing OpenAI client at the TrueFlow gateway.
  *
  * @example
  * ```ts
- * import { AILinkClient } from "@ailink/sdk";
+ * import { TrueFlowClient } from "@trueflow/sdk";
  *
- * const client = new AILinkClient({ apiKey: "ailink_v1_..." });
+ * const client = new TrueFlowClient({ apiKey: "tf_v1_..." });
  * const openai = client.openai();
  *
- * // Now use the standard OpenAI SDK — all requests route through AILink
+ * // Now use the standard OpenAI SDK — all requests route through TrueFlow
  * const response = await openai.chat.completions.create({
  *   model: "gpt-4o",
  *   messages: [{ role: "user", content: "Hello!" }],
@@ -21,19 +21,19 @@
 import { VERSION } from "./version.js";
 
 /**
- * Create a configured OpenAI client that routes through the AILink gateway.
+ * Create a configured OpenAI client that routes through the TrueFlow gateway.
  *
  * Requires the `openai` package as a peer dependency.
  *
- * @param gatewayUrl - The AILink gateway URL (e.g. `"http://localhost:8443"`).
- * @param apiKey - The AILink virtual token.
+ * @param gatewayUrl - The TrueFlow gateway URL (e.g. `"http://localhost:8443"`).
+ * @param apiKey - The TrueFlow virtual token.
  * @returns A configured `OpenAI` client instance.
  *
  * @example
  * ```ts
- * import { createOpenAIClient } from "@ailink/sdk";
+ * import { createOpenAIClient } from "@trueflow/sdk";
  *
- * const openai = createOpenAIClient("http://localhost:8443", "ailink_v1_...");
+ * const openai = createOpenAIClient("http://localhost:8443", "tf_v1_...");
  * const res = await openai.chat.completions.create({
  *   model: "gpt-4o",
  *   messages: [{ role: "user", content: "Hello!" }],
@@ -58,7 +58,7 @@ export function createOpenAIClient(gatewayUrl: string, apiKey: string): OpenAICl
         apiKey,
         baseURL: `${gatewayUrl.replace(/\/+$/, "")}/v1`,
         defaultHeaders: {
-            "X-AILink-SDK": `typescript/${VERSION}`,
+            "X-TrueFlow-SDK": `typescript/${VERSION}`,
         },
     });
 }

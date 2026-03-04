@@ -1,11 +1,11 @@
 /**
- * @ailink/sdk — Official TypeScript SDK for the AILink Gateway.
+ * @trueflow/sdk — Official TypeScript SDK for the TrueFlow Gateway.
  *
  * @example
  * ```ts
- * import { AILinkClient } from "@ailink/sdk";
+ * import { TrueFlowClient } from "@trueflow/sdk";
  *
- * const client = new AILinkClient({ apiKey: "ailink_v1_..." });
+ * const client = new TrueFlowClient({ apiKey: "tf_v1_..." });
  *
  * // Use the OpenAI drop-in wrapper
  * const openai = client.openai();
@@ -15,7 +15,7 @@
  * });
  *
  * // Use the management API
- * const admin = AILinkClient.admin({ adminKey: "your-admin-key" });
+ * const admin = TrueFlowClient.admin({ adminKey: "your-admin-key" });
  * const tokens = await admin.tokens.list();
  * ```
  *
@@ -23,12 +23,12 @@
  */
 
 // ── Client ────────────────────────────────────────────────────────────────
-export { AILinkClient, ScopedClient } from "./client.js";
-export type { AILinkClientOptions, AdminOptions } from "./client.js";
+export { TrueFlowClient, ScopedClient } from "./client.js";
+export type { TrueFlowClientOptions, AdminOptions } from "./client.js";
 
 // ── Errors ────────────────────────────────────────────────────────────────
 export {
-    AILinkError,
+    TrueFlowError,
     AuthenticationError,
     AccessDeniedError,
     PolicyDeniedError,

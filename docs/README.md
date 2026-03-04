@@ -1,4 +1,4 @@
-# AILink Documentation
+# TrueFlow Documentation
 
 > **The Enterprise AI Agent Gateway** — Route, govern, and observe every AI call.
 
@@ -15,8 +15,8 @@
 
 | SDK | Description |
 |-----|-------------|
-| **[Python SDK](sdks/python.md)** | `pip install ailink` — drop‑in OpenAI replacement, async, LangChain/CrewAI/LlamaIndex |
-| **[TypeScript SDK](sdks/typescript.md)** | `npm install @ailink/sdk` — OpenAI/Anthropic drop‑in, SSE streaming, zero dependencies |
+| **[Python SDK](sdks/python.md)** | `pip install trueflow` — drop‑in OpenAI replacement, async, LangChain/CrewAI/LlamaIndex |
+| **[TypeScript SDK](sdks/typescript.md)** | `npm install @trueflow/sdk` — OpenAI/Anthropic drop‑in, SSE streaming, zero dependencies |
 
 ## Guides
 

@@ -118,8 +118,8 @@ pub async fn emit_async_violation(
         "async guardrail violation — response already sent"
     );
 
-    // Notify AILINK_ASYNC_GUARDRAIL_WEBHOOK if configured (best-effort)
-    if let Ok(webhook_url) = std::env::var("AILINK_ASYNC_GUARDRAIL_WEBHOOK") {
+    // Notify TRUEFLOW_ASYNC_GUARDRAIL_WEBHOOK if configured (best-effort)
+    if let Ok(webhook_url) = std::env::var("TRUEFLOW_ASYNC_GUARDRAIL_WEBHOOK") {
         let payload = serde_json::json!({
             "event_type": "async_guardrail_violation",
             "token_id": violation.token_id,

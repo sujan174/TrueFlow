@@ -97,14 +97,14 @@ pub async fn set_cached(
 /// Check if caching should be skipped for this request.
 ///
 /// Skips caching when:
-/// - `x-ailink-no-cache: true` header is present (explicit opt-out)
+/// - `x-trueflow-no-cache: true` header is present (explicit opt-out)
 /// - `Cache-Control: no-cache` / `no-store` header is present
 /// - `temperature > 0.1` in the request body (non-deterministic — caching is misleading)
 /// - `stream: true` in the request body (streaming responses cannot be cached)
 pub fn should_skip_cache(headers: &axum::http::HeaderMap, body: Option<&serde_json::Value>) -> bool {
     // Explicit opt-out
     if headers
-        .get("x-ailink-no-cache")
+        .get("x-trueflow-no-cache")
         .and_then(|v| v.to_str().ok())
         .map(|v| v == "true" || v == "1")
         .unwrap_or(false)
@@ -213,7 +213,7 @@ mod tests {
         let mut headers = axum::http::HeaderMap::new();
         assert!(!should_skip_cache(&headers, None));
 
-        headers.insert("x-ailink-no-cache", "true".parse().unwrap());
+        headers.insert("x-trueflow-no-cache", "true".parse().unwrap());
         assert!(should_skip_cache(&headers, None));
     }
 

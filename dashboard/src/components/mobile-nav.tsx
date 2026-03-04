@@ -146,7 +146,7 @@ export function MobileNav() {
                         <div className="flex h-7 w-7 items-center justify-center rounded-md bg-gradient-to-br from-[#6366f1] to-[#4338ca] text-white text-xs font-black shrink-0">
                             A
                         </div>
-                        <span className="gradient-text font-semibold text-sm">AIlink</span>
+                        <span className="gradient-text font-semibold text-sm">TrueFlow</span>
                     </div>
                     <button
                         aria-label="Close navigation"

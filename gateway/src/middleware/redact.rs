@@ -1115,10 +1115,10 @@ mod tests {
             &mut mutations,
             &TransformOp::SetBodyField {
                 path: "metadata.source".to_string(),
-                value: json!("ailink"),
+                value: json!("trueflow"),
             },
         );
-        assert_eq!(body["metadata"]["source"], "ailink");
+        assert_eq!(body["metadata"]["source"], "trueflow");
     }
 
     #[test]

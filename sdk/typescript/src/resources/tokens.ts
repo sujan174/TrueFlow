@@ -7,7 +7,7 @@
  *   name: "my-agent",
  *   upstreamUrl: "https://api.openai.com",
  * });
- * console.log(token.tokenId); // ailink_v1_...
+ * console.log(token.tokenId); // tf_v1_...
  * ```
  *
  * @module

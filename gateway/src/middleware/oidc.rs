@@ -355,12 +355,12 @@ pub fn decode_claims(token: &str) -> anyhow::Result<OidcClaims> {
 /// claim_mapping example:
 /// ```json
 /// {
-///   "role": "custom:ailink_role",
-///   "scopes": "custom:ailink_scopes"
+///   "role": "custom:trueflow_role",
+///   "scopes": "custom:trueflow_scopes"
 /// }
 /// ```
 ///
-/// This means: look for `custom:ailink_role` in the JWT claims → use as role.
+/// This means: look for `custom:trueflow_role` in the JWT claims → use as role.
 pub fn map_claims_to_rbac(
     claims: &OidcClaims,
     provider: &OidcProvider,
@@ -412,8 +412,8 @@ mod tests {
             jwks_uri: None,
             audience: None,
             claim_mapping: serde_json::json!({
-                "role": "custom:ailink_role",
-                "scopes": "custom:ailink_scopes"
+                "role": "custom:trueflow_role",
+                "scopes": "custom:trueflow_scopes"
             }),
             default_role: "viewer".to_string(),
             default_scopes: "audit:read".to_string(),
@@ -480,7 +480,7 @@ mod tests {
         use base64::Engine;
         let engine = base64::engine::general_purpose::URL_SAFE_NO_PAD;
         let header = engine.encode(r#"{"alg":"RS256"}"#);
-        let payload = engine.encode(r#"{"sub":"admin-user","exp":9999999999,"custom:ailink_role":"admin","custom:ailink_scopes":"*"}"#);
+        let payload = engine.encode(r#"{"sub":"admin-user","exp":9999999999,"custom:trueflow_role":"admin","custom:trueflow_scopes":"*"}"#);
         let token = format!("{}.{}.signature", header, payload);
 
         let claims = decode_claims(&token).unwrap();

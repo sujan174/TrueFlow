@@ -1,4 +1,4 @@
-# ── AILink Production Stack ──────────────────────────────────────────────────
+# ── TrueFlow Production Stack ──────────────────────────────────────────────────
 # This is the shipping compose file: gateway, dashboard, postgres, redis.
 # For testing, use: docker compose -f docker-compose.yml -f docker-compose.test.yml up
 
@@ -7,18 +7,18 @@ services:
     build:
       context: ./gateway
       dockerfile: Dockerfile
-    image: ailink/gateway:latest
+    image: trueflow/gateway:latest
     restart: unless-stopped
     ports:
       - "8443:8443"
     environment:
-      - DATABASE_URL=postgres://postgres:password@postgres:5432/ailink
+      - DATABASE_URL=postgres://postgres:password@postgres:5432/trueflow
       - REDIS_URL=redis://redis:6379
       - RUST_LOG=info
-      - AILINK_MASTER_KEY=000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f
-      - AILINK_ADMIN_KEY=ailink-admin-test
+      - TRUEFLOW_MASTER_KEY=000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f
+      - TRUEFLOW_ADMIN_KEY=trueflow-admin-test
       - DASHBOARD_ORIGIN=http://localhost:3000
-      - AILINK_ENABLE_TEST_HOOKS=1
+      - TRUEFLOW_ENABLE_TEST_HOOKS=1
     depends_on:
       postgres:
         condition: service_healthy
@@ -44,7 +44,7 @@ services:
     build:
       context: ./dashboard
       dockerfile: Dockerfile
-    image: ailink/dashboard:latest
+    image: trueflow/dashboard:latest
     restart: unless-stopped
     ports:
       - "3000:3000"
@@ -52,8 +52,8 @@ services:
       NEXT_PUBLIC_API_URL: "http://localhost:8443/api/v1"
       API_URL: "http://gateway:8443/api/v1"
       GATEWAY_INTERNAL_URL: "http://gateway:8443"
-      AILINK_ADMIN_KEY: "ailink-admin-test"
-      DASHBOARD_SECRET: "ailink-dashboard-dev-secret"
+      TRUEFLOW_ADMIN_KEY: "trueflow-admin-test"
+      DASHBOARD_SECRET: "trueflow-dashboard-dev-secret"
       GOOGLE_CLIENT_ID: "${GOOGLE_CLIENT_ID}"
       GOOGLE_CLIENT_SECRET: "${GOOGLE_CLIENT_SECRET}"
       NEXTAUTH_URL: "http://localhost:3000"
@@ -76,7 +76,7 @@ services:
     image: postgres:16-alpine
     restart: always
     environment:
-      POSTGRES_DB: ailink
+      POSTGRES_DB: trueflow
       POSTGRES_USER: postgres
       # ⚠️  DEV ONLY — override in production with a strong password
       POSTGRES_PASSWORD: password

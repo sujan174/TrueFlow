@@ -1,6 +1,6 @@
-# Self-Hosting AILink
+# Self-Hosting TrueFlow
 
-Run the full AILink stack (Gateway + Dashboard + PostgreSQL + Redis) on your machine or server.
+Run the full TrueFlow stack (Gateway + Dashboard + PostgreSQL + Redis) on your machine or server.
 
 ## Prerequisites
 
@@ -12,8 +12,8 @@ Run the full AILink stack (Gateway + Dashboard + PostgreSQL + Redis) on your mac
 
 ### 1. Clone the Repository
 ```bash
-git clone https://github.com/sujan174/ailink.git
-cd ailink
+git clone https://github.com/sujan174/trueflow.git
+cd trueflow
 ```
 
 ### 2. Start the Stack
@@ -27,7 +27,7 @@ docker compose up -d --build
 
 Open your browser → **[http://localhost:3000](http://localhost:3000)**
 
-- **Default Admin Key**: `ailink-admin-test` (set in `docker-compose.yml`)
+- **Default Admin Key**: `trueflow-admin-test` (set in `docker-compose.yml`)
 
 ## What's Running?
 
@@ -51,9 +51,9 @@ Edit `docker-compose.yml` to customize your deployment:
 
 | Variable | What It Does | Default |
 |----------|-------------|---------|
-| `AILINK_MASTER_KEY` | Encryption key for the credential vault. **Change for production** | dev key |
-| `AILINK_ADMIN_KEY` | Root admin API key for the Management API | `ailink-admin-test` |
-| `DASHBOARD_SECRET` | Shared secret for dashboard ↔ gateway auth | `ailink-dashboard-dev-secret` |
+| `TRUEFLOW_MASTER_KEY` | Encryption key for the credential vault. **Change for production** | dev key |
+| `TRUEFLOW_ADMIN_KEY` | Root admin API key for the Management API | `trueflow-admin-test` |
+| `DASHBOARD_SECRET` | Shared secret for dashboard ↔ gateway auth | `trueflow-dashboard-dev-secret` |
 | `DASHBOARD_ORIGIN` | CORS origin for the dashboard | `http://localhost:3000` |
 | Port `8443` | Gateway port (change `"8443:8443"` if conflicts) | `8443` |
 | Port `3000` | Dashboard port (change `"3000:3000"` if conflicts) | `3000` |
@@ -94,7 +94,7 @@ docker compose down -v
 Ensure Docker is running. Check `docker compose ps` — all containers should show `healthy`.
 
 ### "Gateway container keeps restarting"
-Check logs: `docker logs ailink-gateway-1`. Usually indicates a database connection issue — ensure PostgreSQL is healthy first.
+Check logs: `docker logs trueflow-gateway-1`. Usually indicates a database connection issue — ensure PostgreSQL is healthy first.
 
 ### "Dashboard shows Network Error"
 The dashboard makes browser-side requests to `NEXT_PUBLIC_API_URL` (default: `http://localhost:8443/api/v1`). Ensure:

@@ -1,9 +1,9 @@
 import logging
 
-logger = logging.getLogger("ailink")
+logger = logging.getLogger("trueflow")
 
 def log_request(method: str, url: str):
-    logger.debug("AIlink SDK → %s %s", method, url)
+    logger.debug("TrueFlow SDK → %s %s", method, url)
 
 def log_response(status: int, url: str, elapsed_ms: float):
-    logger.debug("AIlink SDK ← %d %s (%.0fms)", status, url, elapsed_ms)
+    logger.debug("TrueFlow SDK ← %d %s (%.0fms)", status, url, elapsed_ms)

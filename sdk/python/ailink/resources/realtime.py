@@ -1,4 +1,4 @@
-"""Realtime WebSocket session proxy — connects to the AILink Realtime gateway."""
+"""Realtime WebSocket session proxy — connects to the TrueFlow Realtime gateway."""
 
 from __future__ import annotations
 
@@ -12,20 +12,20 @@ try:
 except ImportError:
     websockets = None  # type: ignore
 
-from ..exceptions import AIlinkError
+from ..exceptions import TrueFlowError
 
 
 # ── Sync Realtime Session ─────────────────────────────────────
 
 class RealtimeSession:
-    """Synchronous Realtime WebSocket session proxied through AILink.
+    """Synchronous Realtime WebSocket session proxied through TrueFlow.
 
     Usage::
 
         import json
-        from ailink import AIlinkClient
+        from trueflow import TrueFlowClient
 
-        client = AIlinkClient.admin(admin_key="...admin key...", gateway_url="ws://localhost:8080")
+        client = TrueFlowClient.admin(admin_key="...admin key...", gateway_url="ws://localhost:8080")
 
         with client.realtime.connect(model="gpt-4o-realtime-preview") as session:
             # Send a session.update event
@@ -86,7 +86,7 @@ class RealtimeSession:
 
 
 class RealtimeResource:
-    """Manage Realtime WebSocket sessions via the AILink gateway.
+    """Manage Realtime WebSocket sessions via the TrueFlow gateway.
 
     Create sessions using ``connect()`` as a context manager::
 
@@ -115,7 +115,7 @@ class RealtimeResource:
         if websockets is None:
             raise ImportError(
                 "The 'websockets' package is required for client.realtime. "
-                "Install it with: pip install ailink[realtime]\n"
+                "Install it with: pip install trueflow[realtime]\n"
                 "Or standalone: pip install 'websockets>=12'"
             )
         api_key = getattr(self._client, "api_key", None) or getattr(self._client, "_token", None)
@@ -133,7 +133,7 @@ class RealtimeResource:
 # ── Async Realtime Session ────────────────────────────────────
 
 class AsyncRealtimeSession:
-    """Asynchronous Realtime WebSocket session proxied through AILink.
+    """Asynchronous Realtime WebSocket session proxied through TrueFlow.
 
     Usage::
 
@@ -194,7 +194,7 @@ class _AsyncRealtimeConnectCtx:
 
     async def __aenter__(self) -> AsyncRealtimeSession:
         if websockets is None:
-            raise ImportError("Install websockets: pip install ailink[realtime]")
+            raise ImportError("Install websockets: pip install trueflow[realtime]")
         api_key = getattr(self._client, "api_key", None) or getattr(self._client, "_token", None)
         gateway_url = self._client.gateway_url.replace("http://", "ws://").replace("https://", "wss://")
         ws_url = f"{gateway_url}/v1/realtime?model={self._model}"
@@ -210,7 +210,7 @@ class _AsyncRealtimeConnectCtx:
 
 
 class AsyncRealtimeResource:
-    """Async Realtime WebSocket sessions via AILink gateway."""
+    """Async Realtime WebSocket sessions via TrueFlow gateway."""
 
     def __init__(self, client):
         self._client = client
@@ -231,7 +231,7 @@ class AsyncRealtimeResource:
             An async context manager yielding :class:`AsyncRealtimeSession`.
         """
         if websockets is None:
-            raise ImportError("Install websockets: pip install ailink[realtime]")
+            raise ImportError("Install websockets: pip install trueflow[realtime]")
         return _AsyncRealtimeConnectCtx(
             self._client,
             model=model,

@@ -1,38 +1,38 @@
-# AIlink Python SDK
+# TrueFlow Python SDK
 
-Python client for the [AIlink Gateway](https://github.com/sujan174/ailink) — secure credential management and policy enforcement for AI agents.
+Python client for the [TrueFlow Gateway](https://github.com/sujan174/trueflow) — secure credential management and policy enforcement for AI agents.
 
 ## Installation
 
 ```bash
-pip install ailink
+pip install trueflow
 ```
 
 With provider extras:
 
 ```bash
-pip install ailink[openai]      # OpenAI compatibility
-pip install ailink[anthropic]   # Anthropic compatibility
+pip install trueflow[openai]      # OpenAI compatibility
+pip install trueflow[anthropic]   # Anthropic compatibility
 ```
 
 With framework integrations:
 
 ```bash
-pip install ailink[langchain]    # LangChain support
-pip install ailink[crewai]       # CrewAI support
-pip install ailink[llamaindex]   # LlamaIndex support
-pip install ailink[frameworks]   # All frameworks
+pip install trueflow[langchain]    # LangChain support
+pip install trueflow[crewai]       # CrewAI support
+pip install trueflow[llamaindex]   # LlamaIndex support
+pip install trueflow[frameworks]   # All frameworks
 ```
 
 ## Framework Integrations
 
-AILink integrates natively with LangChain, CrewAI, and LlamaIndex:
+TrueFlow integrates natively with LangChain, CrewAI, and LlamaIndex:
 
 ```python
-from ailink import AIlinkClient
-from ailink.integrations import langchain_chat, crewai_llm, llamaindex_llm
+from trueflow import TrueFlowClient
+from trueflow.integrations import langchain_chat, crewai_llm, llamaindex_llm
 
-client = AIlinkClient()
+client = TrueFlowClient()
 
 # LangChain
 llm = langchain_chat(client, model="gpt-4o")
@@ -55,10 +55,10 @@ See [Framework Integration Cookbook](../../docs/guides/framework-integrations.md
 Route LLM requests through the gateway:
 
 ```python
-from ailink import AIlinkClient
+from trueflow import TrueFlowClient
 
-# Reads AILINK_API_KEY and AILINK_GATEWAY_URL from environment
-client = AIlinkClient()
+# Reads TRUEFLOW_API_KEY and TRUEFLOW_GATEWAY_URL from environment
+client = TrueFlowClient()
 
 # Check gateway health
 print(client.health())  # -> {"status": "ok", ...}
@@ -76,10 +76,10 @@ response = oai.chat.completions.create(
 Manage tokens, credentials, policies, and view audit logs:
 
 ```python
-from ailink import AIlinkClient
+from trueflow import TrueFlowClient
 
-# Reads AILINK_ADMIN_KEY from environment
-admin = AIlinkClient.admin()
+# Reads TRUEFLOW_ADMIN_KEY from environment
+admin = TrueFlowClient.admin()
 
 # Credentials
 cred = admin.credentials.create(name="prod-openai", provider="openai", secret="sk-...")
@@ -92,7 +92,7 @@ token = admin.tokens.create(
     upstream_url="https://api.openai.com",
     circuit_breaker={"enabled": True, "failure_threshold": 5},  # optional
 )
-api_key = token["token_id"]  # → "ailink_v1_..."
+api_key = token["token_id"]  # → "tf_v1_..."
 
 tokens = admin.tokens.list()           # → List[Token]
 admin.tokens.revoke(api_key)           # Soft-delete
@@ -109,7 +109,7 @@ health = admin.tokens.upstream_health()
 # → [{"token_id": ..., "url": ..., "is_healthy": True, "failure_count": 0, ...}]
 
 # Policies — using fluent DSL
-from ailink.policy import PolicyBuilder
+from trueflow.policy import PolicyBuilder
 rules = PolicyBuilder().when("prompt", "contains", "ignore instructions").deny("prompt injection detected").build()
 
 policy = admin.policies.create(
@@ -179,7 +179,7 @@ admin.experiments.stop(exp["id"])               # done
 ### Async Usage
 
 ```python
-from ailink import AsyncClient
+from trueflow import AsyncClient
 
 async with AsyncClient() as client:
     oai = client.openai()
@@ -189,24 +189,24 @@ async with AsyncClient() as client:
 ## Error Handling
 
 ```python
-from ailink import AIlinkClient
-from ailink.exceptions import (
+from trueflow import TrueFlowClient
+from trueflow.exceptions import (
     AuthenticationError,  # 401
     NotFoundError,        # 404
     RateLimitError,       # 429
     ValidationError,      # 422
     GatewayError,         # 5xx
-    AIlinkError,          # Base class
+    TrueFlowError,          # Base class
 )
 
-admin = AIlinkClient.admin(admin_key="...")
+admin = TrueFlowClient.admin(admin_key="...")
 
 try:
     admin.tokens.revoke("nonexistent")
 except NotFoundError as e:
     print(f"Token not found: {e.message}")
     print(f"Status: {e.status_code}")
-except AIlinkError as e:
+except TrueFlowError as e:
     print(f"Unexpected error: {e}")
 ```
 

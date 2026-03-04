@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-AILink Mock Upstream Server
+TrueFlow Mock Upstream Server
 ===========================
 Simulates OpenAI, Anthropic, Gemini, Azure Content Safety, AWS Comprehend,
 LlamaGuard (as OpenAI-compatible), and a webhook receiver — all in one
@@ -34,7 +34,7 @@ from typing import Any, AsyncIterator, Deque
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import StreamingResponse, JSONResponse
 
-app = FastAPI(title="AILink Mock Upstream")
+app = FastAPI(title="TrueFlow Mock Upstream")
 
 # ── In-memory webhook history ─────────────────────────────────────────────────
 webhook_history: Deque[dict] = deque(maxlen=200)
@@ -733,7 +733,7 @@ async def openai_image_generations(request: Request):
     data = []
     for i in range(n):
         data.append({
-            "url": f"https://mock.ailink.test/images/{uuid.uuid4().hex}.png",
+            "url": f"https://mock.trueflow.test/images/{uuid.uuid4().hex}.png",
             "revised_prompt": f"Mock image {i+1}: {prompt[:50]}",
         })
 
@@ -780,13 +780,13 @@ async def openai_model_detail(model_id: str, request: Request):
 
 @app.get("/healthz")
 async def health():
-    return {"status": "ok", "service": "ailink-mock-upstream"}
+    return {"status": "ok", "service": "trueflow-mock-upstream"}
 
 
 @app.get("/")
 async def root():
     return {
-        "service": "AILink Mock Upstream",
+        "service": "TrueFlow Mock Upstream",
         "endpoints": [
             "POST /v1/chat/completions           (OpenAI + LlamaGuard)",
             "POST /v1/messages                   (Anthropic)",
@@ -888,7 +888,7 @@ async def oidc_discovery():
         "id_token_signing_alg_values_supported": ["RS256"],
         "scopes_supported": ["openid", "profile", "email"],
         "claims_supported": ["sub", "iss", "aud", "exp", "iat", "email", "name",
-                              "custom:ailink_role", "custom:ailink_scopes"],
+                              "custom:trueflow_role", "custom:trueflow_scopes"],
     }
 
 
@@ -908,8 +908,8 @@ async def oidc_mint(request: Request):
     Body (JSON):
         sub          - subject (user ID, required)
         email        - email claim (optional)
-        role         - custom:ailink_role claim (optional, default: 'admin')
-        scopes       - custom:ailink_scopes claim (optional, default: '*')
+        role         - custom:trueflow_role claim (optional, default: 'admin')
+        scopes       - custom:trueflow_scopes claim (optional, default: '*')
         audience     - aud claim (optional)
         expires_in   - token lifetime in seconds (optional, default: 3600)
         expired      - if true, token is already expired (default: false)
@@ -941,8 +941,8 @@ async def oidc_mint(request: Request):
         "exp": exp,
         "email": email,
         "name": f"Test User ({sub})",
-        "custom:ailink_role": role,
-        "custom:ailink_scopes": scopes,
+        "custom:trueflow_role": role,
+        "custom:trueflow_scopes": scopes,
     }
     if audience:
         payload["aud"] = audience

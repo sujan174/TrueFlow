@@ -373,8 +373,8 @@ function CreateTokenForm({ onSuccess, onCreate }: { onSuccess: () => void; onCre
           </div>
           <p className="text-[10px] text-muted-foreground">
             {mode === "managed"
-              ? "AIlink injects credentials from the vault. Agents never see real API keys."
-              : "Agents provide their own API key via X-Real-Authorization header. AIlink provides observability, analytics, and policies."}
+              ? "TrueFlow injects credentials from the vault. Agents never see real API keys."
+              : "Agents provide their own API key via X-Real-Authorization header. TrueFlow provides observability, analytics, and policies."}
           </p>
         </div>
 

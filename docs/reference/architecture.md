@@ -1,14 +1,14 @@
-# AIlink — System Architecture
+# TrueFlow — System Architecture
 
 > **Comprehensive Technical Reference**
 >
-> This document details the internal architecture, data flows, and component design of AIlink. It is intended for core contributors and system architects.
+> This document details the internal architecture, data flows, and component design of TrueFlow. It is intended for core contributors and system architects.
 
 ---
 
 ## 1. High-Level Design
 
-AIlink is a high-performance, security-focused reverse proxy for LLM and API traffic. It sits between AI agents and upstream providers (OpenAI, Anthropic, internal APIs), acting as a centralized control plane for observability, security, and cost management.
+TrueFlow is a high-performance, security-focused reverse proxy for LLM and API traffic. It sits between AI agents and upstream providers (OpenAI, Anthropic, internal APIs), acting as a centralized control plane for observability, security, and cost management.
 
 ### Core Philosophy
 1.  **Zero Trust**: No request passes without explicit token validation and policy evaluation.
@@ -25,7 +25,7 @@ graph TD
     Agent[AI Agent] -->|HTTPS| Gateway
     Dashboard[Dashboard] -->|HTTPS + Secret| Gateway
 
-    subgraph "AIlink Gateway (Rust/Axum)"
+    subgraph "TrueFlow Gateway (Rust/Axum)"
         M_TLS[TLS Termination]
         M_Auth[Token Auth / RBAC]
         M_Rate[Distributed Rate Limiter]
@@ -72,7 +72,7 @@ Requests flow through a stack of **Tower Middleware** layers. Each layer is isol
 4.  **CORS**: Enforces `DASHBOARD_ORIGIN` for browser clients.
 5.  **Authentication**:
     *   **Management API**: Validates `Authorization: Bearer <admin-key>` against `api_keys` table. Checks `role` (Admin/Editor/Viewer) and `scopes` (e.g., `tokens:write`).
-    *   **Proxy API**: Validates `Authorization: Bearer ailink_v1_...`. Resolves Virtual Token ID to `project_id`.
+    *   **Proxy API**: Validates `Authorization: Bearer tf_v1_...`. Resolves Virtual Token ID to `project_id`.
     *   **Dashboard Proxy**: Validates `DASHBOARD_SECRET` and `X-Dashboard-Token`.
 6.  **Rate Limiting (L1)**: Checks in-memory checks for DoS protection.
 7.  **Policy Engine (Pre-Flight)**:
@@ -86,7 +86,7 @@ Requests flow through a stack of **Tower Middleware** layers. Each layer is isol
     *   Selects an upstream using **weighted round-robin within priority tiers**.
     *   CB states: `closed` (healthy) → `open` (blocked after N failures) → `half_open` (cooldown elapsed) → `closed` (recovered).
     *   When `enabled: false`, CB is bypassed entirely — all upstreams are always routable (useful for dev tokens).
-    *   Adds `X-AILink-CB-State` and `X-AILink-Upstream` response headers for client-side observability.
+    *   Adds `X-TrueFlow-CB-State` and `X-TrueFlow-Upstream` response headers for client-side observability.
 11. **Model Router**:
     *   **Detection**: Identifies provider (OpenAI, Anthropic, Gemini) via model prefix (e.g. `claude-3`).
     *   **Translation**: Converts incoming OpenAI-format body to target provider format (e.g., specific JSON structure for Gemini).
@@ -104,7 +104,7 @@ Requests flow through a stack of **Tower Middleware** layers. Each layer is isol
 
 ### 3.2. Policy Engine
 
-The heart of AIlink's control plane. Policies are JSON documents that bind **Conditions** to **Actions**.
+The heart of TrueFlow's control plane. Policies are JSON documents that bind **Conditions** to **Actions**.
 
 *   **Phases**:
     *   `pre`: Before upstream request (Access Control, Limits).
@@ -149,12 +149,12 @@ The gateway acts as a managed MCP client, bridging AI agents to external tool se
 
 ### 3.5. Identity & Security
 
-*   **Virtual Tokens**: `ailink_v1_...`. Randomly generated pointer to a configuration.
+*   **Virtual Tokens**: `tf_v1_...`. Randomly generated pointer to a configuration.
     *   **Isolation**: Tokens belong to a `project_id`. Access across projects is blocked (IDOR protection).
     *   **Capabilities**: Tokens are scoped to specific upstreams or services.
 *   **Secret Management (The Vault)**:
     *   **Envelope Encryption**:
-        *   **Master Key (KEK)**: 32-byte key from `AILINK_MASTER_KEY` env var. Never stored in DB.
+        *   **Master Key (KEK)**: 32-byte key from `TRUEFLOW_MASTER_KEY` env var. Never stored in DB.
         *   **Data Key (DEK)**: Unique 256-bit key per credential. Stored in DB encrypted by KEK.
         *   **Ciphertext**: The actual API key, encrypted by DEK using **AES-256-GCM** with a unique 96-bit nonce.
     *   **Lifecycle**: Decrypted only in memory, for the duration of the request context, then zeroed.
@@ -256,7 +256,7 @@ The gateway acts as a managed MCP client, bridging AI agents to external tool se
 
 *   **Docker**:
     *   Multi-stage builds (Planner + Builder + Runtime) for minimal image size (~100MB).
-    *   Non-root user `ailink` for security.
+    *   Non-root user `trueflow` for security.
 *   **Configuration**:
     *   `Config` struct loads from Environment Variables + `.env` file.
     *   Strict typing and validation at startup (fails fast if config is invalid).

@@ -1,12 +1,12 @@
 {
-    "name": "@ailink/sdk",
+    "name": "@trueflow/sdk",
     "version": "0.1.0",
-    "description": "Official TypeScript SDK for AILink Gateway — secure API proxy for AI agents",
+    "description": "Official TypeScript SDK for TrueFlow Gateway — secure API proxy for AI agents",
     "license": "MIT",
-    "author": "AILink Team <hello@ailink.dev>",
+    "author": "TrueFlow Team <hello@trueflow.dev>",
     "repository": {
         "type": "git",
-        "url": "https://github.com/ailink-dev/ailink",
+        "url": "https://github.com/trueflow-dev/trueflow",
         "directory": "sdk/typescript"
     },
     "type": "module",
@@ -65,7 +65,7 @@
         "@anthropic-ai/sdk": "^0.30.0"
     },
     "keywords": [
-        "ailink",
+        "trueflow",
         "ai",
         "gateway",
         "proxy",

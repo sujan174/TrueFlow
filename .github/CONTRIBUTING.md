@@ -1,6 +1,6 @@
-# Contributing to AILink
+# Contributing to TrueFlow
 
-Thank you for your interest in contributing to AILink! This guide will help you get started.
+Thank you for your interest in contributing to TrueFlow! This guide will help you get started.
 
 ## Getting Started
 
@@ -16,8 +16,8 @@ Thank you for your interest in contributing to AILink! This guide will help you 
 
 ```bash
 # 1. Clone the repo
-git clone https://github.com/sujan174/ailink.git
-cd ailink
+git clone https://github.com/sujan174/trueflow.git
+cd trueflow
 
 # 2. Start dependencies
 docker compose up -d postgres redis
@@ -117,4 +117,4 @@ chore: remove unused dependencies
 
 ## License
 
-By contributing, you agree that your contributions will be licensed under the [AILink Proprietary License](../LICENSE).
+By contributing, you agree that your contributions will be licensed under the [TrueFlow Proprietary License](../LICENSE).

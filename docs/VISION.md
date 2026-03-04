@@ -1,10 +1,10 @@
-# AIlink — Product Vision & Strategy
+# TrueFlow — Product Vision & Strategy
 
 > **"You manage the Intelligence. We manage the Access."**
 
 ---
 
-## Why AIlink Exists
+## Why TrueFlow Exists
 
 Current AI Agent deployments are insecure.
 When a developer builds an agent using LangChain, CrewAI, AutoGen, or vanilla Python, they hand that agent real API keys — Stripe, GitHub, AWS, Slack, OpenAI — to do useful work. These keys usually live in `.env` files, hardcoded variables, or scattered across systems with no oversight.
@@ -15,17 +15,17 @@ When a developer builds an agent using LangChain, CrewAI, AutoGen, or vanilla Py
 2. **Runaway Cost**: Infinite loops can drain API budgets rapidly.
 3. **Accidental Damage**: Agents with broad permissions can delete or corrupt production data.
 
-**AIlink makes AI Agents secure by default.**
+**TrueFlow makes AI Agents secure by default.**
 
 ---
 
-## What AIlink Is
+## What TrueFlow Is
 
-AIlink is a **Secure API Gateway** purpose-built for AI Agents. It sits between the agent and every external API, acting as a security and governance layer.
+TrueFlow is a **Secure API Gateway** purpose-built for AI Agents. It sits between the agent and every external API, acting as a security and governance layer.
 
 ### The Architecture
 
-Instead of giving agents real API keys, you issue **virtual tokens**. The agent sends requests to AIlink, which enforces policies and injects the real key on the backend.
+Instead of giving agents real API keys, you issue **virtual tokens**. The agent sends requests to TrueFlow, which enforces policies and injects the real key on the backend.
 
 **This enables:**
 
@@ -52,8 +52,8 @@ Developers building agents with LangChain, CrewAI, AutoGen, or custom Python/Typ
 - No visibility into agent API activity
 - Fear of prompt injection key theft
 
-**What AIlink gives them:**
-- `pip install ailink` + one line of code  
+**What TrueFlow gives them:**
+- `pip install trueflow` + one line of code  
 - Never touch `.env` files again
 - Per-agent, per-API access control
 - Sleep at night
@@ -67,7 +67,7 @@ Companies deploying 10+ agents across teams, needing governance and compliance.
 - Compliance gaps — no audit trail for agent actions
 - CISO blocking AI adoption due to security concerns
 
-**What AIlink gives them:**
+**What TrueFlow gives them:**
 - Centralized credential vault with envelope encryption
 - Organization-wide policy enforcement
 - Comprehensive audit logs for compliance
@@ -78,13 +78,13 @@ Companies deploying 10+ agents across teams, needing governance and compliance.
 
 ## Market Position
 
-AIlink occupies a unique intersection that no existing product covers:
+TrueFlow occupies a unique intersection that no existing product covers:
 
 ```
                     ┌───────────────────────────┐
                     │     AI-Agent Specific      │
                     │                           │
-                    │      ★ AIlink ★           │
+                    │      ★ TrueFlow ★           │
                     │   (credential + policy    │
                     │    + HITL + audit)        │
                     │                           │
@@ -110,7 +110,7 @@ AIlink occupies a unique intersection that no existing product covers:
 1. **Agent-native** — SDK built for AI frameworks (LangChain, CrewAI), not generic HTTP clients
 2. **Policy-first** — Declarative JSON policies with shadow mode for safe rollout
 3. **HITL built-in** — Approval workflows are first-class, not bolted on
-4. **Developer-first** — `pip install ailink` and one line of code
+4. **Developer-first** — `pip install trueflow` and one line of code
 5. **Auto-rotation** — Real API keys rotate automatically on a schedule
 
 ---
@@ -119,9 +119,9 @@ AIlink occupies a unique intersection that no existing product covers:
 
 1. **AI Agent Adoption**: Frameworks like LangChain and AutoGen are driving agent deployment. Someone needs to secure the credentials these agents use.
 
-2. **Enterprise Governance**: Security teams block agent adoption because there's no visibility or control. AIlink fills that gap.
+2. **Enterprise Governance**: Security teams block agent adoption because there's no visibility or control. TrueFlow fills that gap.
 
-3. **MCP Support**: The Model Context Protocol opens a new attack surface for tool use. AIlink can sit in front of MCP tool calls.
+3. **MCP Support**: The Model Context Protocol opens a new attack surface for tool use. TrueFlow can sit in front of MCP tool calls.
 
 ---
 
@@ -173,7 +173,7 @@ AIlink occupies a unique intersection that no existing product covers:
 
 ## The One-Liner
 
-**AIlink is what happens when you put an API gateway, a secrets vault, and a policy engine in a box — and design it specifically for AI agents.**
+**TrueFlow is what happens when you put an API gateway, a secrets vault, and a policy engine in a box — and design it specifically for AI agents.**
 
 For developers: *"Stop managing `.env` files. Get secure agents with one line of code."*
 

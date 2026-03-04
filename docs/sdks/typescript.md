@@ -1,9 +1,9 @@
-# AILink TypeScript SDK
+# TrueFlow TypeScript SDK
 
-> Zero-dependency TypeScript client for the AILink Gateway — OpenAI/Anthropic drop-in, SSE streaming, typed errors.
+> Zero-dependency TypeScript client for the TrueFlow Gateway — OpenAI/Anthropic drop-in, SSE streaming, typed errors.
 
 ```bash
-npm install @ailink/sdk
+npm install @trueflow/sdk
 ```
 
 ---
@@ -11,11 +11,11 @@ npm install @ailink/sdk
 ## Quick Start — OpenAI Drop-In
 
 ```typescript
-import { AILinkClient } from '@ailink/sdk';
+import { TrueFlowClient } from '@trueflow/sdk';
 
-const client = new AILinkClient({
-  apiKey: 'ailink_v1_...',
-  gatewayUrl: 'https://gateway.ailink.dev',
+const client = new TrueFlowClient({
+  apiKey: 'tf_v1_...',
+  gatewayUrl: 'https://gateway.trueflow.dev',
 });
 
 // Get a configured OpenAI client — works with openai@4+
@@ -53,7 +53,7 @@ const anthropic = client.anthropic();
 const message = await anthropic.messages.create({
   model: 'claude-3-5-sonnet-20241022',
   max_tokens: 1024,
-  messages: [{ role: 'user', content: 'Hello Claude via AILink!' }],
+  messages: [{ role: 'user', content: 'Hello Claude via TrueFlow!' }],
 });
 ```
 
@@ -62,9 +62,9 @@ const message = await anthropic.messages.create({
 ## Action Gateway (API Proxy)
 
 ```typescript
-const client = new AILinkClient({
-  apiKey: 'ailink_v1_proj_abc123_tok_def456',
-  gatewayUrl: 'https://gateway.ailink.dev',
+const client = new TrueFlowClient({
+  apiKey: 'tf_v1_proj_abc123_tok_def456',
+  gatewayUrl: 'https://gateway.trueflow.dev',
   agentName: 'billing-agent',
 });
 
@@ -90,8 +90,8 @@ const result = await client.post('/v1/charges', {
 ## Admin Mode (Management API)
 
 ```typescript
-const admin = AILinkClient.admin({
-  adminKey: 'ailink-admin-test',
+const admin = TrueFlowClient.admin({
+  adminKey: 'trueflow-admin-test',
   gatewayUrl: 'http://localhost:8443',
 });
 
@@ -126,9 +126,9 @@ const policy = await admin.policies.create({
 });
 
 // ── Guardrails ──
-await admin.guardrails.enable('ailink_v1_...', ['pii_redaction', 'prompt_injection']);
-const status = await admin.guardrails.status('ailink_v1_...');
-await admin.guardrails.disable('ailink_v1_...');
+await admin.guardrails.enable('tf_v1_...', ['pii_redaction', 'prompt_injection']);
+const status = await admin.guardrails.status('tf_v1_...');
+await admin.guardrails.disable('tf_v1_...');
 
 // ── Analytics ──
 const summary = await admin.analytics.summary();
@@ -144,10 +144,10 @@ await admin.config.importYaml(yamlConfig);
 ## Health Polling & Fallback
 
 ```typescript
-import { AILinkClient, HealthPoller } from '@ailink/sdk';
+import { TrueFlowClient, HealthPoller } from '@trueflow/sdk';
 import OpenAI from 'openai';
 
-const client = new AILinkClient({ apiKey: 'ailink_v1_...' });
+const client = new TrueFlowClient({ apiKey: 'tf_v1_...' });
 const fallback = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 // One-shot health check
@@ -170,7 +170,7 @@ poller.stop();
 ## Per-Request Guardrails
 
 ```typescript
-import { PRESET_PII_REDACTION, PRESET_PROMPT_INJECTION } from '@ailink/sdk';
+import { PRESET_PII_REDACTION, PRESET_PROMPT_INJECTION } from '@trueflow/sdk';
 
 const guarded = client.withGuardrails([PRESET_PII_REDACTION, PRESET_PROMPT_INJECTION]);
 await guarded.post('/v1/chat/completions', { ... });
@@ -206,13 +206,13 @@ Every gateway failure maps to a typed error:
 
 ```typescript
 import {
-  AILinkError,
+  TrueFlowError,
   PolicyDeniedError,
   RateLimitError,
   SpendCapError,
   ContentBlockedError,
   AuthenticationError,
-} from '@ailink/sdk';
+} from '@trueflow/sdk';
 
 try {
   const response = await client.post('/v1/charges', { body: { amount: 5000 } });
@@ -232,7 +232,7 @@ try {
 ### Error Hierarchy
 
 ```
-AILinkError (base)
+TrueFlowError (base)
 ├── AuthenticationError      (401)
 ├── AccessDeniedError        (403)
 │   ├── PolicyDeniedError    (403, code=policy_denied)
@@ -261,7 +261,7 @@ await session.close();
 ## SSE Streaming
 
 ```typescript
-import { streamSSE } from '@ailink/sdk';
+import { streamSSE } from '@trueflow/sdk';
 
 const response = await client.post('/v1/chat/completions', {
   model: 'gpt-4o',
@@ -281,7 +281,7 @@ for await (const chunk of streamSSE(response)) {
 Create, version, deploy, and render prompt templates. Rendered prompts are cached client-side (default 60s) to reduce latency.
 
 ```typescript
-const admin = AILinkClient.admin({ adminKey: 'ailink-admin-...' });
+const admin = TrueFlowClient.admin({ adminKey: 'trueflow-admin-...' });
 
 // Create and version
 const prompt = await admin.prompts.create({ name: 'Support Agent', folder: '/support' });
@@ -317,7 +317,7 @@ admin.prompts.clearCache();                 // clear all
 Compare models, prompts, or routing strategies with weighted traffic splitting:
 
 ```typescript
-const admin = AILinkClient.admin({ adminKey: 'ailink-admin-...' });
+const admin = TrueFlowClient.admin({ adminKey: 'trueflow-admin-...' });
 
 // Create
 const exp = await admin.experiments.create({
@@ -350,9 +350,9 @@ await admin.experiments.stop(exp.id);
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `AILINK_API_KEY` | Virtual token for authentication | — |
-| `AILINK_GATEWAY_URL` | Gateway base URL | `http://localhost:8443` |
-| `AILINK_ADMIN_KEY` | Admin key for management API | — |
+| `TRUEFLOW_API_KEY` | Virtual token for authentication | — |
+| `TRUEFLOW_GATEWAY_URL` | Gateway base URL | `http://localhost:8443` |
+| `TRUEFLOW_ADMIN_KEY` | Admin key for management API | — |
 
 ## Requirements
 

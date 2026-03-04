@@ -1,6 +1,6 @@
-# AIlink — Security Model
+# TrueFlow — Security Model
 
-> This document describes AIlink's security architecture, threat model, and encryption design.
+> This document describes TrueFlow's security architecture, threat model, and encryption design.
 
 ---
 
@@ -8,7 +8,7 @@
 
 **Agents do not access real API keys.**
 
-All agent credentials are virtual tokens (`ailink_v1_...`) that only work through the AIlink gateway. Real API keys are encrypted at rest, decrypted in memory only during request forwarding, and zeroed immediately after.
+All agent credentials are virtual tokens (`tf_v1_...`) that only work through the TrueFlow gateway. Real API keys are encrypted at rest, decrypted in memory only during request forwarding, and zeroed immediately after.
 
 ---
 
@@ -18,14 +18,14 @@ All agent credentials are virtual tokens (`ailink_v1_...`) that only work throug
 
 | # | Threat | Severity | Mitigation |
 |---|---|---|---|
-| T1 | **Prompt Injection → Key Exfiltration** | Critical | Agent only has virtual token. Real key never in agent's environment. `print(os.environ)` yields `ailink_v1_...`, which is useless without the gateway |
+| T1 | **Prompt Injection → Key Exfiltration** | Critical | Agent only has virtual token. Real key never in agent's environment. `print(os.environ)` yields `tf_v1_...`, which is useless without the gateway |
 | T2 | **Stolen Virtual Token** | High | Tokens are scoped (methods, paths, rate limits). Instantly revocable. IP allowlisting available. Short TTLs optional |
 | T3 | **Replay Attack** | Medium | Idempotency keys, request timestamping, rate limiting |
 | T4 | **Man-in-the-Middle** | High | TLS 1.3 enforced on all connections. mTLS available for enterprise |
 | T5 | **Runaway Agent Costs** | High | Per-token spend caps (atomic checks via Redis Lua). Per-window rate limits. HITL for high-value operations |
 | T6 | **Accidental Destructive Operations** | High | Method + path whitelists (e.g., GET only). HITL for write operations. Shadow mode for safe rollout |
 | T7 | **Gateway Infrastructure Compromise** | Critical | Secrets encrypted at rest (AES-256-GCM). DEKs held in memory only during request. Master key in environment variable or external KMS, never in database |
-| T8 | **Insider Threat (AIlink Operator)** | High | Envelope encryption — operators can access encrypted blobs but not plaintext. Master keys in HSM/KMS for enterprise |
+| T8 | **Insider Threat (TrueFlow Operator)** | High | Envelope encryption — operators can access encrypted blobs but not plaintext. Master keys in HSM/KMS for enterprise |
 | T9 | **Stale Compromised Credentials** | Medium | Automatic key rotation — real API keys rotated every 24h. A stolen key expires in hours |
 | T10 | **Supply Chain Attack (SDK)** | Medium | SDKs published with SLSA provenance. Dependencies pinned and audited |
 | T11 | **Database Breach** | High | All credentials encrypted at rest. Audit logs contain request hashes, not request bodies. PII redacted before storage |
@@ -36,13 +36,13 @@ All agent credentials are virtual tokens (`ailink_v1_...`) that only work throug
 
 ## Role-Based Access Control (RBAC)
 
-AIlink enforces a layered authorization model: **Role → Scope → Resource**.
+TrueFlow enforces a layered authorization model: **Role → Scope → Resource**.
 
 ### Roles
 
 | Role | How Assigned | Auto-Passes All Scopes? | Description |
 |------|-------------|-------------------------|-------------|
-| **SuperAdmin** | `AILINK_ADMIN_KEY` env var | ✅ Yes | Full system access. Used for initial setup and break-glass operations |
+| **SuperAdmin** | `TRUEFLOW_ADMIN_KEY` env var | ✅ Yes | Full system access. Used for initial setup and break-glass operations |
 | **Admin** | API key with `role: "admin"` | ✅ Yes | Full access within the organization. Can create/delete tokens, policies, credentials |
 | **Member** | API key with `role: "member"` | ❌ No | Read/write access gated by individual scopes. Cannot perform admin-only operations |
 | **ReadOnly** | API key with `role: "read_only"` | ❌ No | Read-only access gated by individual scopes |
@@ -134,7 +134,7 @@ These endpoints require only a valid authenticated API key (any role):
 
 ### Envelope Encryption
 
-AIlink implements envelope encryption, following the pattern used by AWS KMS and HashiCorp Vault.
+TrueFlow implements envelope encryption, following the pattern used by AWS KMS and HashiCorp Vault.
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -163,19 +163,19 @@ AIlink implements envelope encryption, following the pattern used by AWS KMS and
 | Algorithm | AES-256-GCM (authenticated encryption) |
 | Nonce | 96-bit, unique per encryption operation, **never reused** |
 | DEK | 256-bit, unique per credential |
-| KEK (Master Key) | Derived from env var (`AILINK_MASTER_KEY`) or external KMS |
+| KEK (Master Key) | Derived from env var (`TRUEFLOW_MASTER_KEY`) or external KMS |
 
 ### Key Rotation
 
 - **Master Key Rotation**: Decrypt all DEKs with old master, re-encrypt with new master. Credentials themselves are untouched.
 - **DEK Rotation**: Generate new DEK, decrypt credential with old DEK, re-encrypt with new DEK.
-- **Credential Rotation**: AIlink's auto-rotation feature creates a new key on the provider API (e.g., Stripe), encrypts it with a new DEK, and revokes the old key after a grace period.
+- **Credential Rotation**: TrueFlow's auto-rotation feature creates a new key on the provider API (e.g., Stripe), encrypts it with a new DEK, and revokes the old key after a grace period.
 
 ---
 
 ## Data Security
 
-### What AIlink Stores
+### What TrueFlow Stores
 
 | Data | Storage | Encryption |
 |---|---|---|
@@ -184,7 +184,7 @@ AIlink implements envelope encryption, following the pattern used by AWS KMS and
 | Policies | PostgreSQL | Plaintext (not sensitive) |
 | Audit logs | PostgreSQL (partitioned) | Plaintext metadata. Bodies stored only at Level 1+ (PII-scrubbed) or Level 2 (full debug, auto-expires after 24h) |
 
-### What AIlink Does NOT Store (at Level 0)
+### What TrueFlow Does NOT Store (at Level 0)
 
 - Request/response bodies (only metadata: method, path, status, latency, cost)
 - Real API keys in plaintext anywhere

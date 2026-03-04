@@ -20,19 +20,19 @@ if TYPE_CHECKING:
     from .resources.services import ServicesResource, AsyncServicesResource
 
 
-class AIlinkClient:
+class TrueFlowClient:
     """
-    AIlink Gateway Client.
+    TrueFlow Gateway Client.
 
     For agent proxy operations (forwarding LLM requests through the gateway):
 
-        client = AIlinkClient(api_key="ailink_v1_...")
+        client = TrueFlowClient(api_key="tf_v1_...")
         oai = client.openai()
         oai.chat.completions.create(...)
 
     For admin management operations:
 
-        admin = AIlinkClient.admin(admin_key="...")
+        admin = TrueFlowClient.admin(admin_key="...")
         admin.tokens.list()
     """
 
@@ -50,9 +50,9 @@ class AIlinkClient:
     ):
         """
         Args:
-            api_key: AIlink virtual token (starts with 'ailink_v1_'). Defaults to AILINK_API_KEY env var.
-            gateway_url: URL of the AIlink gateway (default: http://localhost:8443 or AILINK_GATEWAY_URL env var)
-            agent_name: Optional name for this agent (sent as X-AIlink-Agent-Name)
+            api_key: TrueFlow virtual token (starts with 'tf_v1_'). Defaults to TRUEFLOW_API_KEY env var.
+            gateway_url: URL of the TrueFlow gateway (default: http://localhost:8443 or TRUEFLOW_GATEWAY_URL env var)
+            agent_name: Optional name for this agent (sent as X-TrueFlow-Agent-Name)
             idempotency_key: Optional key for idempotent requests
             timeout: Request timeout in seconds (default: 30)
             max_retries: Number of connection retries (default: 2)
@@ -62,12 +62,12 @@ class AIlinkClient:
         if _admin_key:
             api_key = _admin_key
         else:
-            api_key = api_key or os.environ.get("AILINK_API_KEY")
+            api_key = api_key or os.environ.get("TRUEFLOW_API_KEY")
             if not api_key:
-                from .exceptions import AIlinkError
-                raise AIlinkError("No API key provided. Pass api_key= or set AILINK_API_KEY env var.")
+                from .exceptions import TrueFlowError
+                raise TrueFlowError("No API key provided. Pass api_key= or set TRUEFLOW_API_KEY env var.")
         
-        gateway_url = gateway_url or os.environ.get("AILINK_GATEWAY_URL", "http://localhost:8443")
+        gateway_url = gateway_url or os.environ.get("TRUEFLOW_GATEWAY_URL", "http://localhost:8443")
         
         self.api_key = api_key
         self.gateway_url = gateway_url.rstrip("/")
@@ -81,14 +81,14 @@ class AIlinkClient:
         else:
             headers = {"Authorization": f"Bearer {api_key}"}
             if agent_name:
-                headers["X-AIlink-Agent-Name"] = agent_name
+                headers["X-TrueFlow-Agent-Name"] = agent_name
             if idempotency_key:
-                headers["X-AIlink-Idempotency-Key"] = idempotency_key
+                headers["X-TrueFlow-Idempotency-Key"] = idempotency_key
 
         # Send SDK version on every request so the gateway can log it and
         # detect breaking incompatibilities (currently only logged, future: 426 upgrade hint)
         from . import __version__
-        headers["X-AILink-SDK-Version"] = __version__
+        headers["X-TrueFlow-SDK-Version"] = __version__
 
         # Only set retry transport if user hasn't provided their own transport
         if "transport" not in kwargs and max_retries > 0:
@@ -115,7 +115,7 @@ class AIlinkClient:
 
     def __repr__(self) -> str:
         name = f", agent_name={self._agent_name!r}" if getattr(self, "_agent_name", None) else ""
-        return f"AIlinkClient(gateway_url={self.gateway_url!r}{name})"
+        return f"TrueFlowClient(gateway_url={self.gateway_url!r}{name})"
 
     def __enter__(self):
         return self
@@ -136,7 +136,7 @@ class AIlinkClient:
 
         When the token has no stored credential, the gateway forwards
         whatever key you supply here directly to the upstream as the
-        Authorization header.  The AIlink token still authenticates *you*
+        Authorization header.  The TrueFlow token still authenticates *you*
         to the gateway; this key authenticates the gateway to the upstream.
 
         Args:
@@ -213,7 +213,7 @@ class AIlinkClient:
         """
         Context manager to apply guardrails on a per-request basis.
 
-        Injects the ``X-AILink-Guardrails`` header with comma-separated
+        Injects the ``X-TrueFlow-Guardrails`` header with comma-separated
         preset names so the gateway applies them for this request only.
 
         Available presets: ``pii_redaction``, ``pii_block``, ``prompt_injection``.
@@ -231,7 +231,7 @@ class AIlinkClient:
             return
 
         header_val = ",".join(presets)
-        scoped = _ScopedClient(self._http, extra_headers={"X-AILink-Guardrails": header_val})
+        scoped = _ScopedClient(self._http, extra_headers={"X-TrueFlow-Guardrails": header_val})
         try:
             yield scoped
         finally:
@@ -282,7 +282,7 @@ class AIlinkClient:
         the provided fallback.
 
         Best practice — always supply a fallback so your agent keeps working
-        even when the AIlink gateway is temporarily unreachable::
+        even when the TrueFlow gateway is temporarily unreachable::
 
             import openai
 
@@ -310,7 +310,7 @@ class AIlinkClient:
         else:
             import warnings
             warnings.warn(
-                f"AIlink gateway at {self.gateway_url} is unreachable — "
+                f"TrueFlow gateway at {self.gateway_url} is unreachable — "
                 "using fallback client. Requests will bypass policy enforcement and audit logging.",
                 stacklevel=3,
             )
@@ -345,18 +345,18 @@ class AIlinkClient:
     # ── Admin Factory ──────────────────────────────────────────
 
     @classmethod
-    def admin(cls, admin_key: Optional[str] = None, gateway_url: Optional[str] = None, **kwargs) -> "AIlinkClient":
+    def admin(cls, admin_key: Optional[str] = None, gateway_url: Optional[str] = None, **kwargs) -> "TrueFlowClient":
         """
         Create an admin client for Management API operations.
 
         Args:
-            admin_key: Admin key (X-Admin-Key header value). Defaults to AILINK_ADMIN_KEY.
-            gateway_url: URL of the AIlink gateway
+            admin_key: Admin key (X-Admin-Key header value). Defaults to TRUEFLOW_ADMIN_KEY.
+            gateway_url: URL of the TrueFlow gateway
         """
-        admin_key = admin_key or os.environ.get("AILINK_ADMIN_KEY")
+        admin_key = admin_key or os.environ.get("TRUEFLOW_ADMIN_KEY")
         if not admin_key:
-            from .exceptions import AIlinkError
-            raise AIlinkError("No admin key provided. Pass admin_key= or set AILINK_ADMIN_KEY env var.")
+            from .exceptions import TrueFlowError
+            raise TrueFlowError("No admin key provided. Pass admin_key= or set TRUEFLOW_ADMIN_KEY env var.")
             
         return cls(
             gateway_url=gateway_url,
@@ -370,21 +370,21 @@ class AIlinkClient:
         """
         Returns a configured openai.Client that routes through the gateway.
 
-        Requires 'openai' package: pip install ailink[openai]
+        Requires 'openai' package: pip install trueflow[openai]
         """
         try:
             import openai
         except ImportError:
             raise ImportError(
                 "The 'openai' package is required for client.openai(). "
-                "Install it with: pip install ailink[openai]\n"
+                "Install it with: pip install trueflow[openai]\n"
                 "Or standalone: pip install openai"
             ) from None
 
         return openai.Client(
             api_key=self.api_key,
             base_url=self.gateway_url,
-            default_headers={"X-AIlink-Agent-Name": self._agent_name} if self._agent_name else None,
+            default_headers={"X-TrueFlow-Agent-Name": self._agent_name} if self._agent_name else None,
             max_retries=0,
         )
 
@@ -392,19 +392,19 @@ class AIlinkClient:
         """
         Returns a configured anthropic.Client that routes through the gateway.
 
-        Requires 'anthropic' package: pip install ailink[anthropic]
+        Requires 'anthropic' package: pip install trueflow[anthropic]
         """
         try:
             import anthropic
         except ImportError:
             raise ImportError(
                 "The 'anthropic' package is required for client.anthropic(). "
-                "Install it with: pip install ailink[anthropic]\n"
+                "Install it with: pip install trueflow[anthropic]\n"
                 "Or standalone: pip install anthropic"
             ) from None
 
         return anthropic.Client(
-            api_key="AILINK_GATEWAY_MANAGED",
+            api_key="TRUEFLOW_GATEWAY_MANAGED",
             base_url=self.gateway_url,
             default_headers={"Authorization": f"Bearer {self.api_key}"},
             max_retries=0,
@@ -495,13 +495,13 @@ class AIlinkClient:
 
     @cached_property
     def batches(self) -> "BatchesResource":
-        """Feature 10: Proxy OpenAI /v1/batches through the AILink gateway."""
+        """Feature 10: Proxy OpenAI /v1/batches through the TrueFlow gateway."""
         from .resources.batches import BatchesResource
         return BatchesResource(self)
 
     @cached_property
     def fine_tuning(self) -> "FineTuningResource":
-        """Feature 10: Proxy OpenAI /v1/fine_tuning/jobs through the AILink gateway."""
+        """Feature 10: Proxy OpenAI /v1/fine_tuning/jobs through the TrueFlow gateway."""
         from .resources.fine_tuning import FineTuningResource
         return FineTuningResource(self)
 
@@ -514,11 +514,11 @@ class AIlinkClient:
 
 class AsyncClient:
     """
-    AIlink Gateway Async Client.
+    TrueFlow Gateway Async Client.
 
     Supports async context manager for clean resource management:
 
-        async with AsyncClient(api_key="ailink_v1_...") as client:
+        async with AsyncClient(api_key="tf_v1_...") as client:
             oai = client.openai()
     """
 
@@ -534,20 +534,20 @@ class AsyncClient:
     ):
         """
         Args:
-            api_key: AIlink virtual token. Defaults to AILINK_API_KEY env var.
-            gateway_url: Gateway URL (default: http://localhost:8443 or AILINK_GATEWAY_URL)
+            api_key: TrueFlow virtual token. Defaults to TRUEFLOW_API_KEY env var.
+            gateway_url: Gateway URL (default: http://localhost:8443 or TRUEFLOW_GATEWAY_URL)
             agent_name: Optional name for this agent
             idempotency_key: Optional key for idempotent requests
             timeout: Request timeout in seconds (default: 30)
             max_retries: Number of connection retries (default: 2)
             **kwargs: Arguments for httpx.AsyncClient
         """
-        api_key = api_key or os.environ.get("AILINK_API_KEY")
+        api_key = api_key or os.environ.get("TRUEFLOW_API_KEY")
         if not api_key:
-            from .exceptions import AIlinkError
-            raise AIlinkError("No API key provided. Pass api_key= or set AILINK_API_KEY env var.")
+            from .exceptions import TrueFlowError
+            raise TrueFlowError("No API key provided. Pass api_key= or set TRUEFLOW_API_KEY env var.")
             
-        gateway_url = gateway_url or os.environ.get("AILINK_GATEWAY_URL", "http://localhost:8443")
+        gateway_url = gateway_url or os.environ.get("TRUEFLOW_GATEWAY_URL", "http://localhost:8443")
         
         self.api_key = api_key
         self.gateway_url = gateway_url.rstrip("/")
@@ -555,9 +555,9 @@ class AsyncClient:
 
         headers = {"Authorization": f"Bearer {api_key}"}
         if agent_name:
-            headers["X-AIlink-Agent-Name"] = agent_name
+            headers["X-TrueFlow-Agent-Name"] = agent_name
         if idempotency_key:
-            headers["X-AIlink-Idempotency-Key"] = idempotency_key
+            headers["X-TrueFlow-Idempotency-Key"] = idempotency_key
 
         # Only set retry transport if user hasn't provided their own transport
         if "transport" not in kwargs and max_retries > 0:
@@ -658,7 +658,7 @@ class AsyncClient:
         """
         Async context manager to apply guardrails on a per-request basis.
 
-        Injects the ``X-AILink-Guardrails`` header with comma-separated
+        Injects the ``X-TrueFlow-Guardrails`` header with comma-separated
         preset names so the gateway applies them for this request only.
 
         Available presets: ``pii_redaction``, ``pii_block``, ``prompt_injection``.
@@ -676,7 +676,7 @@ class AsyncClient:
             return
 
         header_val = ",".join(presets)
-        scoped = _AsyncScopedClient(self._http, extra_headers={"X-AILink-Guardrails": header_val})
+        scoped = _AsyncScopedClient(self._http, extra_headers={"X-TrueFlow-Guardrails": header_val})
         try:
             yield scoped
         finally:
@@ -732,7 +732,7 @@ class AsyncClient:
         else:
             import warnings
             warnings.warn(
-                f"AIlink gateway at {self.gateway_url} is unreachable — "
+                f"TrueFlow gateway at {self.gateway_url} is unreachable — "
                 "using fallback client. Requests will bypass policy enforcement and audit logging.",
                 stacklevel=3,
             )
@@ -765,12 +765,12 @@ class AsyncClient:
         try:
             import openai
         except ImportError:
-            raise ImportError("Please install 'openai' package: pip install ailink[openai]")
+            raise ImportError("Please install 'openai' package: pip install trueflow[openai]")
 
         return openai.AsyncOpenAI(
             api_key=self.api_key,
             base_url=self.gateway_url,
-            default_headers={"X-AIlink-Agent-Name": self._agent_name} if self._agent_name else None,
+            default_headers={"X-TrueFlow-Agent-Name": self._agent_name} if self._agent_name else None,
             max_retries=0,
         )
 
@@ -778,10 +778,10 @@ class AsyncClient:
         try:
             import anthropic
         except ImportError:
-            raise ImportError("Please install 'anthropic' package: pip install ailink[anthropic]")
+            raise ImportError("Please install 'anthropic' package: pip install trueflow[anthropic]")
 
         return anthropic.AsyncAnthropic(
-            api_key="AILINK_GATEWAY_MANAGED",
+            api_key="TRUEFLOW_GATEWAY_MANAGED",
             base_url=self.gateway_url,
             default_headers={"Authorization": f"Bearer {self.api_key}"},
             max_retries=0,
@@ -859,13 +859,13 @@ class AsyncClient:
 
     @cached_property
     def batches(self) -> "AsyncBatchesResource":
-        """Feature 10: Async proxy of OpenAI /v1/batches through the AILink gateway."""
+        """Feature 10: Async proxy of OpenAI /v1/batches through the TrueFlow gateway."""
         from .resources.batches import AsyncBatchesResource
         return AsyncBatchesResource(self)
 
     @cached_property
     def fine_tuning(self) -> "AsyncFineTuningResource":
-        """Feature 10: Async proxy of OpenAI /v1/fine_tuning/jobs through the AILink gateway."""
+        """Feature 10: Async proxy of OpenAI /v1/fine_tuning/jobs through the TrueFlow gateway."""
         from .resources.fine_tuning import AsyncFineTuningResource
         return AsyncFineTuningResource(self)
 
@@ -973,21 +973,21 @@ class _AsyncScopedClient:
 
 class HealthPoller:
     """
-    Background thread that continuously polls the AIlink gateway's ``/healthz``
+    Background thread that continuously polls the TrueFlow gateway's ``/healthz``
     endpoint and caches the result, so agents can check health on the critical
     path without paying an HTTP round-trip per request.
 
     Args:
-        client:   An ``AIlinkClient`` instance.
+        client:   An ``TrueFlowClient`` instance.
         interval: Seconds between health probes (default: 15).
         timeout:  Per-probe connect timeout in seconds (default: 3).
 
     Example::
 
         import openai
-        from ailink import AIlinkClient, HealthPoller
+        from trueflow import TrueFlowClient, HealthPoller
 
-        client = AIlinkClient(api_key=\"ailink_v1_...\")
+        client = TrueFlowClient(api_key=\"tf_v1_...\")
         fallback = openai.OpenAI(api_key=os.environ[\"OPENAI_API_KEY\"])
 
         poller = HealthPoller(client, interval=10)
@@ -1004,7 +1004,7 @@ class HealthPoller:
             poller.stop()
     """
 
-    def __init__(self, client: AIlinkClient, interval: float = 15.0, timeout: float = 3.0):
+    def __init__(self, client: TrueFlowClient, interval: float = 15.0, timeout: float = 3.0):
         self._client = client
         self._interval = interval
         self._timeout = timeout
@@ -1027,7 +1027,7 @@ class HealthPoller:
                 self._healthy = self._client.is_healthy(timeout=self._timeout)
                 self._stop_event.wait(self._interval)  # type: ignore[union-attr]
 
-        self._thread = threading.Thread(target=_loop, daemon=True, name="ailink-health-poller")
+        self._thread = threading.Thread(target=_loop, daemon=True, name="trueflow-health-poller")
         self._thread.start()  # type: ignore[union-attr]
         return self
 
@@ -1053,9 +1053,9 @@ class AsyncHealthPoller:
     Use as an async context manager::
 
         import openai
-        from ailink import AsyncClient, AsyncHealthPoller
+        from trueflow import AsyncClient, AsyncHealthPoller
 
-        client = AsyncClient(api_key=\"ailink_v1_...\")
+        client = AsyncClient(api_key=\"tf_v1_...\")
         fallback = openai.AsyncOpenAI(api_key=os.environ[\"OPENAI_API_KEY\"])
 
         async with AsyncHealthPoller(client, interval=10) as poller:

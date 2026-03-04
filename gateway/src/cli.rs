@@ -1,8 +1,8 @@
 use clap::{Parser, Subcommand};
 
-/// AIlink — Secure API Gateway for AI Agents
+/// TrueFlow — Secure API Gateway for AI Agents
 #[derive(Parser)]
-#[command(name = "ailink", version, about)]
+#[command(name = "trueflow", version, about)]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Option<Commands>,

@@ -133,7 +133,7 @@ function ProviderFormDialog({
                                 placeholder={'{\n  "email": "user_email",\n  "roles.admin": "admin"\n}'}
                             />
                             <p className="text-[11px] text-muted-foreground">
-                                Map JWT claims to AILink roles. Keys are claim paths, values are local role names.
+                                Map JWT claims to TrueFlow roles. Keys are claim paths, values are local role names.
                             </p>
                         </div>
                     </div>
@@ -217,7 +217,7 @@ export default function SSOPage() {
                         Agents can pass a <code className="font-mono bg-blue-500/10 px-1 rounded">Bearer &lt;JWT&gt;</code> token in their{" "}
                         <code className="font-mono bg-blue-500/10 px-1 rounded">Authorization</code> header.
                         The gateway validates the JWT against the matching provider (by <code className="font-mono bg-blue-500/10 px-1 rounded">iss</code> claim),
-                        maps claims to AILink roles, and falls back to API key auth if no provider matches.
+                        maps claims to TrueFlow roles, and falls back to API key auth if no provider matches.
                     </p>
                 </div>
             </div>

@@ -12,7 +12,7 @@ export interface UserSession {
 }
 
 /**
- * Hook to read the user session from the ailink_session cookie (client-side).
+ * Hook to read the user session from the trueflow_session cookie (client-side).
  * Returns null if no session or if SSO is not enabled (cookie is httpOnly,
  * so we read it via a non-httpOnly mirror set by middleware).
  *
@@ -26,7 +26,7 @@ export function useSession(): UserSession | null {
             // Read from a client-visible cookie or localStorage
             const raw = document.cookie
                 .split("; ")
-                .find((c) => c.startsWith("ailink_user="))
+                .find((c) => c.startsWith("trueflow_user="))
                 ?.split("=")[1];
 
             if (raw) {
@@ -50,5 +50,5 @@ export function useSession(): UserSession | null {
 export function isSsoEnabled(): boolean {
     // This runs client-side — we detect SSO by checking if the session cookie exists
     if (typeof document === "undefined") return false;
-    return document.cookie.includes("ailink_user=");
+    return document.cookie.includes("trueflow_user=");
 }

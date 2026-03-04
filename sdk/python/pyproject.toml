@@ -3,14 +3,14 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "ailink"
+name = "trueflow"
 version = "0.1.0"
-description = "Official Python SDK for AIlink Gateway"
+description = "Official Python SDK for TrueFlow Gateway"
 readme = "README.md"
 requires-python = ">=3.9"
 license = {text = "MIT"}
 authors = [
-    {name = "AIlink Team", email = "hello@ailink.dev"}
+    {name = "TrueFlow Team", email = "hello@trueflow.dev"}
 ]
 dependencies = [
     "httpx>=0.24.0",
@@ -33,7 +33,7 @@ dev = ["pytest>=7.0", "anyio[trio]", "requests"]
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["ailink*"]
+include = ["trueflow*"]
 
 [tool.setuptools.package-data]
-ailink = ["py.typed"]
+trueflow = ["py.typed"]

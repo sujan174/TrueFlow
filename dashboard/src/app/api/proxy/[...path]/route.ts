@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 const GATEWAY_URL = process.env.GATEWAY_INTERNAL_URL || process.env.NEXT_PUBLIC_GATEWAY_URL || "http://localhost:8443";
-const ADMIN_KEY = process.env.AILINK_ADMIN_KEY;
+const ADMIN_KEY = process.env.TRUEFLOW_ADMIN_KEY;
 const DASHBOARD_SECRET = process.env.DASHBOARD_SECRET;
 
 /**
@@ -59,7 +59,7 @@ async function proxyHandler(req: NextRequest, { params }: { params: Promise<{ pa
 
     if (!ADMIN_KEY) {
         return NextResponse.json(
-            { error: "Server misconfiguration: AILINK_ADMIN_KEY not set" },
+            { error: "Server misconfiguration: TRUEFLOW_ADMIN_KEY not set" },
             { status: 500 }
         );
     }

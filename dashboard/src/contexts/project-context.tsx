@@ -30,14 +30,14 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
             setProjects(data);
 
             // Auto-select if none selected
-            const cached = localStorage.getItem("ailink_project_id");
+            const cached = localStorage.getItem("trueflow_project_id");
             if (cached && data.find(p => p.id === cached)) {
                 setSelectedProjectId(cached);
             } else if (data.length > 0) {
                 // Default to first one (likely 'default')
                 const defaultProj = data[0].id;
                 setSelectedProjectId(defaultProj);
-                localStorage.setItem("ailink_project_id", defaultProj);
+                localStorage.setItem("trueflow_project_id", defaultProj);
             }
         } catch {
             toast.error("Failed to load projects");
@@ -52,7 +52,7 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
 
     const selectProject = (projectId: string) => {
         setSelectedProjectId(projectId);
-        localStorage.setItem("ailink_project_id", projectId);
+        localStorage.setItem("trueflow_project_id", projectId);
         // Reload page to force all data fetches to refresh with new ID
         // This is a crude but effective way to ensure all useStates/useEffects in pages reset
         window.location.reload();
@@ -90,7 +90,7 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
             if (id === selectedProjectId) {
                 // Find default or first available
                 // We'll trust refreshProjects will fix the state or we force a reload knowing the ID is gone
-                localStorage.removeItem("ailink_project_id");
+                localStorage.removeItem("trueflow_project_id");
                 window.location.reload();
             }
         } catch (e) {

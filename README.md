@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="https://img.shields.io/badge/A-AILink-49111c?style=for-the-badge&labelColor=49111c&color=8e2137" alt="AILink" height="40"/>
+  <img src="https://img.shields.io/badge/A-TrueFlow-49111c?style=for-the-badge&labelColor=49111c&color=8e2137" alt="TrueFlow" height="40"/>
 </p>
 
-<h1 align="center">AILink</h1>
+<h1 align="center">TrueFlow</h1>
 <h3 align="center">The Enterprise AI Agent Gateway</h3>
 
 <p align="center">
@@ -27,15 +27,15 @@
 
 ---
 
-## Why AILink?
+## Why TrueFlow?
 
 Your AI agents need API keys to do anything useful — OpenAI, Anthropic, Gemini, AWS.
 Most teams hardcode them in `.env` files with **zero governance**.
 
-**AILink changes that.** Instead of handing agents real keys (`sk_live_...`), you issue **virtual tokens** (`ailink_v1_...`). The gateway enforces your policies, injects the real key server-side, and the agent never sees it.
+**TrueFlow changes that.** Instead of handing agents real keys (`sk_live_...`), you issue **virtual tokens** (`tf_v1_...`). The gateway enforces your policies, injects the real key server-side, and the agent never sees it.
 
 ```
-Agent (virtual token) ──▶ AILink Gateway (policy + inject) ──▶ Provider (real key)
+Agent (virtual token) ──▶ TrueFlow Gateway (policy + inject) ──▶ Provider (real key)
 ```
 
 > **"You manage the Intelligence. We manage the Access."**
@@ -47,7 +47,7 @@ Agent (virtual token) ──▶ AILink Gateway (policy + inject) ──▶ Provi
 ### 1. Start the stack
 
 ```bash
-git clone https://github.com/sujan174/ailink.git && cd ailink
+git clone https://github.com/sujan174/trueflow.git && cd trueflow
 docker compose up -d
 ```
 
@@ -57,16 +57,16 @@ docker compose up -d
 
 1. **Vault** → Add your OpenAI / Anthropic / Gemini API key
 2. **Policies** → Create a content filter or spend cap
-3. **Virtual Keys** → Generate an `ailink_v1_...` token
+3. **Virtual Keys** → Generate an `tf_v1_...` token
 
 ### 3. Use it — change 2 lines of code
 
 ```python
-# pip install ailink
-from ailink import AIlinkClient
+# pip install trueflow
+from trueflow import TrueFlowClient
 
-client = AIlinkClient(
-    api_key="ailink_v1_...",
+client = TrueFlowClient(
+    api_key="tf_v1_...",
     gateway_url="http://localhost:8443"
 )
 
@@ -74,12 +74,12 @@ client = AIlinkClient(
 oai = client.openai()
 resp = oai.chat.completions.create(
     model="gpt-4o",
-    messages=[{"role": "user", "content": "Hello from AILink!"}]
+    messages=[{"role": "user", "content": "Hello from TrueFlow!"}]
 )
 print(resp.choices[0].message.content)
 ```
 
-Works with **any OpenAI-compatible SDK** — LangChain, CrewAI, LlamaIndex, Vercel AI SDK — just point `base_url` at AILink.
+Works with **any OpenAI-compatible SDK** — LangChain, CrewAI, LlamaIndex, Vercel AI SDK — just point `base_url` at TrueFlow.
 
 ---
 
@@ -162,11 +162,11 @@ Works with **any OpenAI-compatible SDK** — LangChain, CrewAI, LlamaIndex, Verc
 
 ```
                               ┌─────────────────────────────────────────────────────────┐
-                              │                    AILink Gateway (Rust)                 │
+                              │                    TrueFlow Gateway (Rust)                 │
                               │                                                         │
   Agent / SDK                 │   Token Auth ──▶ Policy Engine ──▶ Guardrails            │        Providers
  ─────────────▶               │       │              │                │                  │    ──────────────▶
-  ailink_v1_...               │       ▼              ▼                ▼                  │      OpenAI
+  tf_v1_...               │       ▼              ▼                ▼                  │      OpenAI
                               │   AES Vault     Transform        PII Redact              │      Anthropic
                               │       │          (headers,        (SSN, CC,              │      Gemini
                               │       ▼          body, system)     email)                │      Azure
@@ -221,7 +221,7 @@ Works with **any OpenAI-compatible SDK** — LangChain, CrewAI, LlamaIndex, Verc
 ## Project Structure
 
 ```
-ailink/
+trueflow/
 ├── gateway/                  # Rust gateway — the core (39k lines)
 │   ├── src/
 │   │   ├── middleware/       # Policy engine, guardrails, PII, audit, MCP
@@ -231,8 +231,8 @@ ailink/
 │   │   └── mcp/              # MCP client, registry, types
 │   └── migrations/           # SQL migrations (001–036)
 ├── dashboard/                # Next.js admin UI (26k lines)
-├── sdk/python/               # Python SDK — pip install ailink
-├── sdk/typescript/           # TypeScript SDK — npm install @ailink/sdk
+├── sdk/python/               # Python SDK — pip install trueflow
+├── sdk/typescript/           # TypeScript SDK — npm install @trueflow/sdk
 ├── tests/                    # 1,051 tests across all layers
 └── docker-compose.yml
 ```

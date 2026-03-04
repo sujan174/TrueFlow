@@ -1,8 +1,8 @@
-"""Fluent typed policy builder DSL for AILink.
+"""Fluent typed policy builder DSL for TrueFlow.
 
 Build structured policies without writing raw JSON::
 
-    from ailink.policy import Policy, when, deny, rate_limit, redact, content_filter
+    from trueflow.policy import Policy, when, deny, rate_limit, redact, content_filter
 
     policy = (
         Policy("block-gpt4")
@@ -232,7 +232,7 @@ class Rule:
 
 
 class Policy:
-    """Fluent typed builder for an AILink policy.
+    """Fluent typed builder for an TrueFlow policy.
 
     Usage::
 

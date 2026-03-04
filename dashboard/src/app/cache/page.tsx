@@ -297,7 +297,7 @@ export default function CacheManagementPage() {
                             </div>
                             <div>
                                 <CardTitle className="text-sm">Cache Strategy</CardTitle>
-                                <CardDescription className="text-xs">How AIlink caches LLM responses</CardDescription>
+                                <CardDescription className="text-xs">How TrueFlow caches LLM responses</CardDescription>
                             </div>
                         </div>
                     </CardHeader>
@@ -335,7 +335,7 @@ export default function CacheManagementPage() {
                         <div className="rounded-md border border-border/40 bg-muted/20 p-3 text-xs text-muted-foreground space-y-1">
                             <p><strong className="text-foreground">Key generation:</strong> SHA-256 hash of <code className="font-mono text-[11px]">token_id + canonical_request_fields</code></p>
                             <p><strong className="text-foreground">Storage:</strong> Redis (tiered: in-process → Redis)</p>
-                            <p><strong className="text-foreground">Bypass header:</strong> <code className="font-mono text-[11px]">x-ailink-no-cache: true</code></p>
+                            <p><strong className="text-foreground">Bypass header:</strong> <code className="font-mono text-[11px]">x-trueflow-no-cache: true</code></p>
                         </div>
                     </CardContent>
                 </Card>

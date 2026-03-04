@@ -1,4 +1,4 @@
-# AIlink — Policy Guide
+# TrueFlow — Policy Guide
 
 > Policies define **what** an agent can do with a token.
 
@@ -571,7 +571,7 @@ Spend caps are implemented through the policy engine using `usage.*` fields. Red
 
 ### Dedicated Spend Cap Enforcement
 
-In addition to policy-based budget rules, AIlink provides **dedicated per-token spend caps** stored in the `spend_caps` database table. These enforce hard budget limits independently of any policy configuration.
+In addition to policy-based budget rules, TrueFlow provides **dedicated per-token spend caps** stored in the `spend_caps` database table. These enforce hard budget limits independently of any policy configuration.
 
 **How it works:**
 1. Per-token daily and monthly limits are stored in the `spend_caps` table
@@ -590,12 +590,12 @@ VALUES ('your-token-id', 'project-uuid', 'monthly', 500.00, NOW() + INTERVAL '1 
 
 ### Webhook Notifications
 
-When a policy violation, rate limit exceedance, or spend cap breach occurs, AIlink dispatches a webhook to all configured URLs.
+When a policy violation, rate limit exceedance, or spend cap breach occurs, TrueFlow dispatches a webhook to all configured URLs.
 
 **Configuration:**
 
 ```bash
-AILINK_WEBHOOK_URLS=https://hooks.slack.com/services/...,https://webhook.site/your-id
+TRUEFLOW_WEBHOOK_URLS=https://hooks.slack.com/services/...,https://webhook.site/your-id
 ```
 
 **Event types:**

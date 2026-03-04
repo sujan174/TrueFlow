@@ -142,7 +142,7 @@ export default function WebhooksPage() {
                     <CardHeader className="pb-3">
                         <CardTitle className="text-base">New Webhook Endpoint</CardTitle>
                         <CardDescription>
-                            AIlink will POST a JSON payload to this URL when the selected events occur.
+                            TrueFlow will POST a JSON payload to this URL when the selected events occur.
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
@@ -275,7 +275,7 @@ export default function WebhooksPage() {
                         <div className="space-y-1">
                             <p className="text-sm font-medium">Webhook Payload Format</p>
                             <p className="text-xs text-muted-foreground">
-                                AIlink sends a <code className="font-mono bg-muted px-1 rounded">POST</code> request with{" "}
+                                TrueFlow sends a <code className="font-mono bg-muted px-1 rounded">POST</code> request with{" "}
                                 <code className="font-mono bg-muted px-1 rounded">Content-Type: application/json</code>.
                                 Deliveries are fire-and-forget — failures are logged but do not block requests.
                             </p>

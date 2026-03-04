@@ -67,7 +67,7 @@ class TokensResource:
                     ``{"enabled": True, "failure_threshold": 5, "recovery_cooldown_secs": 60}``
             fallback_url: Convenience shorthand to set a single failover URL
                 (creates two upstreams: primary at priority 1, fallback at priority 2).
-            upstreams: Full upstream list as a mix of :class:`~ailink.types.Upstream`
+            upstreams: Full upstream list as a mix of :class:`~trueflow.types.Upstream`
                 objects and/or raw dicts. Takes precedence over ``fallback_url``.
             log_level: Log verbosity for this token — ``"metadata"``, ``"redacted"``,
                 or ``"full"``. Defaults to the gateway global setting.
@@ -290,7 +290,7 @@ class AsyncTokensResource:
                 Example: ``{"enabled": False}`` to disable CB for dev/test.
             fallback_url: Convenience shorthand to set a single failover URL
                 (creates two upstreams: primary at priority 1, fallback at priority 2).
-            upstreams: Full upstream list as a mix of :class:`~ailink.types.Upstream`
+            upstreams: Full upstream list as a mix of :class:`~trueflow.types.Upstream`
                 objects and/or raw dicts. Takes precedence over ``fallback_url``.
             log_level: Log verbosity for this token — ``"metadata"``, ``"redacted"``,
                 or ``"full"``. Defaults to the gateway global setting.

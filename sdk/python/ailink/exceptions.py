@@ -1,8 +1,8 @@
 """
-Custom exceptions for the AIlink SDK.
+Custom exceptions for the TrueFlow SDK.
 
 Provides clear, actionable error messages instead of raw httpx.HTTPStatusError.
-Parses the canonical AILink error format:
+Parses the canonical TrueFlow error format:
 
     {"error": {"code": "...", "message": "...", "type": "...", "request_id": "...", "details": {...}}}
 """
@@ -10,8 +10,8 @@ Parses the canonical AILink error format:
 import httpx
 
 
-class AIlinkError(Exception):
-    """Base exception for all AIlink SDK errors."""
+class TrueFlowError(Exception):
+    """Base exception for all TrueFlow SDK errors."""
 
     def __init__(
         self,
@@ -41,12 +41,12 @@ class AIlinkError(Exception):
         return f"{self.__class__.__name__}({', '.join(parts)})"
 
 
-class AuthenticationError(AIlinkError):
+class AuthenticationError(TrueFlowError):
     """Invalid or missing API key / admin key."""
     pass
 
 
-class AccessDeniedError(AIlinkError):
+class AccessDeniedError(TrueFlowError):
     """Valid credentials but insufficient permissions."""
     pass
 
@@ -56,12 +56,12 @@ class AccessDeniedError(AIlinkError):
 PermissionError = AccessDeniedError
 
 
-class NotFoundError(AIlinkError):
+class NotFoundError(TrueFlowError):
     """Requested resource does not exist."""
     pass
 
 
-class RateLimitError(AIlinkError):
+class RateLimitError(TrueFlowError):
     """Rate limit exceeded. Check retry_after for backoff duration."""
 
     def __init__(self, message: str, retry_after: float = None, **kwargs):
@@ -69,17 +69,17 @@ class RateLimitError(AIlinkError):
         super().__init__(message, **kwargs)
 
 
-class ValidationError(AIlinkError):
+class ValidationError(TrueFlowError):
     """Request payload failed server-side validation."""
     pass
 
 
-class PayloadTooLargeError(AIlinkError):
+class PayloadTooLargeError(TrueFlowError):
     """Request body exceeds the gateway's 25 MB size limit."""
     pass
 
 
-class SpendCapError(AIlinkError):
+class SpendCapError(TrueFlowError):
     """Token spend cap has been reached."""
     pass
 
@@ -97,7 +97,7 @@ class ContentBlockedError(AccessDeniedError):
         super().__init__(message, **kwargs)
 
 
-class GatewayError(AIlinkError):
+class GatewayError(TrueFlowError):
     """Gateway returned a 5xx error."""
     pass
 
@@ -128,7 +128,7 @@ def _parse_error_body(response: httpx.Response) -> tuple:
 
 def raise_for_status(response: httpx.Response) -> None:
     """
-    Check response status and raise the appropriate AIlink exception.
+    Check response status and raise the appropriate TrueFlow exception.
 
     Use this instead of response.raise_for_status() for better error messages.
     The exception will include:
@@ -183,6 +183,6 @@ def raise_for_status(response: httpx.Response) -> None:
             **kwargs,
         )
     elif 400 <= status < 500:
-        raise AIlinkError(f"Client error ({status}): {message}", **kwargs)
+        raise TrueFlowError(f"Client error ({status}): {message}", **kwargs)
     elif status >= 500:
         raise GatewayError(f"Gateway error ({status}): {message}", **kwargs)

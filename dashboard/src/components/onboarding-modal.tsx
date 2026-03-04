@@ -16,7 +16,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-const ONBOARDING_KEY = "ailink_onboarding_complete";
+const ONBOARDING_KEY = "trueflow_onboarding_complete";
 
 interface OnboardingStep {
     icon: React.ElementType;
@@ -30,7 +30,7 @@ const STEPS: OnboardingStep[] = [
     {
         icon: Rocket,
         iconColor: "text-blue-400",
-        title: "Welcome to AILink",
+        title: "Welcome to TrueFlow",
         description:
             "Your unified AI gateway for routing, observability, and cost management. Let's take a quick tour of what you can do.",
         features: [

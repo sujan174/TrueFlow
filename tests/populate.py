@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-AILink Dashboard Population — SDK Edition
+TrueFlow Dashboard Population — SDK Edition
 ==========================================
-Uses the AILink Python SDK to populate the dashboard with realistic data,
+Uses the TrueFlow Python SDK to populate the dashboard with realistic data,
 then generates traffic via token OpenAI clients to fill analytics.
 """
 
@@ -11,17 +11,17 @@ import sys, os, random, time
 # Add the SDK to the path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "sdk", "python"))
 
-from ailink import AIlinkClient
+from trueflow import TrueFlowClient
 
 GW = "http://localhost:8443"
-ADMIN_KEY = "ailink-admin-test"
+ADMIN_KEY = "trueflow-admin-test"
 MOCK_URL = "http://mock-upstream:9000"  # Docker network (gateway appends /v1/...)
 
 # ── Admin client ─────────────────────────────────────────────────────
-admin = AIlinkClient.admin(admin_key=ADMIN_KEY, gateway_url=GW)
+admin = TrueFlowClient.admin(admin_key=ADMIN_KEY, gateway_url=GW)
 
 print("=" * 60)
-print("  AILink Dashboard Population (SDK)")
+print("  TrueFlow Dashboard Population (SDK)")
 print("=" * 60)
 
 # Health check
@@ -175,7 +175,7 @@ total, success, errors = 30, 0, 0
 for i in range(total):
     tok = random.choice(tokens)
     try:
-        client = AIlinkClient(api_key=tok.token_id, gateway_url=GW)
+        client = TrueFlowClient(api_key=tok.token_id, gateway_url=GW)
         with client.trace(session_id=random.choice(sessions)):
             resp = client.post("/v1/chat/completions", json={
                 "model": random.choice(models),

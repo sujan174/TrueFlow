@@ -1,5 +1,5 @@
 /**
- * Shared types for AILink API requests and responses.
+ * Shared types for TrueFlow API requests and responses.
  *
  * Every interface mirrors the gateway's JSON schema and the Python SDK's
  * Pydantic models 1:1, with TypeScript naming conventions (camelCase).
@@ -42,7 +42,7 @@ export interface Token {
 
 /** Response from creating a new token. */
 export interface TokenCreateResponse {
-    /** The `ailink_v1_...` key — only returned once at creation time. */
+    /** The `tf_v1_...` key — only returned once at creation time. */
     tokenId?: string;
     /** Internal UUID. */
     id?: string;

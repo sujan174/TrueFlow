@@ -31,14 +31,14 @@ pub async fn proxy_handler(
 
     // Copy agent name header before consuming request
     let agent_name = headers
-        .get("X-AIlink-Agent-Name")
+        .get("X-TrueFlow-Agent-Name")
         .or_else(|| headers.get("user-agent"))
         .and_then(|v| v.to_str().ok())
         .map(|s| s.to_string());
 
     // Copy idempotency key for HITL
     let idempotency_key = headers
-        .get("X-AIlink-Idempotency-Key")
+        .get("X-TrueFlow-Idempotency-Key")
         .and_then(|v| v.to_str().ok())
         .map(|s| s.to_string());
 
@@ -48,12 +48,12 @@ pub async fn proxy_handler(
     #[cfg(feature = "test-hooks")]
     let (test_cost_override, test_tokens_override, test_latency_override) = {
         let cost = headers
-            .get("x-ailink-test-cost")
+            .get("x-trueflow-test-cost")
             .and_then(|v| v.to_str().ok())
             .and_then(|s| rust_decimal::Decimal::from_str(s).ok());
             
         let tokens = headers
-            .get("x-ailink-test-tokens")
+            .get("x-trueflow-test-tokens")
             .and_then(|v| v.to_str().ok())
             .and_then(|s| {
                 let parts: Vec<&str> = s.split(',').collect();
@@ -65,7 +65,7 @@ pub async fn proxy_handler(
             });
             
         let latency = headers
-            .get("x-ailink-test-latency")
+            .get("x-trueflow-test-latency")
             .and_then(|v| v.to_str().ok())
             .and_then(|s| s.parse::<u64>().ok());
             
@@ -281,12 +281,12 @@ pub async fn proxy_handler(
     };
     // ctx is now dropped — parsed_body can be mutated
 
-    // -- X-AILink-Guardrails header opt-in (per-request guardrails, no policy config needed) --
-    // Header format:  X-AILink-Guardrails: pii_redaction,prompt_injection
+    // -- X-TrueFlow-Guardrails header opt-in (per-request guardrails, no policy config needed) --
+    // Header format:  X-TrueFlow-Guardrails: pii_redaction,prompt_injection
     // Each recognised preset injects synthetic TriggeredAction entries at the front of the queue.
     let mut outcome_actions = outcome_actions;
     if let Some(guardrail_header) = headers
-        .get("x-ailink-guardrails")
+        .get("x-trueflow-guardrails")
         .and_then(|v| v.to_str().ok())
     {
         let mut header_actions: Vec<TriggeredAction> = Vec::new();
@@ -325,7 +325,7 @@ pub async fn proxy_handler(
                     max_content_length: 0,
                 }),
                 other => {
-                    tracing::warn!(preset = other, "X-AILink-Guardrails: unrecognised preset, ignoring");
+                    tracing::warn!(preset = other, "X-TrueFlow-Guardrails: unrecognised preset, ignoring");
                     None
                 }
             };
@@ -798,7 +798,7 @@ pub async fn proxy_handler(
                     .map(|v| v.to_string())
                     .unwrap_or_default();
                 // check_with_timeout wraps the vendor call in a tokio::time::timeout (default 5s,
-                // configurable via AILINK_GUARDRAIL_TIMEOUT_SECS). On expiry it returns Err(...)
+                // configurable via TRUEFLOW_GUARDRAIL_TIMEOUT_SECS). On expiry it returns Err(...)
                 // which falls through to the fail-open branch below — capping worst-case latency.
                 match middleware::external_guardrail::check_with_timeout(
                     vendor, endpoint, api_key_env.as_deref(), *threshold, &text
@@ -944,7 +944,7 @@ pub async fn proxy_handler(
         state.webhook.dispatch(&webhook_urls, webhook_event).await;
 
         return Err(AppError::SpendCapReached {
-            message: format!("Spend cap reached (USD): {}. Check your limits at the AILink dashboard.", e),
+            message: format!("Spend cap reached (USD): {}. Check your limits at the TrueFlow dashboard.", e),
         });
     }
 
@@ -970,7 +970,7 @@ pub async fn proxy_handler(
         audit.emit(&state);
 
         return Err(AppError::SpendCapReached {
-            message: "Project spending limit reached. Contact your administrator or review limits at the AILink dashboard.".to_string(),
+            message: "Project spending limit reached. Contact your administrator or review limits at the TrueFlow dashboard.".to_string(),
         });
     }
 
@@ -1390,7 +1390,7 @@ pub async fn proxy_handler(
             return Response::builder()
                 .status(axum_status)
                 .header("content-type", cached.content_type)
-                .header("x-ailink-cache", "HIT")
+                .header("x-trueflow-cache", "HIT")
                 .body(Body::from(cached.body))
                 .map_err(|e| AppError::Internal(anyhow::anyhow!("cached response build failed: {}", e)));
         }
@@ -1722,7 +1722,7 @@ pub async fn proxy_handler(
             upstream_headers.insert(reqwest::header::USER_AGENT, ua.clone());
         } else {
             // Fallback User-Agent if none provided by client
-            upstream_headers.insert(reqwest::header::USER_AGENT, reqwest::header::HeaderValue::from_static("AILink-Gateway/1.0"));
+            upstream_headers.insert(reqwest::header::USER_AGENT, reqwest::header::HeaderValue::from_static("TrueFlow-Gateway/1.0"));
         }
     }
     
@@ -2673,27 +2673,27 @@ pub async fn proxy_handler(
     }
 
     // -- Circuit breaker visibility headers --
-    // X-AILink-Upstream: which upstream was selected for this request
-    // X-AILink-CB-State: closed | open | half_open | disabled
+    // X-TrueFlow-Upstream: which upstream was selected for this request
+    // X-TrueFlow-CB-State: closed | open | half_open | disabled
     // X-Request-Id: correlation ID for debugging and support
     let cb_state: &'static str = if cb_config.enabled {
         state.lb.get_circuit_state(&token.id, &final_upstream_url, cb_config.recovery_cooldown_secs)
     } else {
         "disabled"
     };
-    response = response.header("x-ailink-cb-state", axum::http::HeaderValue::from_static(cb_state));
+    response = response.header("x-trueflow-cb-state", axum::http::HeaderValue::from_static(cb_state));
     if let Ok(upstream_hv) = axum::http::HeaderValue::from_str(&final_upstream_url) {
-        response = response.header("x-ailink-upstream", upstream_hv);
+        response = response.header("x-trueflow-upstream", upstream_hv);
     }
     // DynamicRoute observability: tell developers which strategy won and why
     if let Some(ref strategy) = dynamic_route_strategy {
         if let Ok(hv) = axum::http::HeaderValue::from_str(strategy) {
-            response = response.header("x-ailink-route-strategy", hv);
+            response = response.header("x-trueflow-route-strategy", hv);
         }
     }
     if let Some(ref reason) = dynamic_route_reason {
         if let Ok(hv) = axum::http::HeaderValue::from_str(reason) {
-            response = response.header("x-ailink-route-reason", hv);
+            response = response.header("x-trueflow-route-reason", hv);
         }
     }
     // Attach request ID to every response for support correlation
@@ -2713,19 +2713,19 @@ pub async fn proxy_handler(
             if let Some(daily_limit) = status.daily_limit_usd {
                 let remaining = (daily_limit - status.current_daily_usd).max(0.0);
                 if let Ok(hv) = axum::http::HeaderValue::from_str(&format!("{:.4}", remaining)) {
-                    response = response.header("x-ailink-budget-remaining-daily", hv);
+                    response = response.header("x-trueflow-budget-remaining-daily", hv);
                 }
             }
             if let Some(monthly_limit) = status.monthly_limit_usd {
                 let remaining = (monthly_limit - status.current_monthly_usd).max(0.0);
                 if let Ok(hv) = axum::http::HeaderValue::from_str(&format!("{:.4}", remaining)) {
-                    response = response.header("x-ailink-budget-remaining-monthly", hv);
+                    response = response.header("x-trueflow-budget-remaining-monthly", hv);
                 }
             }
             if let Some(lifetime_limit) = status.lifetime_limit_usd {
                 let remaining = (lifetime_limit - status.current_lifetime_usd).max(0.0);
                 if let Ok(hv) = axum::http::HeaderValue::from_str(&format!("{:.4}", remaining)) {
-                    response = response.header("x-ailink-budget-remaining-lifetime", hv);
+                    response = response.header("x-trueflow-budget-remaining-lifetime", hv);
                 }
             }
         }
@@ -2734,7 +2734,7 @@ pub async fn proxy_handler(
     // P1.7: Attach idempotency warning if retries were skipped for safety
     if let Some(warning_msg) = idempotency_warning {
         if let Ok(warning_hv) = axum::http::HeaderValue::from_str(warning_msg) {
-            response = response.header("x-ailink-warning", warning_hv);
+            response = response.header("x-trueflow-warning", warning_hv);
         }
     }
 
@@ -3039,7 +3039,7 @@ fn extract_bearer_token(headers: &HeaderMap) -> Result<String, AppError> {
         return Err(AppError::TokenNotFound);
     }
     let token = auth[7..].trim().to_string();
-    if !token.starts_with("ailink_v1_") {
+    if !token.starts_with("tf_v1_") {
         return Err(AppError::TokenNotFound);
     }
     Ok(token)

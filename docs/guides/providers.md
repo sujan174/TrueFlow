@@ -1,6 +1,6 @@
 # Supported Providers
 
-AILink supports **10 LLM providers** with automatic format translation. Send requests in OpenAI format — the gateway detects the provider and translates on the fly.
+TrueFlow supports **10 LLM providers** with automatic format translation. Send requests in OpenAI format — the gateway detects the provider and translates on the fly.
 
 ---
 

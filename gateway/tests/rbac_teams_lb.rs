@@ -278,7 +278,7 @@ fn test_routing_strategy_round_trip() {
 
 // NOTE: In-flight tracking tests (LoadBalancer) are in the --bin target.
 // The proxy module is only available in the binary, not the library crate.
-// See: cargo test --bin ailink -- "in_flight" (3 tests pass in bin target).
+// See: cargo test --bin trueflow -- "in_flight" (3 tests pass in bin target).
 
 // ═══════════════════════════════════════════════════════════════════════════
 // AppError::Forbidden — Error Response Correctness (#7)

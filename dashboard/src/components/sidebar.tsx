@@ -211,7 +211,7 @@ export function Sidebar({ className }: SidebarProps) {
                     </div>
                     {!collapsed && (
                         <span className="gradient-text font-semibold text-sm tracking-tight whitespace-nowrap">
-                            AIlink
+                            TrueFlow
                         </span>
                     )}
                 </Link>
