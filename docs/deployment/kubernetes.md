@@ -2,7 +2,7 @@
 
 Deploy TrueFlow on Kubernetes for production workloads with horizontal scaling, health probes, and resource management.
 
-> Helm charts are in development. For now, use the raw manifests below.
+> Helm charts are not yet available. For now, use the raw manifests below.
 
 ---
 
@@ -35,6 +35,8 @@ spec:
         - secretRef:
             name: trueflow-secrets
         env:
+        - name: TRUEFLOW_PORT
+          value: "8443"
         - name: TRUEFLOW_ENV
           value: "production"
         - name: RUST_LOG
@@ -100,6 +102,9 @@ stringData:
 
 > [!CAUTION]
 > Never commit secrets to version control. Use Kubernetes Secrets, AWS Secrets Manager, or HashiCorp Vault.
+
+> [!IMPORTANT]
+> The default `Secret` manifest stores data in base64 within etcd. Ensure encryption at rest is enabled for etcd, or use an external secrets operator (like External Secrets Operator + AWS Secrets Manager) for production.
 
 ---
 

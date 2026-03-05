@@ -334,7 +334,7 @@ Modifies headers, JSON body fields, or injects synthetic messages and system pro
 |---|---|
 | `set_header` | Sets an HTTP header (request or response) |
 | `remove_header` | Removes an HTTP header (including standard headers like `User-Agent`) |
-| `prepend_system_prompt`| Injects text into the first `system` message. Creates one if absent. |
+| `prepend_system_prompt`\|`append_system_prompt`| Injects text into the OpenAI `system` message or Anthropic `system` field. Creates one if absent. |
 | `regex_replace` | Regex find/replace across all strings in the JSON body |
 | `set_body_field` | Sets a JSON field by dot-path (e.g. `temperature`) |
 | `remove_body_field` | Deletes a JSON field by dot-path |
@@ -579,13 +579,18 @@ In addition to policy-based budget rules, TrueFlow provides **dedicated per-toke
 3. `check_spend_cap()` runs after policy evaluation — if a cap is exceeded, the request is blocked with HTTP 429
 4. A `spend_cap_exceeded` webhook event is automatically dispatched
 
-```sql
--- Example: Set a $50/day and $500/month cap on a token
-INSERT INTO spend_caps (token_id, project_id, period, limit_usd, reset_at)
-VALUES ('your-token-id', 'project-uuid', 'daily', 50.00, NOW() + INTERVAL '1 day');
+```bash
+# Example: Set a $50/day cap on a token
+curl -X PUT http://localhost:8443/api/v1/tokens/your-token-id/spend \
+  -H "Authorization: Bearer $ADMIN_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"period": "daily", "limit_usd": 50.00}'
 
-INSERT INTO spend_caps (token_id, project_id, period, limit_usd, reset_at)
-VALUES ('your-token-id', 'project-uuid', 'monthly', 500.00, NOW() + INTERVAL '1 month');
+# Example: Set an additional $500/month cap
+curl -X PUT http://localhost:8443/api/v1/tokens/your-token-id/spend \
+  -H "Authorization: Bearer $ADMIN_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"period": "monthly", "limit_usd": 500.00}'
 ```
 
 ### Webhook Notifications
@@ -708,7 +713,7 @@ Review the audit logs for shadow violations, then promote:
 
 ```bash
 # Check shadow violations
-curl http://localhost:8443/api/v1/audit/logs?shadow=true
+curl http://localhost:8443/api/v1/audit?shadow=true
 
 # Promote to enforce
 curl -X PATCH http://localhost:8443/api/v1/policies/{id} \

@@ -291,3 +291,16 @@ export TRUEFLOW_GATEWAY_URL="http://localhost:8443"
 client = TrueFlowClient()
 llm = langchain_chat(client, model="gpt-4o")
 ```
+
+---
+
+## Troubleshooting
+
+### "AuthenticationError: Missing or invalid token"
+Ensure `TRUEFLOW_API_KEY` is set in your environment or passed to the `TrueFlowClient`. The key must start with `tf_v1_`.
+
+### "PolicyDeniedError: Access forbidden"
+A TrueFlow policy has blocked the request. Open the TrueFlow Dashboard and check the **Audit Logs** to see exactly which policy rule triggered the block.
+
+### "Model not found" or "Invalid model name"
+If you are using manual configuration without the TrueFlow integration helpers, ensure you are passing the model correctly. Some frameworks prefix model names (e.g., CrewAI uses `openai/gpt-4o` internally) but TrueFlow understands native model names (e.g., `gpt-4o`). The `trueflow.integrations` helpers handle this mapping automatically.

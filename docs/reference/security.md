@@ -23,10 +23,11 @@ All agent credentials are virtual tokens (`tf_v1_...`) that only work through th
 | T3 | **Replay Attack** | Medium | Idempotency keys, request timestamping, rate limiting |
 | T4 | **Man-in-the-Middle** | High | TLS 1.3 enforced on all connections. mTLS available for enterprise |
 | T5 | **Runaway Agent Costs** | High | Per-token spend caps (atomic checks via Redis Lua). Per-window rate limits. HITL for high-value operations |
+| T5.1 | **HITL Resource Exhaustion** | Medium | `HITL_MAX_PENDING_PER_TOKEN` boundary limits pending approvals, preventing memory/queue exhaustion |
 | T6 | **Accidental Destructive Operations** | High | Method + path whitelists (e.g., GET only). HITL for write operations. Shadow mode for safe rollout |
 | T7 | **Gateway Infrastructure Compromise** | Critical | Secrets encrypted at rest (AES-256-GCM). DEKs held in memory only during request. Master key in environment variable or external KMS, never in database |
 | T8 | **Insider Threat (TrueFlow Operator)** | High | Envelope encryption — operators can access encrypted blobs but not plaintext. Master keys in HSM/KMS for enterprise |
-| T9 | **Stale Compromised Credentials** | Medium | Automatic key rotation — real API keys rotated every 24h. A stolen key expires in hours |
+| T9 | **Stale Compromised Credentials** | Medium | Configurable key rotation via background jobs minimizes the blast radius of a compromised credential |
 | T10 | **Supply Chain Attack (SDK)** | Medium | SDKs published with SLSA provenance. Dependencies pinned and audited |
 | T11 | **Database Breach** | High | All credentials encrypted at rest. Audit logs contain request hashes, not request bodies. PII redacted before storage |
 | T12 | **SSRF (Server-Side Request Forgery)** | High | Webhook URLs validated: HTTPS-only, no private/reserved IPs (RFC 1918), no cloud metadata access |
@@ -252,8 +253,10 @@ The real credential exists in memory for the shortest possible time — typicall
 
 ## Compliance Roadmap
 
-| Certification | Target |
+*Note: The following are planned roadmap items for TrueFlow enterprise deployments. Timelines are targets, not factual commitments.*
+
+| Certification | Description |
 |---|---|
-| SOC 2 Type II | Year 1 |
-| GDPR | Year 1 (data residency options) |
-| HIPAA | Year 2 (for healthcare AI agents) |
+| SOC 2 Type II | Ongoing continuous monitoring and auditing for cloud environments |
+| GDPR | Comprehensive data residency configurations and native DSR support |
+| HIPAA | Dedicated BAA process and expanded PHI-redaction presets |

@@ -1,6 +1,6 @@
 # TrueFlow — API Reference
 
-> This reference covers the Management API for configuring TrueFlow. For making requests *through* the gateway, see the [SDK Guide](SDK.md).
+> This reference covers the Management API for configuring TrueFlow. For making requests *through* the gateway, see the [Python SDK](../sdks/python.md) or [TypeScript SDK](../sdks/typescript.md).
 
 ## Management API
 
@@ -124,6 +124,8 @@ Virtual tokens issued to AI agents. Agents use these instead of real API keys.
   "circuit_breaker": {
     "enabled": true,
     "failure_threshold": 3,
+    "failure_rate_threshold": 0.5,
+    "min_sample_size": 10,
     "recovery_cooldown_secs": 30,
     "half_open_max_requests": 1
   }
@@ -149,6 +151,8 @@ Per-token circuit breaker configuration for upstream resilience.
 {
   "enabled": true,
   "failure_threshold": 3,
+  "failure_rate_threshold": 0.5,
+  "min_sample_size": 10,
   "recovery_cooldown_secs": 30,
   "half_open_max_requests": 1
 }
@@ -157,7 +161,18 @@ Per-token circuit breaker configuration for upstream resilience.
 #### Update Circuit Breaker Config
 `PATCH /tokens/{id}/circuit-breaker`
 
-Update at runtime without gateway restart. CB states: `closed` → `open` (after N failures) → `half_open` (cooldown elapsed) → `closed`.
+```json
+{
+  "enabled": true,
+  "failure_threshold": 5,
+  "failure_rate_threshold": 0.3,
+  "min_sample_size": 20,
+  "recovery_cooldown_secs": 60,
+  "half_open_max_requests": 2
+}
+```
+
+Update at runtime without gateway restart. CB states: `closed` → `open` (after N continuous failures or when failure rate > threshold) → `half_open` (cooldown elapsed) → `closed`.
 
 > Response headers on every proxied request:
 > - `X-TrueFlow-CB-State: closed | open | half_open | disabled`
@@ -438,6 +453,8 @@ High-stakes operations that pause for manual review.
 #### List Pending Approvals
 `GET /approvals`
 
+> **Note**: Approval requests are rate-limited. If a token exceeds `HITL_MAX_PENDING_PER_TOKEN` (default: 10) pending requests, the proxy will return `403 Forbidden` (`code: hitl_concurrency_cap_exceeded`) to prevent resource exhaustion.
+
 #### Decide Approval
 `POST /approvals/{id}/decision`
 ```json
@@ -657,6 +674,36 @@ Register external APIs for secure, credential-injected proxying.
 
 #### Proxy Through a Service
 `ANY /v1/proxy/services/{service_name}/*`
+
+---
+
+### Proxy API (For Agents)
+
+The Proxy API is how AI agents make requests *through* TrueFlow to upstream LLM providers or registered services.
+
+| Endpoint | Description |
+|----------|-------------|
+| `ANY /v1/*` | Routes to LLM provider chat completions, embeddings, etc. |
+| `ANY /v1/proxy/services/{service_name}/*` | Routes to registered external services |
+
+**Request Headers (Accepted)**
+
+| Header | Description |
+|--------|-------------|
+| `Authorization` | `Bearer tf_v1_...` (Virtual Token) |
+| `X-Agent-Name` | Optional context for audit logging (e.g., `fraud-bot`) |
+| `X-MCP-Servers` | Comma-separated list of registered MCP servers to auto-inject tools |
+| `x-trueflow-no-cache` | Set to `true` to bypass response caching. *Requires the token to have the `cache:bypass` scope.* |
+| `Idempotency-Key` | UUID to prevent duplicate operations (useful for async HITL) |
+
+**Response Headers (Returned by TrueFlow)**
+
+| Header | Description |
+|--------|-------------|
+| `X-TrueFlow-Request-Id` | Unique UUID for the gateway transaction, used for tracing |
+| `X-TrueFlow-CB-State` | `closed`, `open`, `half_open`, or `disabled` |
+| `X-TrueFlow-Upstream` | The URL of the upstream provider that serviced the request |
+| `X-TrueFlow-Cache` | `HIT` or `MISS` |
 
 ---
 

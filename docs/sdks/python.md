@@ -16,7 +16,7 @@ TrueFlow is a **drop-in replacement** for any OpenAI-compatible endpoint. Point 
 from trueflow import TrueFlowClient
 
 # One line to get a policy-enforced, audited OpenAI client
-client = TrueFlowClient(api_key="tf_v1_...", gateway_url="https://gateway.trueflow.dev")
+client = TrueFlowClient(api_key="tf_v1_...", gateway_url="http://localhost:8443")
 oai = client.openai()
 
 # Use exactly like openai.Client — no other changes needed
@@ -65,7 +65,7 @@ for chunk in stream:
 ```python
 from trueflow import AsyncClient
 
-async with AsyncClient(api_key="tf_v1_...", gateway_url="https://gateway.trueflow.dev") as client:
+async with AsyncClient(api_key="tf_v1_...", gateway_url="http://localhost:8443") as client:
     oai = client.openai()
     response = await oai.chat.completions.create(
         model="gpt-4o",
@@ -109,6 +109,8 @@ job = oai.fine_tuning.jobs.create(
 
 ## Realtime API (WebSocket)
 
+Connect to a WebSocket upstream through TrueFlow. The token must be configured with a realtime-capable model (like `gpt-4o-realtime-preview`) and the provider must support WebSockets.
+
 ```python
 async with client.realtime("gpt-4o-realtime-preview") as ws:
     await ws.send({"type": "session.update", ...})
@@ -124,7 +126,7 @@ Use the `TrueFlowClient` to proxy requests to any REST API:
 ```python
 client = TrueFlowClient(
     api_key="tf_v1_proj_abc123_tok_def456",
-    gateway_url="https://gateway.trueflow.dev",
+    gateway_url="http://localhost:8443",
     agent_name="billing-agent",  # shows up in audit logs
 )
 
@@ -237,7 +239,7 @@ except TrueFlowError as e:
 ## Response Caching
 
 ```python
-# Bypass cache for this request
+# Bypass cache for this request. Requires `cache:bypass` scope on the token.
 response = client.post(
     "/v1/chat/completions",
     json={...},
@@ -245,7 +247,7 @@ response = client.post(
 )
 ```
 
-Cache hits are indicated by `x-trueflow-cache: HIT` in the response headers.
+Cache hits are indicated by `X-TrueFlow-Cache: HIT` in the response headers.
 
 ---
 
@@ -309,7 +311,7 @@ async with AsyncHealthPoller(client, interval=15) as poller:
 
 ## Passthrough Mode (Bring Your Own Key)
 
-When a token has **no stored credential**, supply the upstream API key at call time:
+When a token is explicitly configured for passthrough (no stored `.credential_id`), you can supply the upstream API key at call time. The gateway will inject this key into the upstream request while still applying policies and tracking spend.
 
 ```python
 client = TrueFlowClient(api_key="tf_v1_...")

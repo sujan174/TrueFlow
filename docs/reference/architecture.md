@@ -80,11 +80,13 @@ Requests flow through a stack of **Tower Middleware** layers. Each layer is isol
     *   Evaluates JSON-logic rules.
     *   Executes actions: `deny`, `rate_limit` (Redis-backed), `spend_cap` (DB-backed atomic check).
 8.  **Human-in-the-Loop (HITL)**: If triggered, suspends the request, notifies Slack/Dashboard via Redis Stream, and waits for `approval` or `rejection`.
-9.  **Response Cache (Read)**: Checks Redis for a semantic match (hash of model + messages + args). Returns immediately on hit.
+9.  **Response Cache (Read)**: Checks Redis for a semantic match (hash of model + messages + args). Returns immediately on hit. Bypassed if request has `x-trueflow-no-cache: true` and the token has the `cache:bypass` scope.
 10. **Load Balancer + Circuit Breaker**:
     *   Reads per-token `CircuitBreakerConfig` from the resolved token (`circuit_breaker` JSONB).
     *   Selects an upstream using **weighted round-robin within priority tiers**.
-    *   CB states: `closed` (healthy) → `open` (blocked after N failures) → `half_open` (cooldown elapsed) → `closed` (recovered).
+    *   CB states are tracked **distributably in Redis** (`cb:state:{token_id}:{url}`), sharing failure metrics across multiple gateway instances.
+    *   Trips to `open` (blocked) after `failure_threshold` consecutive failures OR if the failure rate > `failure_rate_threshold` (using a rolling window of `min_sample_size`).
+    *   CB states: `closed` (healthy) → `open` (blocked) → `half_open` (cooldown elapsed) → `closed` (recovered).
     *   When `enabled: false`, CB is bypassed entirely — all upstreams are always routable (useful for dev tokens).
     *   Adds `X-TrueFlow-CB-State` and `X-TrueFlow-Upstream` response headers for client-side observability.
 11. **Model Router**:

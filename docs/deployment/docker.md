@@ -17,7 +17,7 @@ Run the full TrueFlow stack (Gateway + Dashboard + PostgreSQL + Redis) with Dock
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/sujan174/trueflow.git
+git clone https://github.com/trueflow/trueflow.git
 cd trueflow
 ```
 
@@ -77,6 +77,8 @@ Open **[http://localhost:3000](http://localhost:3000)**
 |----------|-------------|---------|
 | `TRUEFLOW_MASTER_KEY` | 32-byte hex key for vault encryption. **Change for production** | dev key |
 | `TRUEFLOW_ADMIN_KEY` | Root admin API key | `trueflow-admin-test` |
+| `DATABASE_URL` | PostgreSQL connection string | `postgres://postgres:password@localhost:5432/trueflow` |
+| `REDIS_URL` | Redis connection string | `redis://localhost:6379` |
 | `DASHBOARD_SECRET` | Dashboard ↔ gateway auth secret | `trueflow-dashboard-dev-secret` |
 | `DASHBOARD_ORIGIN` | CORS origin for dashboard | `http://localhost:3000` |
 | `TRUEFLOW_ENV` | Set to `production` for secure startup checks | `development` |

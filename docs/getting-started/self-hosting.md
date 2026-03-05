@@ -5,14 +5,14 @@ Run the full TrueFlow stack (Gateway + Dashboard + PostgreSQL + Redis) on your m
 ## Prerequisites
 
 - [Docker](https://docs.docker.com/get-docker/) and Docker Compose installed
-- At least **2 GB RAM** available for the stack
+- At least **4 GB RAM** available for the stack
 - `git` (to clone the repo)
 
 ## Quick Start
 
 ### 1. Clone the Repository
 ```bash
-git clone https://github.com/sujan174/trueflow.git
+git clone https://github.com/trueflow/trueflow.git
 cd trueflow
 ```
 
@@ -110,5 +110,5 @@ The Rust gateway compilation is CPU-intensive. On the first build:
 ## Next Steps
 
 - **[Quickstart Guide](../getting-started/quickstart.md)** — Create your first credential, policy, and token
-- **[Deployment Guide](../deployment/docker.md)** — Production deployment with Kubernetes
+- **[Deployment Guide](../deployment/kubernetes.md)** — Production deployment with Kubernetes
 - **[Python SDK](../sdks/python.md)** / **[TypeScript SDK](../sdks/typescript.md)** — Client libraries

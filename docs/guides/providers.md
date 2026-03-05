@@ -64,7 +64,7 @@ The gateway detects the provider from the **model name prefix** first, then fall
 ### Amazon Bedrock
 
 - **Auth**: AWS SigV4 signing
-- **Credential setup**: Store `ACCESS_KEY_ID:SECRET_ACCESS_KEY` with `injection_mode: sigv4`
+- **Credential setup**: Store `ACCESS_KEY_ID:SECRET_ACCESS_KEY` (e.g., `AKIAIOSFODNN7EXAMPLE:wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY`) with `injection_mode: sigv4`
 - **Streaming**: Binary event stream ✅ — `application/vnd.amazon.eventstream` auto-decoded and translated to OpenAI SSE
 - **Request translation**: OpenAI → Bedrock Converse API format
 - **Response translation**: Bedrock → OpenAI format with usage

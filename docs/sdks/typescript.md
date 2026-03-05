@@ -6,6 +6,13 @@
 npm install @trueflow/sdk
 ```
 
+### Requirements
+
+- Node.js 18+ (uses native `fetch`)
+- TypeScript 5.5+ (for best type inference)
+- `openai` package for `client.openai()` (optional peer dep)
+- `@anthropic-ai/sdk` for `client.anthropic()` (optional peer dep)
+
 ---
 
 ## Quick Start — OpenAI Drop-In
@@ -15,7 +22,7 @@ import { TrueFlowClient } from '@trueflow/sdk';
 
 const client = new TrueFlowClient({
   apiKey: 'tf_v1_...',
-  gatewayUrl: 'https://gateway.trueflow.dev',
+  gatewayUrl: 'http://localhost:8443',
 });
 
 // Get a configured OpenAI client — works with openai@4+
@@ -64,7 +71,7 @@ const message = await anthropic.messages.create({
 ```typescript
 const client = new TrueFlowClient({
   apiKey: 'tf_v1_proj_abc123_tok_def456',
-  gatewayUrl: 'https://gateway.trueflow.dev',
+  gatewayUrl: 'http://localhost:8443',
   agentName: 'billing-agent',
 });
 
@@ -247,6 +254,22 @@ TrueFlowError (base)
 
 ---
 
+## Response Caching
+
+TrueFlow caches LLM responses semantically. By default, duplicate requests return the cached response.
+
+```typescript
+// Bypass cache for this request. Requires `cache:bypass` scope on the token.
+const response = await client.post('/v1/chat/completions', {
+  body: { ... },
+  headers: { 'x-trueflow-no-cache': 'true' }
+});
+```
+
+Cache hits are indicated by `X-TrueFlow-Cache: HIT` in the response headers.
+
+---
+
 ## Realtime API (WebSocket)
 
 ```typescript
@@ -353,10 +376,3 @@ await admin.experiments.stop(exp.id);
 | `TRUEFLOW_API_KEY` | Virtual token for authentication | — |
 | `TRUEFLOW_GATEWAY_URL` | Gateway base URL | `http://localhost:8443` |
 | `TRUEFLOW_ADMIN_KEY` | Admin key for management API | — |
-
-## Requirements
-
-- Node.js 18+ (uses native `fetch`)
-- TypeScript 5.5+ (for best type inference)
-- `openai` package for `client.openai()` (optional peer dep)
-- `@anthropic-ai/sdk` for `client.anthropic()` (optional peer dep)
