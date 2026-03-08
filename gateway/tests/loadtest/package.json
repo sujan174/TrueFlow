@@ -1,0 +1,17 @@
+{
+  "name": "trueflow-loadtest",
+  "version": "1.0.0",
+  "description": "k6 load testing suite for TrueFlow",
+  "scripts": {
+    "test:all": "./run.sh all",
+    "test:1": "./run.sh scenario_1",
+    "test:2": "./run.sh scenario_2",
+    "test:3": "./run.sh scenario_3",
+    "test:4": "./run.sh scenario_4",
+    "test:5": "./run.sh scenario_5",
+    "test:6": "./run.sh scenario_6"
+  },
+  "devDependencies": {
+    "@types/k6": "^0.46.0"
+  }
+}
