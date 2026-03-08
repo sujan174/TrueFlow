@@ -187,7 +187,7 @@ pub async fn proxy_handler(
 
     let policies = state
         .db
-        .get_policies_for_token(&token.policy_ids)
+        .get_policies_for_token(token.project_id, &token.policy_ids)
         .await
         .map_err(AppError::Internal)?;
 
@@ -249,12 +249,20 @@ pub async fn proxy_handler(
         counters
     };
 
-    // Extract client IP from X-Forwarded-For or X-Real-IP
-    let client_ip_str = headers
-        .get("x-forwarded-for")
-        .or_else(|| headers.get("x-real-ip"))
-        .and_then(|v| v.to_str().ok())
-        .map(|s| s.split(',').next().unwrap_or(s).trim().to_string());
+    // SEC: Extract client IP from X-Forwarded-For ONLY if trusted proxies are configured.
+    // This prevents IP spoofing via malicious X-Forwarded-For headers from untrusted clients.
+    // If TRUSTED_PROXY_CIDRS is empty (default), we ignore these headers entirely.
+    let client_ip_str = if state.config.trusted_proxy_cidrs.is_empty() {
+        // No trusted proxies configured - ignore X-Forwarded-For for security
+        None
+    } else {
+        // Trusted proxies are configured - trust X-Forwarded-For from the edge proxy
+        headers
+            .get("x-forwarded-for")
+            .or_else(|| headers.get("x-real-ip"))
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.split(',').next().unwrap_or(s).trim().to_string())
+    };
 
     // Scope the RequestContext borrow so we can mutate parsed_body after evaluation
     let (outcome_actions, shadow_violations, pre_async_triggered) = {
@@ -1072,7 +1080,7 @@ pub async fn proxy_handler(
             .and_then(|v| v.parse().ok())
             .unwrap_or(10);
 
-        match state.db.count_pending_approvals_for_token(&token.id).await {
+        match state.db.count_pending_approvals_for_token(&token.id, token.project_id).await {
             Ok(pending_count) if pending_count >= hitl_max_pending => {
                 tracing::warn!(
                     token_id = %token.id,
@@ -1261,7 +1269,7 @@ pub async fn proxy_handler(
             Some(value) => value,
             None => {
                 // All Redis paths exhausted — final DB check
-                state.db.get_approval_status(approval_id).await
+                state.db.get_approval_status(approval_id, token.project_id).await
                     .map_err(AppError::Internal)?
             }
         };
@@ -1452,6 +1460,49 @@ pub async fn proxy_handler(
     if let Some(ref key) = cache_key {
         if let Some(cached) = proxy::response_cache::get_cached(&state.cache, key).await {
             tracing::info!(cache_key = %key, "response cache HIT");
+
+            // BILLING: Record spend for cached responses
+            if let (Some(prompt_tokens), Some(completion_tokens)) = (cached.prompt_tokens, cached.completion_tokens) {
+                if let Some(ref cached_model) = cached.model {
+                    // Detect provider from upstream URL
+                    let provider = if token.upstream_url.contains("anthropic") && !token.upstream_url.contains("bedrock") {
+                        "anthropic"
+                    } else if token.upstream_url.contains("generativelanguage") || token.upstream_url.contains("googleapis") {
+                        "google"
+                    } else if token.upstream_url.contains("mistral") {
+                        "mistral"
+                    } else if token.upstream_url.contains("bedrock") {
+                        "bedrock"
+                    } else if token.upstream_url.contains("groq") {
+                        "groq"
+                    } else if token.upstream_url.contains("cohere") {
+                        "cohere"
+                    } else if token.upstream_url.contains("together") {
+                        "together"
+                    } else if token.upstream_url.contains("localhost:11434") || token.upstream_url.contains("ollama") {
+                        "ollama"
+                    } else {
+                        "openai"
+                    };
+
+                    let final_cost = cost::calculate_cost_with_cache(
+                        &state.pricing, provider, cached_model, prompt_tokens, completion_tokens,
+                    ).await;
+
+                    if !final_cost.is_zero() {
+                        let cost_f64 = final_cost.to_f64().unwrap_or(0.0);
+                        if let Err(e) = middleware::spend::check_and_increment_spend(
+                            &state.cache,
+                            state.db.pool(),
+                            &token.id,
+                            cost_f64,
+                        ).await {
+                            tracing::error!(token_id = %token.id, cost = cost_f64, "Cache hit: spend cap exceeded or tracking failed: {}", e);
+                        }
+                    }
+                }
+            }
+
             let mut audit = base_audit(
                 request_id, token.project_id, &token.id, agent_name, method.as_str(), &path,
                 &upstream_url, &policies, hitl_required, hitl_decision, hitl_latency_ms,
@@ -2275,6 +2326,9 @@ pub async fn proxy_handler(
     // execute those tools via the MCP registry, build continuation messages,
     // and re-send to the LLM. Repeat until no more MCP tool calls or max iterations.
     let mut mcp_loop_iterations: u16 = 0;
+    // Track cumulative token usage across all MCP loop iterations
+    let mut mcp_cumulative_prompt_tokens: u32 = 0;
+    let mut mcp_cumulative_completion_tokens: u32 = 0;
     if !mcp_server_names.is_empty() && status.is_success() {
         let max_iters = crate::middleware::mcp::MAX_TOOL_LOOP_ITERATIONS;
 
@@ -2310,7 +2364,9 @@ pub async fn proxy_handler(
             // Execute permitted MCP tool calls
             let tool_messages = crate::middleware::mcp::execute_mcp_tool_calls(
                 &state.mcp_registry,
+                permitted,
                 &current_resp,
+                token.project_id,
             ).await;
 
             let Some(mut new_messages) = tool_messages else {
@@ -2393,6 +2449,63 @@ pub async fn proxy_handler(
                 loop_body
             };
 
+            // SECURITY: Accumulate token usage for cumulative billing across MCP loop iterations
+            // This ensures all LLM calls within the tool loop are billed to the token
+            if let Ok(Some((iter_prompt, iter_completion))) = cost::extract_usage(&token.upstream_url, &resp_body_vec) {
+                mcp_cumulative_prompt_tokens += iter_prompt;
+                mcp_cumulative_completion_tokens += iter_completion;
+
+                // Convert Provider enum to string for cost calculation
+                let provider_str = match detected_provider {
+                    proxy::model_router::Provider::Anthropic => "anthropic",
+                    proxy::model_router::Provider::Gemini => "google",
+                    proxy::model_router::Provider::Mistral => "mistral",
+                    proxy::model_router::Provider::Bedrock => "bedrock",
+                    proxy::model_router::Provider::Groq => "groq",
+                    proxy::model_router::Provider::Cohere => "cohere",
+                    proxy::model_router::Provider::TogetherAI => "together",
+                    proxy::model_router::Provider::Ollama => "ollama",
+                    proxy::model_router::Provider::AzureOpenAI => "openai",
+                    proxy::model_router::Provider::OpenAI => "openai",
+                    proxy::model_router::Provider::Unknown => "openai",
+                };
+
+                // Calculate and immediately bill for this iteration's cost
+                let iter_cost = cost::calculate_cost_with_cache(
+                    &state.pricing,
+                    provider_str,
+                    &detected_model,
+                    iter_prompt,
+                    iter_completion,
+                ).await;
+
+                if !iter_cost.is_zero() {
+                    let cost_f64 = iter_cost.to_f64().unwrap_or(0.0);
+                    if let Err(e) = middleware::spend::check_and_increment_spend(
+                        &state.cache,
+                        state.db.pool(),
+                        &token.id,
+                        cost_f64,
+                    ).await {
+                        tracing::error!(
+                            iteration = iteration,
+                            cost = %cost_f64,
+                            error = %e,
+                            "MCP loop: spend cap exceeded or tracking failed"
+                        );
+                    }
+                }
+
+                tracing::debug!(
+                    iteration = iteration,
+                    prompt_tokens = iter_prompt,
+                    completion_tokens = iter_completion,
+                    cumulative_prompt = mcp_cumulative_prompt_tokens,
+                    cumulative_completion = mcp_cumulative_completion_tokens,
+                    "MCP loop: accumulated token usage"
+                );
+            }
+
             mcp_loop_iterations = (iteration + 1) as u16;
         }
 
@@ -2424,6 +2537,102 @@ pub async fn proxy_handler(
         }
         h
     };
+
+    // -- 6. Sanitize response (moved before post-flight to support cost tracking) --
+    let content_type = resp_headers
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("application/octet-stream");
+    let sanitization_result = middleware::sanitize::sanitize_response(&resp_body_vec, content_type);
+    let sanitized_body = sanitization_result.body;
+
+    // -- 6.1 Calculate Cost & Update Spend --
+    // MOVED BEFORE post-flight: the upstream was already called and tokens consumed.
+    // Post-flight denials (ContentFilter, ValidateSchema, ExternalGuardrail, Deny)
+    // must NOT skip billing — the provider charges regardless.
+    let mut estimated_cost_usd = None;
+    let mut audit_prompt_tokens: Option<u32> = None;
+    let mut audit_completion_tokens: Option<u32> = None;
+    let mut audit_model: Option<String> = None;
+
+    // TEST HOOK: Allow forcing cost/tokens via header for deterministic testing
+    if let Some((p, c)) = test_tokens_override {
+        audit_prompt_tokens = Some(p);
+        audit_completion_tokens = Some(c);
+        audit_model = Some(detected_model.clone());
+    }
+    
+    if let Some(cost_val) = test_cost_override {
+        estimated_cost_usd = Some(cost_val);
+        let cost_f64 = cost_val.to_f64().unwrap_or(0.0);
+        // SEC: Even in test mode, log billing failures for observability
+        if let Err(e) = middleware::spend::check_and_increment_spend(
+            &state.cache,
+            state.db.pool(),
+            &token.id,
+            cost_f64,
+        )
+        .await
+        {
+            tracing::warn!("Test hook billing failed: {}", e);
+        }
+    }
+
+    // FIX: Skip billing if upstream returned 4xx or 5xx error
+    if estimated_cost_usd.is_none() && status.is_success() {
+        match extract_usage(&token.upstream_url, &sanitized_body) {
+            Ok(Some((input, output))) => {
+                audit_prompt_tokens = Some(input);
+                audit_completion_tokens = Some(output);
+                let model = extract_model(&sanitized_body).unwrap_or("unknown".to_string());
+                audit_model = Some(model.clone());
+                let provider = if token.upstream_url.contains("anthropic") && !token.upstream_url.contains("bedrock") {
+                    "anthropic"
+                } else if token.upstream_url.contains("generativelanguage") || token.upstream_url.contains("googleapis") {
+                    "google"
+                } else if token.upstream_url.contains("mistral") {
+                    "mistral"
+                } else if token.upstream_url.contains("bedrock") {
+                    "bedrock"
+                } else if token.upstream_url.contains("groq") {
+                    "groq"
+                } else if token.upstream_url.contains("cohere") {
+                    "cohere"
+                } else if token.upstream_url.contains("together") {
+                    "together"
+                } else if token.upstream_url.contains("localhost:11434") || token.upstream_url.contains("ollama") {
+                    "ollama"
+                } else {
+                    "openai"
+                };
+                let final_cost = cost::calculate_cost_with_cache(
+                    &state.pricing, provider, &model, input, output,
+                ).await;
+
+                if !final_cost.is_zero() {
+                    estimated_cost_usd = Some(final_cost);
+                    let cost_f64 = final_cost.to_f64().unwrap_or(0.0);
+                    if let Err(e) = middleware::spend::check_and_increment_spend(
+                        &state.cache,
+                        state.db.pool(),
+                        &token.id,
+                        cost_f64,
+                    )
+                    .await
+                    {
+                        tracing::error!("Spend cap exceeded or tracking failed: {}", e);
+                    }
+                }
+            }
+            Ok(None) => {}
+            Err(e) => tracing::warn!("Failed to extract usage: {}", e),
+        }
+    } else if estimated_cost_usd.is_none() && !status.is_success() {
+        tracing::debug!(
+            status = %status.as_u16(),
+            "Skipping billing for non-success upstream response"
+        );
+    }
 
     {
         let project_id_str = token.project_id.to_string();
@@ -2676,91 +2885,8 @@ pub async fn proxy_handler(
         }
     }
 
-    // -- 6. Sanitize response --
-    let content_type = resp_headers
-        .get("content-type")
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("application/octet-stream");
-    let sanitization_result = middleware::sanitize::sanitize_response(&resp_body_vec, content_type);
-    let sanitized_body = sanitization_result.body;
-
-    // -- 6.1 Calculate Cost & Update Spend --
-    let mut estimated_cost_usd = None;
-    let mut audit_prompt_tokens: Option<u32> = None;
-    let mut audit_completion_tokens: Option<u32> = None;
-    let mut audit_model: Option<String> = None;
-
-    // TEST HOOK: Allow forcing cost/tokens via header for deterministic testing
-    if let Some((p, c)) = test_tokens_override {
-        audit_prompt_tokens = Some(p);
-        audit_completion_tokens = Some(c);
-        // Provide a default model if overriding tokens so the dashboard looks normal
-        audit_model = Some(detected_model.clone());
-    }
-    
-    if let Some(cost_val) = test_cost_override {
-        estimated_cost_usd = Some(cost_val);
-        let cost_f64 = cost_val.to_f64().unwrap_or(0.0);
-        let _ = middleware::spend::check_and_increment_spend(
-            &state.cache,
-            state.db.pool(),
-            &token.id,
-            cost_f64,
-        )
-        .await;
-    }
-
-    if estimated_cost_usd.is_none() {
-        match extract_usage(&token.upstream_url, &sanitized_body) {
-            Ok(Some((input, output))) => {
-                audit_prompt_tokens = Some(input);
-                audit_completion_tokens = Some(output);
-                let model = extract_model(&sanitized_body).unwrap_or("unknown".to_string());
-                audit_model = Some(model.clone());
-                // GAP-1 FIX: detect all supported providers (was missing Gemini/Mistral)
-                let provider = if token.upstream_url.contains("anthropic") && !token.upstream_url.contains("bedrock") {
-                    "anthropic"
-                } else if token.upstream_url.contains("generativelanguage") || token.upstream_url.contains("googleapis") {
-                    "google"
-                } else if token.upstream_url.contains("mistral") {
-                    "mistral"
-                } else if token.upstream_url.contains("bedrock") {
-                    "bedrock"
-                } else if token.upstream_url.contains("groq") {
-                    "groq"
-                } else if token.upstream_url.contains("cohere") {
-                    "cohere"
-                } else if token.upstream_url.contains("together") {
-                    "together"
-                } else if token.upstream_url.contains("localhost:11434") || token.upstream_url.contains("ollama") {
-                    "ollama"
-                } else {
-                    "openai"
-                };
-                // BUG-2 FIX: use DB-backed pricing cache (with hardcoded fallback)
-                let final_cost = cost::calculate_cost_with_cache(
-                    &state.pricing, provider, &model, input, output,
-                ).await;
-
-                if !final_cost.is_zero() {
-                    estimated_cost_usd = Some(final_cost);
-                    let cost_f64 = final_cost.to_f64().unwrap_or(0.0);
-                    if let Err(e) = middleware::spend::check_and_increment_spend(
-                        &state.cache,
-                        state.db.pool(),
-                        &token.id,
-                        cost_f64,
-                    )
-                    .await
-                    {
-                        tracing::error!("Spend cap exceeded or tracking failed: {}", e);
-                    }
-                }
-            }
-            Ok(None) => {}
-            Err(e) => tracing::warn!("Failed to extract usage: {}", e),
-        }
-    }
+    // Section 6 + 6.1 moved before post-flight (see above): spend is recorded
+    // before any post-flight denial can skip it.
 
     // ── Phase 4: Calculate TPS ────────────────────────────────
     let elapsed_secs = start.elapsed().as_secs_f32();
@@ -3302,6 +3428,10 @@ fn extract_bearer_token(headers: &HeaderMap) -> Result<String, AppError> {
 fn is_public_ip(ip: std::net::IpAddr) -> bool {
     match ip {
         std::net::IpAddr::V4(v4) => {
+            // SEC: Allow loopback for integration tests (wiremock)
+            if v4.is_loopback() && std::env::var("TRUEFLOW_TEST_ALLOW_LOCAL_WEBHOOKS").is_ok() {
+                return true;
+            }
             !v4.is_loopback()
                 && !v4.is_private()
                 && !v4.is_link_local()
@@ -3311,6 +3441,10 @@ fn is_public_ip(ip: std::net::IpAddr) -> bool {
                 && !(v4.octets() == [100, 100, 100, 200])
         }
         std::net::IpAddr::V6(v6) => {
+            // SEC: Allow loopback for integration tests (wiremock)
+            if v6.is_loopback() && std::env::var("TRUEFLOW_TEST_ALLOW_LOCAL_WEBHOOKS").is_ok() {
+                return true;
+            }
             !v6.is_loopback()
                 && !v6.is_unspecified()
                 // Full unique-local fc00::/7 (covers both fc00::/8 and fd00::/8)
@@ -3353,6 +3487,8 @@ pub(crate) async fn is_safe_webhook_url(url_str: &str) -> bool {
     };
 
     // Block cloud metadata hostnames and localhost by literal name
+    // SEC: Allow localhost for integration tests when TRUEFLOW_TEST_ALLOW_LOCAL_WEBHOOKS is set
+    let allow_local = std::env::var("TRUEFLOW_TEST_ALLOW_LOCAL_WEBHOOKS").is_ok();
     let blocked_hosts = [
         "169.254.169.254",
         "metadata.google.internal",
@@ -3366,7 +3502,7 @@ pub(crate) async fn is_safe_webhook_url(url_str: &str) -> bool {
         "[fd00:ec2::254]",
         "[::1]",
     ];
-    if blocked_hosts.contains(&host) {
+    if blocked_hosts.contains(&host) && !(allow_local && (host == "localhost" || host == "ip6-localhost")) {
         return false;
     }
 

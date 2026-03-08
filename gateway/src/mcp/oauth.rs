@@ -55,7 +55,8 @@ pub struct OAuthDiscovery {
 // ── Token types ────────────────────────────────────────────────
 
 /// Token set returned from token endpoint.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// SEC: Custom Debug impl redacts access_token and refresh_token to prevent logging secrets.
+#[derive(Clone, Serialize, Deserialize)]
 pub struct TokenResponse {
     pub access_token: String,
     pub token_type: String,
@@ -67,8 +68,21 @@ pub struct TokenResponse {
     pub scope: Option<String>,
 }
 
+impl std::fmt::Debug for TokenResponse {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TokenResponse")
+            .field("access_token", &"[REDACTED]")
+            .field("token_type", &self.token_type)
+            .field("expires_in", &self.expires_in)
+            .field("refresh_token", &self.refresh_token.as_ref().map(|_| "[REDACTED]"))
+            .field("scope", &self.scope)
+            .finish()
+    }
+}
+
 /// Cached token with absolute expiry time.
-#[derive(Debug, Clone)]
+/// SEC: Custom Debug impl redacts access_token, refresh_token, and client_secret.
+#[derive(Clone)]
 pub struct CachedToken {
     pub access_token: String,
     pub refresh_token: Option<String>,
@@ -79,6 +93,20 @@ pub struct CachedToken {
     #[allow(dead_code)]
     pub client_secret: String,
     pub scopes: Vec<String>,
+}
+
+impl std::fmt::Debug for CachedToken {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CachedToken")
+            .field("access_token", &"[REDACTED]")
+            .field("refresh_token", &self.refresh_token.as_ref().map(|_| "[REDACTED]"))
+            .field("expires_at", &self.expires_at)
+            .field("token_endpoint", &self.token_endpoint)
+            .field("client_id", &self.client_id)
+            .field("client_secret", &"[REDACTED]")
+            .field("scopes", &self.scopes)
+            .finish()
+    }
 }
 
 impl CachedToken {
@@ -122,16 +150,20 @@ impl Default for OAuthTokenManager {
 
 impl OAuthTokenManager {
     pub fn new() -> Self {
+        Self::try_new().expect("failed to build OAuth HTTP client: check network configuration and system resources")
+    }
+
+    pub fn try_new() -> Result<Self, String> {
         let http = Client::builder()
             .timeout(std::time::Duration::from_secs(10))
             .connect_timeout(std::time::Duration::from_secs(5))
             .build()
-            .expect("failed to build OAuth HTTP client");
+            .map_err(|e| format!("failed to build OAuth HTTP client: {}", e))?;
 
-        Self {
+        Ok(Self {
             http,
             cache: Arc::new(RwLock::new(HashMap::new())),
-        }
+        })
     }
 
     /// Discover OAuth metadata for a given MCP server endpoint.
