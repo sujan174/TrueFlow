@@ -452,9 +452,10 @@ pub async fn proxy_handler(
                     ),
                     crate::models::policy::RateLimitKey::Global => format!("{}:global", policy_prefix),
                 };
+                // Use sliding window to prevent 2x burst at window boundaries
                 let count = state
                     .cache
-                    .increment(&rl_key, window_secs)
+                    .increment_sliding_window(&rl_key, window_secs)
                     .await
                     .map_err(AppError::Internal)?;
 
@@ -895,9 +896,10 @@ pub async fn proxy_handler(
     }
     if !policy_rate_limited && state.config.default_rate_limit > 0 {
         let rl_key = format!("rl:default:tok:{}", token.id);
+        // Use sliding window to prevent 2x burst at window boundaries
         let count = state
             .cache
-            .increment(&rl_key, state.config.default_rate_limit_window)
+            .increment_sliding_window(&rl_key, state.config.default_rate_limit_window)
             .await
             .map_err(AppError::Internal)?;
 

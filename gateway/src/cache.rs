@@ -35,15 +35,24 @@ impl TieredCache {
         self.redis.clone()
     }
 
+    /// Check if Redis is reachable. Returns true if ping succeeds.
+    pub async fn ping(&self) -> bool {
+        let mut conn = self.redis.clone();
+        redis::cmd("PING")
+            .query_async::<_, String>(&mut conn)
+            .await
+            .is_ok()
+    }
+
     pub async fn get<T: DeserializeOwned>(&self, key: &str) -> Option<T> {
         // tier 1: in-memory (with TTL check)
-        if let Some(entry) = self.local.get(key) {
-            if Instant::now() < entry.expires_at {
-                return serde_json::from_str(&entry.value).ok();
-            }
-            // expired — drop the ref before removing
-            drop(entry);
-            self.local.remove(key);
+        // Use remove_if for atomic check-and-remove to avoid TOCTOU race
+        let expired = self.local.remove_if(key, |_, entry| Instant::now() >= entry.expires_at);
+        if expired.is_some() {
+            // Entry was expired and removed, fall through to Redis
+        } else if let Some(entry) = self.local.get(key) {
+            // Entry exists and is not expired
+            return serde_json::from_str(&entry.value).ok();
         }
 
         // tier 2: redis
@@ -108,6 +117,9 @@ impl TieredCache {
         self.local.len()
     }
 
+    /// Fixed-window rate limit counter (legacy).
+    /// WARNING: Allows 2x burst at window boundaries.
+    #[allow(dead_code)]
     pub async fn increment(&self, key: &str, window_secs: u64) -> anyhow::Result<u64> {
         let mut conn = self.redis.clone();
         // Atomic INCR + EXPIRE
@@ -125,6 +137,64 @@ impl TieredCache {
             .arg(window_secs)
             .invoke_async(&mut conn)
             .await?;
+        Ok(count)
+    }
+
+    /// Sliding-window rate limit counter using Redis Sorted Sets.
+    ///
+    /// This provides true rate limiting without the 2x burst vulnerability
+    /// at window boundaries that fixed-window counters have.
+    ///
+    /// Algorithm:
+    /// 1. ZADD: Add entry with current timestamp as score
+    /// 2. ZREMRANGEBYSCORE: Remove entries older than window
+    /// 3. EXPIRE: Set TTL on the key
+    /// 4. ZCARD: Return count of entries in window
+    pub async fn increment_sliding_window(&self, key: &str, window_secs: u64) -> anyhow::Result<u64> {
+        let mut conn = self.redis.clone();
+
+        // Get current time in milliseconds for the score
+        let now_ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as i64)?;
+
+        // Generate unique member ID: timestamp_nanos + random suffix
+        // This ensures each request gets a unique entry in the sorted set
+        let random_suffix: u32 = rand::random();
+        let member = format!("{}_{:08x}", now_ms, random_suffix);
+
+        // Sliding window Lua script
+        let script = redis::Script::new(
+            r#"
+            local key = KEYS[1]
+            local now_ms = tonumber(ARGV[1])
+            local window_secs = tonumber(ARGV[2])
+            local member = ARGV[3]
+            local window_ms = window_secs * 1000
+
+            -- Add new entry with current timestamp as score
+            redis.call("ZADD", key, now_ms, member)
+
+            -- Remove entries older than the window
+            local cutoff = now_ms - window_ms
+            redis.call("ZREMRANGEBYSCORE", key, "-inf", cutoff)
+
+            -- Set expiry on the key (keep for full window duration)
+            redis.call("EXPIRE", key, window_secs)
+
+            -- Return count of entries in window
+            return redis.call("ZCARD", key)
+        "#,
+        );
+
+        let count: u64 = script
+            .key(key)
+            .arg(now_ms)
+            .arg(window_secs)
+            .arg(&member)
+            .invoke_async(&mut conn)
+            .await?;
+
         Ok(count)
     }
 }
