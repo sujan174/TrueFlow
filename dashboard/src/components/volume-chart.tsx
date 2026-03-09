@@ -44,7 +44,7 @@ export function VolumeChart() {
                             {...CHART_AXIS_PROPS}
                             tickFormatter={(value) => `${value}`}
                         />
-                        <Tooltip content={<CustomTooltip contentStyle={{ backgroundColor: "var(--card, #13161e)", borderColor: "var(--border, #1e2330)", color: "var(--foreground, #e8eaf0)" }} />} cursor={{ stroke: 'var(--border)', strokeWidth: 1, strokeDasharray: '4 4' }} />
+                        <Tooltip content={<CustomTooltip />} cursor={{ stroke: 'var(--border)', strokeWidth: 1, strokeDasharray: '4 4' }} />
                         <Area
                             type="monotone"
                             dataKey="requests"

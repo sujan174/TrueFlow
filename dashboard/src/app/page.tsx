@@ -117,7 +117,7 @@ export default function OverviewPage() {
             {/* ── Status Strip ── */}
             <div className="grid gap-4 grid-cols-1 md:grid-cols-3">
                 {/* Anomalies — lead with problems */}
-                <div className="bg-black border border-white/10 rounded-lg px-5 py-4 flex items-center gap-4 group animate-slide-up stagger-2">
+                <div className="bg-black border border-white/[0.08] rounded-lg px-5 py-4 flex items-center gap-4 group animate-slide-up stagger-2 card-hover">
                     <div className="flex-1">
                         <p className="text-[11px] text-zinc-500 uppercase tracking-widest font-medium mb-1">Anomalies</p>
                         <p className={cn(
@@ -133,7 +133,7 @@ export default function OverviewPage() {
                 </div>
 
                 {/* Pending Approvals */}
-                <Link href="/approvals" className="bg-black border border-white/10 rounded-lg px-5 py-4 flex items-center gap-4 hover:border-white/20 hover:bg-white/5 transition-all group animate-slide-up stagger-3">
+                <Link href="/approvals" className="bg-black border border-white/[0.08] rounded-lg px-5 py-4 flex items-center gap-4 hover:border-white/[0.15] hover:bg-white/[0.02] transition-all duration-200 group animate-slide-up stagger-3">
                     <div className="flex-1">
                         <p className="text-[11px] text-zinc-500 uppercase tracking-widest font-medium mb-1">Pending Approvals</p>
                         <p className="text-2xl font-mono tracking-tighter text-white">
@@ -148,7 +148,7 @@ export default function OverviewPage() {
                 </Link>
 
                 {/* Success Rate */}
-                <div className="bg-black border border-white/10 rounded-lg px-5 py-4 flex items-center gap-4 animate-slide-up stagger-4">
+                <div className="bg-black border border-white/[0.08] rounded-lg px-5 py-4 flex items-center gap-4 animate-slide-up stagger-4 card-hover">
                     <div className="flex-1">
                         <p className="text-[11px] text-zinc-500 uppercase tracking-widest font-medium mb-1">Success Rate</p>
                         <p className={cn(
@@ -178,8 +178,8 @@ export default function OverviewPage() {
             )}
 
             {/* ── Latency Chart (full width) ── */}
-            <div className="bg-black border border-white/10 rounded-lg overflow-hidden animate-slide-up stagger-4">
-                <div className="px-5 py-4 border-b border-white/10 flex flex-row items-center justify-between">
+            <div className="bg-black border border-white/[0.08] rounded-lg overflow-hidden animate-slide-up stagger-4 card-hover">
+                <div className="px-5 py-4 border-b border-white/[0.06] flex flex-row items-center justify-between">
                     <h3 className="text-[11px] font-medium text-zinc-500 uppercase tracking-widest">
                         Latency Trend
                     </h3>
@@ -196,8 +196,8 @@ export default function OverviewPage() {
                                 <AreaChart data={latencySeries} margin={{ top: 8, right: 8, left: -24, bottom: 0 }}>
                                     <defs>
                                         <linearGradient id="colorLatency" x1="0" y1="0" x2="0" y2="1">
-                                            <stop offset="5%" stopColor="#ffffff" stopOpacity={0.15} />
-                                            <stop offset="95%" stopColor="#ffffff" stopOpacity={0} />
+                                            <stop offset="0%" stopColor="#ffffff" stopOpacity={0.2} />
+                                            <stop offset="100%" stopColor="#ffffff" stopOpacity={0} />
                                         </linearGradient>
                                     </defs>
                                     <CartesianGrid stroke="rgba(255,255,255,0.05)" strokeDasharray="4 4" vertical={false} />
@@ -231,8 +231,10 @@ export default function OverviewPage() {
                                         strokeWidth={1.5}
                                         fillOpacity={1}
                                         fill="url(#colorLatency)"
-                                        isAnimationActive={false}
-                                        activeDot={{ r: 4, strokeWidth: 0, fill: '#ffffff', filter: 'drop-shadow(0 0 4px rgba(255,255,255,0.5))' }}
+                                        isAnimationActive={true}
+                                        animationDuration={1200}
+                                        animationEasing="ease-out"
+                                        activeDot={{ r: 4, strokeWidth: 0, fill: '#ffffff', filter: 'drop-shadow(0 0 6px rgba(255,255,255,0.6))' }}
                                     />
                                 </AreaChart>
                             </ResponsiveContainer>
@@ -249,8 +251,8 @@ export default function OverviewPage() {
             </div>
 
             {/* ── Recent Activity ── */}
-            <div className="bg-black border border-white/10 rounded-lg overflow-hidden animate-slide-up stagger-5">
-                <div className="px-5 py-3 border-b border-white/10 flex flex-row items-center justify-between">
+            <div className="bg-black border border-white/[0.08] rounded-lg overflow-hidden animate-slide-up stagger-5 card-hover">
+                <div className="px-5 py-3 border-b border-white/[0.06] flex flex-row items-center justify-between">
                     <h3 className="text-[11px] font-medium text-zinc-400 uppercase tracking-widest">
                         Recent Traces
                     </h3>
@@ -283,7 +285,7 @@ export default function OverviewPage() {
                             {recentLogs.map((log) => (
                                 <div
                                     key={log.id}
-                                    className="flex items-center gap-4 px-5 py-3.5 hover:bg-white/[0.02] transition-colors group"
+                                    className="flex items-center gap-4 px-5 py-3.5 hover:bg-white/[0.025] transition-colors duration-150 group"
                                 >
                                     <StatusDot status={log.upstream_status} result={log.policy_result} />
 
@@ -373,9 +375,9 @@ function MetricCard({
     delay?: string;
 }) {
     return (
-        <div className={cn("bg-black border border-white/10 rounded-lg p-5 animate-slide-up hover:border-white/20 transition-all group relative overflow-hidden", delay)}>
-            {/* Extremely subtle corner gradient for depth */}
-            <div className="absolute top-0 right-0 w-32 h-32 bg-white/[0.02] rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 group-hover:bg-white/[0.04] transition-colors" />
+        <div className={cn("bg-black border border-white/[0.08] rounded-lg p-5 animate-slide-up hover:border-white/[0.15] transition-all duration-200 group relative overflow-hidden card-hover", delay)}>
+            {/* Subtle corner gradient for depth */}
+            <div className="absolute top-0 right-0 w-32 h-32 bg-white/[0.015] rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 group-hover:bg-white/[0.03] transition-all duration-500" />
 
             <p className="text-[11px] text-zinc-500 uppercase tracking-widest font-medium relative z-10">
                 {label}

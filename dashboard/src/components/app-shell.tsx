@@ -28,7 +28,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <div className="flex h-full w-full bg-black">
                 <Sidebar className="hidden border-r border-white/10 md:flex bg-black" />
                 <main className="flex-1 flex flex-col overflow-hidden bg-black">
-                    <header className="flex h-12 shrink-0 items-center justify-between gap-2 border-b border-white/[0.06] bg-black/90 px-5 backdrop-blur-md sticky top-0 z-50">
+                    <header className="flex h-12 shrink-0 items-center justify-between gap-2 border-b border-white/[0.05] bg-black/80 px-5 backdrop-blur-xl sticky top-0 z-50">
                         <div className="flex items-center gap-3 flex-1">
                             <MobileNav />
                             <Breadcrumbs />

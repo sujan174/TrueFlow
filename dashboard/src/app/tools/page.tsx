@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import useSWR from "swr";
+import useSWR, { type KeyedMutator } from "swr";
 import {
     createService,
     deleteService,
@@ -597,7 +597,7 @@ function ServicesTab({
 }: {
     services: Service[];
     credentials: Credential[];
-    mutateServices: () => void;
+    mutateServices: KeyedMutator<Service[]>;
 }) {
     const [dialogOpen, setDialogOpen] = useState(false);
     const [name, setName] = useState("");

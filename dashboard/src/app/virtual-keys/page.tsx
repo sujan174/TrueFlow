@@ -294,7 +294,7 @@ function CreateTokenForm({ onSuccess, onCreate }: { onSuccess: () => void; onCre
       setLoading(true);
       const payload: CreateTokenRequest = { ...formData };
       if (mode === "passthrough") {
-        delete (payload as Record<string, unknown>).credential_id;
+        delete (payload as unknown as Record<string, unknown>).credential_id;
       }
       if (upstreamMode === "multi") {
         // Validate all URLs are filled

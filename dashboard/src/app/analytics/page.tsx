@@ -72,12 +72,13 @@ export default function AnalyticsPage() {
         };
 
         statusData.forEach((s) => {
-            const code = s.status_class || s.status_code || 0;
-            if (code >= 200 && code < 300) groups["2xx"].count += s.count;
-            else if (code === 400 || code === 404) groups["400/404"].count += s.count;
-            else if (code === 429) groups["429"].count += s.count;
-            else if (code >= 500 && code < 600) groups["5xx"].count += s.count;
-            else groups["Other"].count += s.count;
+            const code = Number(s.status_class || s.status_code || 0);
+            const count = Number(s.count || 0);
+            if (code >= 200 && code < 300) groups["2xx"].count += count;
+            else if (code === 400 || code === 404) groups["400/404"].count += count;
+            else if (code === 429) groups["429"].count += count;
+            else if (code >= 500 && code < 600) groups["5xx"].count += count;
+            else groups["Other"].count += count;
         });
 
         return Object.entries(groups)
@@ -315,8 +316,8 @@ export default function AnalyticsPage() {
                                         />
                                         <Tooltip
                                             content={<CustomTooltip
-                                                labelFormatter={formatDate}
-                                                valueFormatter={(val: number | string) => typeof val === 'number' && val > 0 && val < 1 ? `$${val.toFixed(4)}` : val}
+                                                labelFormatter={formatDate as (label: string) => string}
+                                                valueFormatter={(val: number | string) => typeof val === 'number' && val > 0 && val < 1 ? `$${val.toFixed(4)}` : String(val)}
                                             />}
                                             cursor={{ stroke: 'rgba(255,255,255,0.15)', strokeWidth: 1, strokeDasharray: '4 4' }}
                                         />
@@ -388,7 +389,7 @@ export default function AnalyticsPage() {
                                                 <Cell key={`cell-${index}`} fill={entry.fill} />
                                             ))}
                                         </Pie>
-                                        <Tooltip content={<CustomTooltip contentStyle={{ backgroundColor: "var(--card, #13161e)", borderColor: "var(--border, #1e2330)", color: "var(--foreground, #e8eaf0)" }} />} />
+                                        <Tooltip content={<CustomTooltip />} />
                                         <Legend verticalAlign="bottom" height={36} wrapperStyle={{ fontSize: '11px', color: 'rgba(255,255,255,0.6)' }} />
                                     </PieChart>
                                 </ResponsiveContainer>

@@ -226,8 +226,8 @@ export default function TokenDetailPage() {
                                         contentStyle={{ backgroundColor: 'rgba(0,0,0,0.8)', border: 'none', borderRadius: '8px', fontSize: '12px' }}
                                         itemStyle={{ color: '#fff' }}
                                         labelStyle={{ color: '#aaa' }}
-                                        formatter={(value: number | string) => [value, "Requests"]}
-                                        labelFormatter={(label: number | string) => new Date(label).toLocaleTimeString()}
+                                        formatter={(value) => [value, "Requests"]}
+                                        labelFormatter={(label) => new Date(label).toLocaleTimeString()}
                                     />
                                     <Area type="monotone" dataKey="count" stroke="#6366f1" strokeWidth={2} fillOpacity={1} fill="url(#colorCount)" />
                                 </AreaChart>

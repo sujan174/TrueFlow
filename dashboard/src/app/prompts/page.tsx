@@ -144,7 +144,7 @@ export default function PromptsPage() {
                         </div>
                         <div>
                             <div className="text-xl font-semibold tabular-nums text-white">
-                                <CountUp end={prompts.length} />
+                                <CountUp value={prompts.length} />
                             </div>
                             <p className="text-[11px] font-medium uppercase tracking-widest text-zinc-500">Total Prompts</p>
                         </div>
@@ -157,7 +157,7 @@ export default function PromptsPage() {
                         </div>
                         <div>
                             <div className="text-xl font-semibold tabular-nums text-emerald-400">
-                                <CountUp end={prompts.reduce((acc, p) => acc + (p.version_count || 0), 0)} />
+                                <CountUp value={prompts.reduce((acc, p) => acc + (p.version_count || 0), 0)} />
                             </div>
                             <p className="text-[11px] font-medium uppercase tracking-widest text-zinc-500">Total Versions</p>
                         </div>
@@ -170,7 +170,7 @@ export default function PromptsPage() {
                         </div>
                         <div>
                             <div className="text-xl font-semibold tabular-nums text-violet-400">
-                                <CountUp end={folders.length} />
+                                <CountUp value={folders.length} />
                             </div>
                             <p className="text-[11px] font-medium uppercase tracking-widest text-zinc-500">Folders</p>
                         </div>

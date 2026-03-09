@@ -178,7 +178,7 @@ export function Sidebar({ className }: SidebarProps) {
 
     return (
         <div
-            style={{ width: collapsed ? 56 : 240, transition: "width 0.2s cubic-bezier(.4,0,.2,1)" }}
+            style={{ width: collapsed ? 56 : 240, transition: "width 0.25s cubic-bezier(.16,1,.3,1)" }}
             className={cn(
                 "flex h-full flex-col relative overflow-hidden",
                 "bg-black border-r border-white/[0.06]",
@@ -272,13 +272,17 @@ export function Sidebar({ className }: SidebarProps) {
                                                 title={collapsed ? route.label : undefined}
                                                 className={cn(
                                                     "relative flex items-center gap-2.5 rounded-md py-1.5 text-[13px] font-medium",
-                                                    "transition-all duration-100 group",
+                                                    "transition-all duration-150 group",
                                                     collapsed ? "justify-center px-3" : "px-2",
                                                     isActive
-                                                        ? "text-white bg-white/10"
-                                                        : "text-zinc-500 hover:text-white hover:bg-white/5"
+                                                        ? "text-white bg-white/[0.06]"
+                                                        : "text-zinc-500 hover:text-zinc-200 hover:bg-white/[0.04]"
                                                 )}
                                             >
+                                                {/* Active accent bar */}
+                                                {isActive && !collapsed && (
+                                                    <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[2px] h-4 rounded-full bg-white/60 animate-scale-in" />
+                                                )}
                                                 <route.icon
                                                     size={16}
                                                     strokeWidth={isActive ? 2 : 1.5}
@@ -322,13 +326,16 @@ export function Sidebar({ className }: SidebarProps) {
                     title={collapsed ? "Settings" : undefined}
                     className={cn(
                         "relative flex items-center gap-2.5 rounded-md py-1.5 text-[13px] font-medium",
-                        "transition-all duration-100 group",
+                        "transition-all duration-150 group",
                         collapsed ? "justify-center px-3" : "px-2",
                         pathname.startsWith("/settings")
-                            ? "text-white bg-white/10"
-                            : "text-zinc-400 hover:text-white hover:bg-white/5"
+                            ? "text-white bg-white/[0.06]"
+                            : "text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.04]"
                     )}
                 >
+                    {pathname.startsWith("/settings") && !collapsed && (
+                        <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[2px] h-4 rounded-full bg-white/60 animate-scale-in" />
+                    )}
                     <Settings
                         size={16}
                         strokeWidth={pathname.startsWith("/settings") ? 2 : 1.5}
@@ -350,11 +357,11 @@ export function Sidebar({ className }: SidebarProps) {
                     title={collapsed ? "Config Export" : undefined}
                     className={cn(
                         "relative flex items-center gap-2.5 rounded-md py-1.5 text-[13px] font-medium",
-                        "transition-all duration-100 group",
+                        "transition-all duration-150 group",
                         collapsed ? "justify-center px-3" : "px-2",
                         pathname.startsWith("/config")
-                            ? "text-white bg-white/10"
-                            : "text-zinc-400 hover:text-white hover:bg-white/5"
+                            ? "text-white bg-white/[0.06]"
+                            : "text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.04]"
                     )}
                 >
                     <FileCode2
@@ -413,11 +420,15 @@ export function Sidebar({ className }: SidebarProps) {
                     collapsed ? "justify-center" : "justify-between px-2"
                 )}>
                     <div className={cn(
-                        "h-1.5 w-1.5 rounded-full transition-colors duration-500",
+                        "h-1.5 w-1.5 rounded-full transition-colors duration-500 relative",
                         health === "online" ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" :
                             health === "offline" ? "bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.5)]" :
                                 "bg-amber-500 animate-pulse shadow-[0_0_8px_rgba(245,158,11,0.5)]"
-                    )} />
+                    )}>
+                        {health === "online" && (
+                            <span className="absolute inset-0 rounded-full bg-emerald-500 animate-ring-pulse" />
+                        )}
+                    </div>
                     {!collapsed && (
                         <span className="font-mono text-[10px] text-zinc-600 tracking-widest uppercase">v0.8.0</span>
                     )}

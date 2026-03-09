@@ -43,40 +43,45 @@
   --font-sans: var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-mono: var(--font-mono), 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
 
-  /* Animations */
-  --animate-fade-in: fade-in 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
-  --animate-slide-up: slide-up 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-  --animate-slide-down: slide-down 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
-  --animate-scale-in: scale-in 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-  --animate-fade-out: fade-out 0.25s ease-out forwards;
-  --animate-scale-out: scale-out 0.2s ease-in forwards;
-  --animate-shimmer: shimmer 2s linear infinite;
-  --animate-count-up: count-up 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+  /*
+   * Animation System
+   *
+   * Timing: Quick 150ms · Normal 200ms · Smooth 300ms · Reveal 500ms
+   * Easing: Spring — cubic-bezier(0.16, 1, 0.3, 1) for organic overshoot
+   *         Smooth — cubic-bezier(0.25, 0.46, 0.45, 0.94) for deceleration
+   * Fill:   'both' so staggered elements stay hidden during delay
+   */
+  --animate-fade-in: fade-in 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
+  --animate-slide-up: slide-up 0.55s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-slide-down: slide-down 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-scale-in: scale-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-fade-out: fade-out 0.2s ease-out both;
+  --animate-scale-out: scale-out 0.2s ease-in both;
+  --animate-shimmer: shimmer 2.5s ease-in-out infinite;
+  --animate-count-up: count-up 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-blur-in: blur-in 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-glow-pulse: glow-pulse 2.5s ease-in-out infinite;
+  --animate-ring-pulse: ring-pulse 2s ease-out infinite;
 }
 
 /*
   ┌─────────────────────────────────────────────────────────────┐
-  │  INDUSTRIAL PRECISION — TrueFlow Dashboard Design System      │
-  │                                                             │
-  │  Philosophy: Brutally minimal, terminal-like precision.       │
-  │  Focus on stark contrast, glassy surfaces, & monospace data.│
-  │                                                             │
-  │  Light (Not heavily used, but defined):                     │
-  │    Page:    #fdfdfd  — Stark white                            │
-  │    Surface: #ffffff                                         │
-  │    Primary: #000000  — Pure black                           │
-  │                                                             │
-  │  Dark (The primary identity):                               │
-  │    Page:    #000000  — Pitch black                            │
-  │    Surface: rgba(255,255,255, 0.03) — Glassy dark             │
-  │    Primary: #ffffff  — Pure white                             │
-  │    Muted:   #a1a1aa  — Zinc 400                               │
+  │  INDUSTRIAL PRECISION — TrueFlow Dashboard Design System   │
+  │                                                            │
+  │  Philosophy: Refined precision. Stark contrast, layered    │
+  │  depth, spring-based motion, and monospace data.           │
+  │                                                            │
+  │  Dark (The primary identity):                              │
+  │    Page:    #000000  — Pitch black                         │
+  │    Surface: rgba(255,255,255, 0.025) — Glassy dark         │
+  │    Primary: #fafafa  — Near-white (softer than pure)       │
+  │    Muted:   #a1a1aa  — Zinc 400                            │
+  │    Border:  rgba(255,255,255, 0.08) — Barely visible       │
   └─────────────────────────────────────────────────────────────┘
 */
 
 @layer base {
   :root {
-    /* ── Light Mode (Minimal setup) ── */
     --background: #ffffff;
     --foreground: #09090b;
 
@@ -118,27 +123,26 @@
   }
 
   .dark {
-    /* ── Dark Mode (The Industrial Core) ── */
     --background: #000000;
-    --foreground: #ffffff;
+    --foreground: #fafafa;
 
-    --card: rgba(255, 255, 255, 0.03);
-    --card-foreground: #ffffff;
+    --card: rgba(255, 255, 255, 0.025);
+    --card-foreground: #fafafa;
 
-    --popover: #09090b;
-    --popover-foreground: #ffffff;
+    --popover: #0a0a0a;
+    --popover-foreground: #fafafa;
 
-    --primary: #ffffff;
-    --primary-foreground: #000000;
+    --primary: #fafafa;
+    --primary-foreground: #050505;
 
-    --secondary: rgba(255, 255, 255, 0.05);
-    --secondary-foreground: #ffffff;
+    --secondary: rgba(255, 255, 255, 0.06);
+    --secondary-foreground: #fafafa;
 
-    --muted: rgba(255, 255, 255, 0.05);
-    --muted-foreground: #a1a1aa; /* Zinc-400 */
+    --muted: rgba(255, 255, 255, 0.06);
+    --muted-foreground: #a1a1aa;
 
     --accent: rgba(255, 255, 255, 0.08);
-    --accent-foreground: #ffffff;
+    --accent-foreground: #fafafa;
 
     --destructive: #ef4444;
     --destructive-foreground: #ffffff;
@@ -149,13 +153,12 @@
     --warning: #f59e0b;
     --warning-foreground: #000000;
 
-    /* Very subtle borders */
-    --border: rgba(255, 255, 255, 0.1);
-    --input: rgba(255, 255, 255, 0.1);
-    --ring: rgba(255, 255, 255, 0.2);
+    --border: rgba(255, 255, 255, 0.08);
+    --input: rgba(255, 255, 255, 0.08);
+    --ring: rgba(255, 255, 255, 0.25);
 
     --scrollbar-track: transparent;
-    --scrollbar-thumb: rgba(255, 255, 255, 0.2);
+    --scrollbar-thumb: rgba(255, 255, 255, 0.15);
   }
 }
 
@@ -169,8 +172,9 @@
   body {
     @apply bg-background text-foreground font-sans antialiased;
     font-feature-settings: "rlig" 1, "calt" 1;
-    /* Tighter tracking for that engineered look */
     letter-spacing: -0.015em;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 
   ::-webkit-scrollbar {
@@ -183,41 +187,47 @@
   ::-webkit-scrollbar-thumb {
     background: var(--scrollbar-thumb);
     border-radius: 3px;
+    transition: background 0.2s;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.3);
+    background: rgba(255, 255, 255, 0.25);
   }
 
-  /* Force monospace elements */
   code, pre, .mono, [data-is-metric="true"] {
     @apply font-mono;
-    letter-spacing: -0.05em; /* Tighter mono */
+    letter-spacing: -0.05em;
   }
 
   ::selection {
-    background: rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.15);
     color: inherit;
+  }
+
+  /* Smooth transitions on all interactive elements by default */
+  a, button, input, select, textarea, [role="button"] {
+    transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
   }
 }
 
 /* ═══ Keyframes ═══ */
+
 @keyframes fade-in {
   from { opacity: 0; }
   to { opacity: 1; }
 }
 
 @keyframes slide-up {
-  from { opacity: 0; transform: translateY(8px); }
+  from { opacity: 0; transform: translateY(12px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
 @keyframes slide-down {
-  from { opacity: 0; transform: translateY(-4px); }
+  from { opacity: 0; transform: translateY(-6px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
 @keyframes scale-in {
-  from { opacity: 0; transform: scale(0.98); }
+  from { opacity: 0; transform: scale(0.96); }
   to { opacity: 1; transform: scale(1); }
 }
 
@@ -232,13 +242,44 @@
 }
 
 @keyframes count-up {
-  from { opacity: 0; transform: translateY(4px); }
+  from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
+/* Blur-in — elements materialize from soft blur */
+@keyframes blur-in {
+  from { opacity: 0; filter: blur(8px); transform: scale(0.98); }
+  to { opacity: 1; filter: blur(0px); transform: scale(1); }
+}
+
+/* Glow pulse — breathing light for live indicators */
+@keyframes glow-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* Ring pulse — concentric ring expanding from a point */
+@keyframes ring-pulse {
+  0% { transform: scale(1); opacity: 0.4; }
+  100% { transform: scale(3); opacity: 0; }
+}
+
+/* Shimmer — softer, wider sweep for loading states */
 @keyframes shimmer {
   0% { background-position: -200% 0; }
   100% { background-position: 200% 0; }
+}
+
+/* Subtle float for ambient elements */
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
+/* Draw-in for chart lines */
+@keyframes draw-in {
+  from { stroke-dashoffset: 1; }
+  to { stroke-dashoffset: 0; }
 }
 
 /* ═══ Utilities ═══ */
@@ -251,36 +292,91 @@
     display: none;
   }
 
-  /* The core machined card effect */
+  /* Machined card — inner top-light for physical depth */
   .machined-card {
     background: var(--card);
     border: 1px solid var(--border);
-    /* Subtle inner top-light to look physically cut */
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.04),
+      0 1px 2px rgba(0, 0, 0, 0.2);
   }
 
-  /* Shimmer for loading */
+  /* Glass card — frosted glass with depth */
+  .glass-card {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    backdrop-filter: blur(16px);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.03),
+      0 1px 3px rgba(0, 0, 0, 0.15);
+  }
+
+  /* Shimmer for loading skeletons — wider, smoother sweep */
   .shimmer {
     background: linear-gradient(
-      90deg,
-      rgba(255, 255, 255, 0) 25%,
-      rgba(255, 255, 255, 0.05) 50%,
-      rgba(255, 255, 255, 0) 75%
+      100deg,
+      rgba(255, 255, 255, 0) 20%,
+      rgba(255, 255, 255, 0.04) 45%,
+      rgba(255, 255, 255, 0.06) 50%,
+      rgba(255, 255, 255, 0.04) 55%,
+      rgba(255, 255, 255, 0) 80%
     );
-    background-size: 200% 100%;
-    animation: shimmer 2s linear infinite;
+    background-size: 250% 100%;
+    animation: shimmer 2.5s ease-in-out infinite;
   }
 
-  /* Staggered reveals */
-  .stagger-1 { animation-delay: 0.05s; }
-  .stagger-2 { animation-delay: 0.10s; }
-  .stagger-3 { animation-delay: 0.15s; }
-  .stagger-4 { animation-delay: 0.20s; }
+  /* Staggered animation delays — 50ms intervals, 'both' fill mode */
+  .stagger-1 { animation-delay: 50ms; }
+  .stagger-2 { animation-delay: 100ms; }
+  .stagger-3 { animation-delay: 150ms; }
+  .stagger-4 { animation-delay: 200ms; }
+  .stagger-5 { animation-delay: 250ms; }
+  .stagger-6 { animation-delay: 300ms; }
+  .stagger-7 { animation-delay: 350ms; }
+  .stagger-8 { animation-delay: 400ms; }
+  .stagger-9 { animation-delay: 450ms; }
+  .stagger-10 { animation-delay: 500ms; }
 
-  /* Smooth page enter */
+  /* Page enter — combined fade + slide with spring easing */
   .page-enter {
-    animation: fade-in 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94),
-               slide-up 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+    animation:
+      fade-in 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94) both,
+      slide-up 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  /* Card hover glow — subtle border brightening on hover */
+  .card-hover {
+    transition: border-color 0.2s ease, box-shadow 0.3s ease, background-color 0.2s ease;
+  }
+  .card-hover:hover {
+    border-color: rgba(255, 255, 255, 0.15);
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.03);
+  }
+
+  /* Press feedback for interactive elements */
+  .press-scale {
+    transition: transform 0.1s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .press-scale:active {
+    transform: scale(0.97);
+  }
+
+  /* Subtle grain texture overlay */
+  .grain {
+    position: relative;
+  }
+  .grain::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 1;
+    opacity: 0.015;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
+    background-repeat: repeat;
+    background-size: 256px 256px;
+    mix-blend-mode: overlay;
+    border-radius: inherit;
   }
 }
 
@@ -291,9 +387,10 @@
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
-  .page-enter, .machined-card, .shimmer {
+  .page-enter, .machined-card, .shimmer, .glass-card {
     animation: none !important;
     opacity: 1 !important;
     transform: none !important;
+    filter: none !important;
   }
 }
