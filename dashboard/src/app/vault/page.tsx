@@ -208,7 +208,7 @@ export default function CredentialsPage() {
                                     <Check className="h-4 w-4" /> Rotation Successful
                                 </div>
                                 <p className="text-[13px] text-muted-foreground mb-4">
-                                    Here is your new secret. Copy it now, you won't see it again.
+                                    Here is your new secret. Copy it now, you won&apos;t see it again.
                                 </p>
                                 <div className="relative">
                                     <pre className="p-3 bg-background rounded-md border border-border font-mono text-sm break-all pr-10">

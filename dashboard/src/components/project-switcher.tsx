@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { ChevronsUpDown, Plus, Check, Building2, Trash2, AlertTriangle } from "lucide-react";
+import { ChevronsUpDown, Plus, Check, Building2, Trash2, AlertTriangle, Layers } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -71,8 +71,9 @@ export function ProjectSwitcher({ className, collapsed }: ProjectSwitcherProps) 
             await deleteProject(projectToDelete.id);
             setShowDeleteDialog(false);
             setProjectToDelete(null);
-        } catch (e: any) {
-            const msg = e?.message || "";
+        } catch (e: unknown) {
+            const err = e as Error;
+            const msg = err.message || "";
             if (msg.includes("400")) {
                 toast.error("Cannot delete the default project");
             } else if (msg.includes("403")) {
@@ -89,50 +90,51 @@ export function ProjectSwitcher({ className, collapsed }: ProjectSwitcherProps) 
         <>
             {/* Create Project Dialog */}
             <Dialog open={showNewProjectDialog} onOpenChange={setShowNewProjectDialog}>
-                <DialogContent>
+                <DialogContent className="bg-zinc-950 border-white/10 text-white">
                     <DialogHeader>
-                        <DialogTitle>Create Project</DialogTitle>
-                        <DialogDescription>
+                        <DialogTitle className="text-white font-medium">Create Project</DialogTitle>
+                        <DialogDescription className="text-zinc-500 text-[13px]">
                             Add a new project to manage isolated resources.
                         </DialogDescription>
                     </DialogHeader>
                     <div className="grid gap-4 py-4">
                         <div className="grid gap-2">
-                            <Label htmlFor="name">Project Name</Label>
+                            <Label htmlFor="name" className="text-zinc-400 text-xs uppercase tracking-widest">Project Name</Label>
                             <Input
                                 id="name"
                                 placeholder="Ex. Marketing Prod"
                                 value={newProjectName}
                                 onChange={(e) => setNewProjectName(e.target.value)}
                                 onKeyDown={(e) => e.key === "Enter" && handleCreate()}
+                                className="bg-black border-white/10 text-white placeholder:text-zinc-600 focus-visible:ring-white/20"
                             />
                         </div>
                     </div>
                     <DialogFooter>
-                        <Button variant="outline" onClick={() => setShowNewProjectDialog(false)}>Cancel</Button>
-                        <Button onClick={handleCreate} disabled={!newProjectName.trim()}>Create</Button>
+                        <Button variant="ghost" onClick={() => setShowNewProjectDialog(false)}>Cancel</Button>
+                        <Button variant="default" onClick={handleCreate} disabled={!newProjectName.trim()}>Create</Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
 
             {/* Delete Project Confirmation Dialog */}
             <Dialog open={showDeleteDialog} onOpenChange={(v) => { if (!deleting) setShowDeleteDialog(v); }}>
-                <DialogContent>
+                <DialogContent className="bg-zinc-950 border-rose-500/20 text-white">
                     <DialogHeader>
-                        <DialogTitle className="flex items-center gap-2 text-rose-500">
+                        <DialogTitle className="flex items-center gap-2 text-rose-500 font-medium">
                             <AlertTriangle className="h-5 w-5" />
                             Delete Project
                         </DialogTitle>
-                        <DialogDescription className="pt-1">
+                        <DialogDescription className="pt-1 text-zinc-400 text-[13px]">
                             This will permanently delete{" "}
-                            <strong className="text-foreground">{projectToDelete?.name}</strong>{" "}
-                            and <strong className="text-rose-400">all of its tokens, credentials, policies, and audit logs</strong>.
+                            <strong className="text-white font-medium">{projectToDelete?.name}</strong>{" "}
+                            and <strong className="text-rose-400 font-medium">all of its tokens, credentials, policies, and audit logs</strong>.
                             This action cannot be undone.
                         </DialogDescription>
                     </DialogHeader>
                     <div className="grid gap-3 py-4">
-                        <Label htmlFor="confirm-name" className="text-[13px] text-muted-foreground">
-                            Type <code className="font-mono bg-muted px-1 rounded text-foreground">{projectToDelete?.name}</code> to confirm
+                        <Label htmlFor="confirm-name" className="text-[12px] text-zinc-500">
+                            Type <code className="font-mono bg-white/5 px-1.5 py-0.5 rounded text-white">{projectToDelete?.name}</code> to confirm
                         </Label>
                         <Input
                             id="confirm-name"
@@ -140,11 +142,11 @@ export function ProjectSwitcher({ className, collapsed }: ProjectSwitcherProps) 
                             value={deleteConfirmName}
                             onChange={(e) => setDeleteConfirmName(e.target.value)}
                             onKeyDown={(e) => e.key === "Enter" && handleDelete()}
-                            className="font-mono border-rose-500/30 focus-visible:ring-rose-500/40"
+                            className="font-mono bg-black border-rose-500/30 text-rose-100 placeholder:text-rose-900/50 focus-visible:ring-rose-500/40"
                         />
                     </div>
                     <DialogFooter>
-                        <Button variant="outline" onClick={() => setShowDeleteDialog(false)} disabled={deleting}>
+                        <Button variant="ghost" onClick={() => setShowDeleteDialog(false)} disabled={deleting}>
                             Cancel
                         </Button>
                         <Button
@@ -165,17 +167,19 @@ export function ProjectSwitcher({ className, collapsed }: ProjectSwitcherProps) 
                         variant="outline"
                         role="combobox"
                         aria-expanded={open}
-                        aria-label="Select a team"
-                        className={cn("w-full justify-between", className)}
+                        aria-label="Select a project"
+                        className={cn("w-full justify-between hover:bg-white/5 hover:text-white transition-colors", className)}
                     >
-                        <Building2 className="mr-2 h-4 w-4" />
-                        <span className="truncate">{selectedProject?.name || "Select Project..."}</span>
-                        <ChevronsUpDown className="ml-auto h-4 w-4 opacity-50" />
+                        <div className="flex items-center gap-2 overflow-hidden">
+                            <Layers className="h-4 w-4 text-zinc-500 shrink-0" />
+                            <span className="truncate text-zinc-300 font-medium">{selectedProject?.name || "Select Project..."}</span>
+                        </div>
+                        <ChevronsUpDown className="ml-2 h-3.5 w-3.5 opacity-50 shrink-0" />
                     </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent className="w-[220px] p-0">
+                <DropdownMenuContent className="w-[220px] p-1 bg-zinc-950 border-white/[0.06]" align="end">
                     <DropdownMenuGroup>
-                        <DropdownMenuLabel>Projects</DropdownMenuLabel>
+                        <DropdownMenuLabel className="text-[10px] uppercase tracking-widest text-zinc-500 px-2 py-1.5">Projects</DropdownMenuLabel>
                         {projects.map((project) => {
                             const isDefault = project.id === defaultProjectId;
                             return (
@@ -185,13 +189,13 @@ export function ProjectSwitcher({ className, collapsed }: ProjectSwitcherProps) 
                                         selectProject(project.id);
                                         setOpen(false);
                                     }}
-                                    className="text-sm group pr-2"
+                                    className="text-[13px] group pr-2 focus:bg-white/5 focus:text-white rounded-sm py-1.5 cursor-pointer"
                                 >
-                                    <Building2 className="mr-2 h-4 w-4 flex-shrink-0" />
-                                    <span className="truncate flex-1">{project.name}</span>
+                                    <Layers className="mr-2 h-3.5 w-3.5 flex-shrink-0 text-zinc-500 group-focus:text-white transition-colors" />
+                                    <span className="truncate flex-1 font-medium text-zinc-300 group-focus:text-white">{project.name}</span>
                                     <Check
                                         className={cn(
-                                            "h-4 w-4 flex-shrink-0 mr-1",
+                                            "h-3.5 w-3.5 flex-shrink-0 mr-1 text-white",
                                             selectedProjectId === project.id ? "opacity-100" : "opacity-0"
                                         )}
                                     />
@@ -199,7 +203,7 @@ export function ProjectSwitcher({ className, collapsed }: ProjectSwitcherProps) 
                                     {!isDefault && (
                                         <button
                                             onClick={(e) => openDeleteDialog(e, project)}
-                                            className="ml-1 h-5 w-5 flex items-center justify-center rounded opacity-0 group-hover:opacity-100 hover:bg-rose-500/10 hover:text-rose-500 transition-all flex-shrink-0"
+                                            className="ml-1 h-5 w-5 flex items-center justify-center rounded opacity-0 group-hover:opacity-100 hover:bg-rose-500/10 hover:text-rose-400 transition-all flex-shrink-0"
                                             title="Delete project (admin only)"
                                         >
                                             <Trash2 className="h-3 w-3" />
@@ -209,14 +213,15 @@ export function ProjectSwitcher({ className, collapsed }: ProjectSwitcherProps) 
                             );
                         })}
                     </DropdownMenuGroup>
-                    <DropdownMenuSeparator />
+                    <DropdownMenuSeparator className="bg-white/[0.06]" />
                     <DropdownMenuItem
                         onSelect={() => {
                             setOpen(false);
                             setShowNewProjectDialog(true);
                         }}
+                        className="text-[13px] focus:bg-white/5 focus:text-white rounded-sm py-1.5 cursor-pointer text-zinc-400"
                     >
-                        <Plus className="mr-2 h-5 w-5" />
+                        <Plus className="mr-2 h-3.5 w-3.5" />
                         Create Project
                     </DropdownMenuItem>
                 </DropdownMenuContent>

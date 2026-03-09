@@ -80,8 +80,9 @@ export default function TeamsPage() {
             setCreateOpen(false);
             setNewName(""); setNewDescription(""); setNewBudget(""); setNewAllowedModels(""); setNewTags("");
             toast.success(`Team "${payload.name}" created`);
-        } catch (e: any) {
-            toast.error(e.message || "Failed to create team");
+        } catch (e: unknown) {
+            const err = e as Error;
+            toast.error(err.message || "Failed to create team");
         } finally {
             setCreating(false);
         }
@@ -94,8 +95,9 @@ export default function TeamsPage() {
             mutate();
             setEditingId(null);
             toast.success("Team renamed");
-        } catch (e: any) {
-            toast.error(e.message || "Failed to rename");
+        } catch (e: unknown) {
+            const err = e as Error;
+            toast.error(err.message || "Failed to rename");
         }
     };
 
@@ -106,8 +108,9 @@ export default function TeamsPage() {
             mutate();
             if (expandedTeam === id) setExpandedTeam(null);
             toast.success(`Team "${name}" deleted`);
-        } catch (e: any) {
-            toast.error(e.message || "Failed to delete team");
+        } catch (e: unknown) {
+            const err = e as Error;
+            toast.error(err.message || "Failed to delete team");
         }
     };
 
@@ -271,8 +274,9 @@ function TeamCard({
             setAddOpen(false);
             setNewUserId("");
             toast.success("Member added");
-        } catch (e: any) {
-            toast.error(e.message || "Failed to add member");
+        } catch (e: unknown) {
+            const err = e as Error;
+            toast.error(err.message || "Failed to add member");
         } finally {
             setAdding(false);
         }
@@ -283,8 +287,9 @@ function TeamCard({
             await removeTeamMember(team.id, userId);
             mutateMembers();
             toast.success("Member removed");
-        } catch (e: any) {
-            toast.error(e.message || "Failed to remove");
+        } catch (e: unknown) {
+            const err = e as Error;
+            toast.error(err.message || "Failed to remove");
         }
     };
 
@@ -378,7 +383,7 @@ function TeamCard({
                                             value={newUserId}
                                             onChange={e => setNewUserId(e.target.value)}
                                         />
-                                        <p className="text-[10px] text-muted-foreground">Enter the user's UUID from your identity provider or API keys table.</p>
+                                        <p className="text-[10px] text-muted-foreground">Enter the user&apos;s UUID from your identity provider or API keys table.</p>
                                     </div>
                                     <div className="space-y-2">
                                         <Label>Role</Label>

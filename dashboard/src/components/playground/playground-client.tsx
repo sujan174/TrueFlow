@@ -92,9 +92,10 @@ export function PlaygroundClient() {
                 const text = await res.text();
                 setResponse(text);
             }
-        } catch (e: any) {
-            toast.error("Request failed: " + e.message);
-            setResponse("Error: " + e.message);
+        } catch (e: unknown) {
+            const err = e as Error;
+            toast.error("Request failed: " + err.message);
+            setResponse("Error: " + err.message);
         } finally {
             setLoading(false);
         }

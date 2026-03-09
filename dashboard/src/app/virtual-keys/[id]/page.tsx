@@ -148,8 +148,9 @@ export default function TokenDetailPage() {
             setCb(updated);
             setCbEdits(updated);
             toast.success("Circuit breaker config saved");
-        } catch (e: any) {
-            toast.error(e.message || "Failed to update circuit breaker");
+        } catch (e: unknown) {
+            const err = e as Error;
+            toast.error(err.message || "Failed to update circuit breaker");
         } finally {
             setSavingCb(false);
         }
@@ -225,8 +226,8 @@ export default function TokenDetailPage() {
                                         contentStyle={{ backgroundColor: 'rgba(0,0,0,0.8)', border: 'none', borderRadius: '8px', fontSize: '12px' }}
                                         itemStyle={{ color: '#fff' }}
                                         labelStyle={{ color: '#aaa' }}
-                                        formatter={(value: any) => [value, "Requests"]}
-                                        labelFormatter={(label: any) => new Date(label).toLocaleTimeString()}
+                                        formatter={(value: number | string) => [value, "Requests"]}
+                                        labelFormatter={(label: number | string) => new Date(label).toLocaleTimeString()}
                                     />
                                     <Area type="monotone" dataKey="count" stroke="#6366f1" strokeWidth={2} fillOpacity={1} fill="url(#colorCount)" />
                                 </AreaChart>
@@ -279,9 +280,9 @@ export default function TokenDetailPage() {
                                     }}><Copy className="h-3 w-3" /></Button>
                                 </div>
                                 <span className="text-violet-400">curl</span> -X POST http://localhost:8443/v1/chat/completions \<br />
-                                &nbsp;&nbsp;-H <span className="text-emerald-400">"Authorization: Bearer {token.id}"</span> \<br />
-                                &nbsp;&nbsp;-H <span className="text-emerald-400">"Content-Type: application/json"</span> \<br />
-                                &nbsp;&nbsp;-d <span className="text-amber-400">'{`\n    "model": "gpt-4o-mini",\n    "messages": [{"role": "user", "content": "Hello TrueFlow!"}]\n  `}'</span>
+                                &nbsp;&nbsp;-H <span className="text-emerald-400">&quot;Authorization: Bearer {token.id}&quot;</span> \<br />
+                                &nbsp;&nbsp;-H <span className="text-emerald-400">&quot;Content-Type: application/json&quot;</span> \<br />
+                                &nbsp;&nbsp;-d <span className="text-amber-400">&apos;{`\n    "model": "gpt-4o-mini",\n    "messages": [{"role": "user", "content": "Hello TrueFlow!"}]\n  `}&apos;</span>
                             </div>
                         </div>
                         <div>
@@ -294,11 +295,11 @@ export default function TokenDetailPage() {
                                     }}><Copy className="h-3 w-3" /></Button>
                                 </div>
                                 <span className="text-rose-400">from</span> trueflow <span className="text-rose-400">import</span> TrueFlowClient<br /><br />
-                                client = TrueFlowClient(api_key=<span className="text-emerald-400">"{token.id}"</span>)<br />
+                                client = TrueFlowClient(api_key=<span className="text-emerald-400">&quot;{token.id}&quot;</span>)<br />
                                 oai = client.openai()<br />
                                 response = oai.chat.completions.create(<br />
-                                &nbsp;&nbsp;&nbsp;&nbsp;model=<span className="text-emerald-400">"gpt-4o-mini"</span>,<br />
-                                &nbsp;&nbsp;&nbsp;&nbsp;messages=[{`{`}<span className="text-emerald-400">"role"</span>: <span className="text-emerald-400">"user"</span>, <span className="text-emerald-400">"content"</span>: <span className="text-emerald-400">"Hello TrueFlow!"</span>{`}`}]<br />
+                                &nbsp;&nbsp;&nbsp;&nbsp;model=<span className="text-emerald-400">&quot;gpt-4o-mini&quot;</span>,<br />
+                                &nbsp;&nbsp;&nbsp;&nbsp;messages=[{`{`}<span className="text-emerald-400">&quot;role&quot;</span>: <span className="text-emerald-400">&quot;user&quot;</span>, <span className="text-emerald-400">&quot;content&quot;</span>: <span className="text-emerald-400">&quot;Hello TrueFlow!&quot;</span>{`}`}]<br />
                                 )<br />
                                 <span className="text-blue-400">print</span>(response.choices[0].message.content)
                             </div>

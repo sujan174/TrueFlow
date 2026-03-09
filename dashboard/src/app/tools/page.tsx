@@ -597,7 +597,7 @@ function ServicesTab({
 }: {
     services: Service[];
     credentials: Credential[];
-    mutateServices: any;
+    mutateServices: () => void;
 }) {
     const [dialogOpen, setDialogOpen] = useState(false);
     const [name, setName] = useState("");

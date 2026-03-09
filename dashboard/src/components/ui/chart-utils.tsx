@@ -12,7 +12,13 @@ export function CustomTooltip({
     label,
     valueFormatter,
     labelFormatter
-}: any) {
+}: {
+    active?: boolean;
+    payload?: Record<string, unknown>[];
+    label?: string;
+    valueFormatter?: (value: number | string) => string;
+    labelFormatter?: (label: string) => string;
+}) {
     if (!active || !payload || payload.length === 0) {
         return null;
     }
@@ -23,21 +29,21 @@ export function CustomTooltip({
                 {labelFormatter ? labelFormatter(label as string) : label}
             </p>
             <div className="flex flex-col gap-2">
-                {payload.map((entry: any, index: number) => (
+                {payload.map((entry: Record<string, unknown>, index: number) => (
                     <div key={index} className="flex items-center justify-between gap-4">
                         <div className="flex items-center gap-2">
                             <div
                                 className="h-2.5 w-2.5 rounded-[2px]"
-                                style={{ backgroundColor: entry.color }}
+                                style={{ backgroundColor: entry.color as string }}
                             />
                             <span className="text-sm font-medium text-foreground">
-                                {entry.name}
+                                {entry.name as string}
                             </span>
                         </div>
                         <span className="text-sm font-semibold font-mono text-foreground">
                             {valueFormatter && typeof entry.value === 'number'
                                 ? valueFormatter(entry.value)
-                                : entry.value}
+                                : String(entry.value)}
                         </span>
                     </div>
                 ))}

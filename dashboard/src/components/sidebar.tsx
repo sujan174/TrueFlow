@@ -39,7 +39,7 @@ type SidebarProps = React.HTMLAttributes<HTMLDivElement>;
 interface Route {
     href: string;
     label: string;
-    icon: any;
+    icon: React.ElementType;
     badge?: number | null;
 }
 
@@ -71,7 +71,10 @@ export function Sidebar({ className }: SidebarProps) {
     }, [collapsed]);
 
     useEffect(() => {
-        setMounted(true);
+        let active = true;
+        setTimeout(() => {
+            if (active) setMounted(true);
+        }, 0);
 
         const checkHealth = async () => {
             try {
@@ -86,8 +89,8 @@ export function Sidebar({ className }: SidebarProps) {
             try {
                 const res = await fetch("/api/proxy/approvals");
                 if (res.ok) {
-                    const data = await res.json();
-                    setApprovalCount(data.filter((a: any) => a.status === "pending").length);
+                    const data: Record<string, unknown>[] = await res.json();
+                    setApprovalCount(data.filter(a => a.status === "pending").length);
                 }
             } catch (e) {
                 console.error("Failed to fetch approvals", e);
@@ -102,7 +105,10 @@ export function Sidebar({ className }: SidebarProps) {
             checkApprovals();
         }, 15000);
 
-        return () => clearInterval(interval);
+        return () => {
+            active = false;
+            clearInterval(interval);
+        };
     }, []);
 
     const groups: Group[] = [
@@ -172,10 +178,10 @@ export function Sidebar({ className }: SidebarProps) {
 
     return (
         <div
-            style={{ width: collapsed ? 56 : 220, transition: "width 0.2s cubic-bezier(.4,0,.2,1)" }}
+            style={{ width: collapsed ? 56 : 240, transition: "width 0.2s cubic-bezier(.4,0,.2,1)" }}
             className={cn(
                 "flex h-full flex-col relative overflow-hidden",
-                "bg-[var(--sidebar-bg)] border-r border-[var(--sidebar-border)]",
+                "bg-black border-r border-white/[0.06]",
                 className
             )}
         >
@@ -185,32 +191,30 @@ export function Sidebar({ className }: SidebarProps) {
                 aria-label="Toggle Sidebar"
                 className={cn(
                     "absolute -right-3 top-7 z-50",
-                    "hidden md:flex h-5 w-5 items-center justify-center rounded-full",
-                    "border border-[var(--border)] bg-[var(--card)]",
-                    "text-muted-foreground hover:text-foreground",
+                    "hidden md:flex h-6 w-6 items-center justify-center rounded-full",
+                    "border border-white/10 bg-black",
+                    "text-zinc-500 hover:text-white hover:border-white/30",
                     "transition-all duration-200",
-                    "hover:border-[var(--primary)]/30"
                 )}
             >
-                {collapsed ? <ChevronRight size={10} /> : <ChevronLeft size={10} />}
+                {collapsed ? <ChevronRight size={12} /> : <ChevronLeft size={12} />}
             </button>
 
             {/* Logo */}
             <div className={cn(
-                "flex h-12 shrink-0 items-center border-b border-[var(--sidebar-border)]",
-                collapsed ? "justify-center px-3" : "px-4"
+                "flex h-12 shrink-0 items-center border-b border-white/[0.06]",
+                collapsed ? "justify-center px-3" : "px-5"
             )}>
-                <Link href="/" className="flex items-center gap-2 group min-w-0">
+                <Link href="/" className="flex items-center gap-3 group min-w-0">
                     <div className={cn(
-                        "flex h-6 w-6 shrink-0 items-center justify-center rounded-md",
-                        "bg-gradient-to-br from-[#6366f1] to-[#4338ca]",
-                        "text-white font-bold text-[10px] tracking-tight",
-                        "group-hover:shadow-[0_0_12px_rgba(99,102,241,0.3)] transition-shadow"
+                        "flex h-6 w-6 shrink-0 items-center justify-center rounded-[4px]",
+                        "bg-white text-black font-bold text-[11px] tracking-tight",
+                        "transition-transform group-hover:scale-105"
                     )}>
-                        A
+                        TF
                     </div>
                     {!collapsed && (
-                        <span className="gradient-text font-semibold text-sm tracking-tight whitespace-nowrap">
+                        <span className="text-white font-semibold text-sm tracking-tight whitespace-nowrap">
                             TrueFlow
                         </span>
                     )}
@@ -218,27 +222,27 @@ export function Sidebar({ className }: SidebarProps) {
             </div>
 
             {/* Navigation */}
-            <div className="flex-1 overflow-y-auto overflow-x-hidden py-2 scrollbar-none px-3">
+            <div className="flex-1 overflow-y-auto overflow-x-hidden py-4 scrollbar-none px-3">
                 {groups.map((group) => {
                     const isOpen = openGroups[group.id] ?? group.defaultOpen ?? false;
 
                     return (
-                        <div key={group.id} className="mb-1">
+                        <div key={group.id} className="mb-2">
                             {/* Group header — clickable to collapse */}
                             {!collapsed ? (
                                 <button
                                     onClick={() => toggleGroup(group.id)}
                                     className={cn(
                                         "w-full flex items-center justify-between",
-                                        "px-3 py-1 mt-3 first:mt-0",
-                                        "text-[10px] font-medium uppercase tracking-[0.08em]",
-                                        "text-muted-foreground/50 hover:text-muted-foreground",
+                                        "px-2 py-1.5 mt-2 first:mt-0",
+                                        "text-[10px] font-medium uppercase tracking-[0.1em]",
+                                        "text-zinc-500 hover:text-zinc-300",
                                         "transition-colors rounded-md"
                                     )}
                                 >
                                     <span>{group.label}</span>
                                     <ChevronDown
-                                        size={10}
+                                        size={12}
                                         className={cn(
                                             "transition-transform duration-200",
                                             !isOpen && "-rotate-90"
@@ -246,17 +250,17 @@ export function Sidebar({ className }: SidebarProps) {
                                     />
                                 </button>
                             ) : (
-                                <div className="h-px bg-[var(--border)] mx-2 my-2" />
+                                <div className="h-px bg-white/[0.06] mx-2 my-3" />
                             )}
 
-                            {/* Routes — CSS grid transition instead of framer-motion */}
+                            {/* Routes */}
                             <div
                                 className="grid overflow-hidden transition-[grid-template-rows] duration-200 ease-in-out"
                                 style={{
                                     gridTemplateRows: (isOpen || collapsed) ? "1fr" : "0fr",
                                 }}
                             >
-                                <div className="min-h-0 space-y-px">
+                                <div className="min-h-0 space-y-[2px]">
                                     {group.routes.map((route) => {
                                         const isActive = route.href === "/"
                                             ? pathname === "/"
@@ -267,24 +271,20 @@ export function Sidebar({ className }: SidebarProps) {
                                                 href={route.href}
                                                 title={collapsed ? route.label : undefined}
                                                 className={cn(
-                                                    "relative flex items-center gap-2 rounded-md py-2 text-[13px] font-medium",
+                                                    "relative flex items-center gap-2.5 rounded-md py-1.5 text-[13px] font-medium",
                                                     "transition-all duration-100 group",
-                                                    collapsed ? "justify-center px-3" : "px-3",
+                                                    collapsed ? "justify-center px-3" : "px-2",
                                                     isActive
-                                                        ? "text-foreground bg-[var(--primary)]/8 border border-[var(--primary)]/12"
-                                                        : "text-muted-foreground hover:text-foreground/80 hover:bg-[var(--card)] border border-transparent"
+                                                        ? "text-white bg-white/10"
+                                                        : "text-zinc-500 hover:text-white hover:bg-white/5"
                                                 )}
                                             >
-                                                {/* Active left indicator */}
-                                                {isActive && (
-                                                    <span className="absolute left-0 top-1/2 -translate-y-1/2 h-3.5 w-[2px] rounded-r-full bg-[var(--primary)]" />
-                                                )}
                                                 <route.icon
-                                                    size={14}
+                                                    size={16}
                                                     strokeWidth={isActive ? 2 : 1.5}
                                                     className={cn(
                                                         "shrink-0 transition-colors",
-                                                        isActive ? "text-[var(--primary)]" : "text-muted-foreground group-hover:text-foreground/60"
+                                                        isActive ? "text-white" : "text-zinc-500 group-hover:text-zinc-300"
                                                     )}
                                                 />
                                                 {!collapsed && (
@@ -295,8 +295,8 @@ export function Sidebar({ className }: SidebarProps) {
                                                 {/* Badge */}
                                                 {!collapsed && route.badge && (
                                                     <span className={cn(
-                                                        "flex h-4 min-w-[1rem] items-center justify-center rounded-full",
-                                                        "bg-amber-500/12 px-1 text-[9px] font-bold text-amber-400 font-mono"
+                                                        "flex h-4 min-w-[1rem] items-center justify-center rounded-sm",
+                                                        "bg-white text-[9px] font-bold text-black font-mono px-1"
                                                     )}>
                                                         {route.badge}
                                                     </span>
@@ -313,7 +313,7 @@ export function Sidebar({ className }: SidebarProps) {
 
             {/* Footer — Settings, Account, Health */}
             <div className={cn(
-                "shrink-0 border-t border-[var(--sidebar-border)] py-3",
+                "shrink-0 border-t border-white/[0.06] py-3",
                 collapsed ? "px-3" : "px-3"
             )}>
                 {/* Settings */}
@@ -321,23 +321,20 @@ export function Sidebar({ className }: SidebarProps) {
                     href="/settings"
                     title={collapsed ? "Settings" : undefined}
                     className={cn(
-                        "relative flex items-center gap-2 rounded-md py-2 text-[13px] font-medium",
+                        "relative flex items-center gap-2.5 rounded-md py-1.5 text-[13px] font-medium",
                         "transition-all duration-100 group",
-                        collapsed ? "justify-center px-3" : "px-3",
+                        collapsed ? "justify-center px-3" : "px-2",
                         pathname.startsWith("/settings")
-                            ? "text-foreground bg-[var(--primary)]/8 border border-[var(--primary)]/12"
-                            : "text-muted-foreground hover:text-foreground/80 hover:bg-[var(--card)] border border-transparent"
+                            ? "text-white bg-white/10"
+                            : "text-zinc-400 hover:text-white hover:bg-white/5"
                     )}
                 >
-                    {pathname.startsWith("/settings") && (
-                        <span className="absolute left-0 top-1/2 -translate-y-1/2 h-3.5 w-[2px] rounded-r-full bg-[var(--primary)]" />
-                    )}
                     <Settings
-                        size={14}
+                        size={16}
                         strokeWidth={pathname.startsWith("/settings") ? 2 : 1.5}
                         className={cn(
                             "shrink-0 transition-colors",
-                            pathname.startsWith("/settings") ? "text-[var(--primary)]" : "text-muted-foreground group-hover:text-foreground/60"
+                            pathname.startsWith("/settings") ? "text-white" : "text-zinc-500 group-hover:text-zinc-300"
                         )}
                     />
                     {!collapsed && (
@@ -347,28 +344,25 @@ export function Sidebar({ className }: SidebarProps) {
                     )}
                 </Link>
 
-                {/* Config Export — formerly in SYSTEM group */}
+                {/* Config Export */}
                 <Link
                     href="/config"
                     title={collapsed ? "Config Export" : undefined}
                     className={cn(
-                        "relative flex items-center gap-2 rounded-md py-2 text-[13px] font-medium",
+                        "relative flex items-center gap-2.5 rounded-md py-1.5 text-[13px] font-medium",
                         "transition-all duration-100 group",
-                        collapsed ? "justify-center px-3" : "px-3",
+                        collapsed ? "justify-center px-3" : "px-2",
                         pathname.startsWith("/config")
-                            ? "text-foreground bg-[var(--primary)]/8 border border-[var(--primary)]/12"
-                            : "text-muted-foreground hover:text-foreground/80 hover:bg-[var(--card)] border border-transparent"
+                            ? "text-white bg-white/10"
+                            : "text-zinc-400 hover:text-white hover:bg-white/5"
                     )}
                 >
-                    {pathname.startsWith("/config") && (
-                        <span className="absolute left-0 top-1/2 -translate-y-1/2 h-3.5 w-[2px] rounded-r-full bg-[var(--primary)]" />
-                    )}
                     <FileCode2
-                        size={14}
+                        size={16}
                         strokeWidth={pathname.startsWith("/config") ? 2 : 1.5}
                         className={cn(
                             "shrink-0 transition-colors",
-                            pathname.startsWith("/config") ? "text-[var(--primary)]" : "text-muted-foreground group-hover:text-foreground/60"
+                            pathname.startsWith("/config") ? "text-white" : "text-zinc-500 group-hover:text-zinc-300"
                         )}
                     />
                     {!collapsed && (
@@ -380,22 +374,22 @@ export function Sidebar({ className }: SidebarProps) {
 
                 {/* Account */}
                 {!collapsed ? (
-                    <div className="mt-2 rounded-md border border-border/40 bg-muted/20 px-3 py-2">
-                        <div className="flex items-center gap-2 mb-2">
-                            <div className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--primary)]/10">
-                                <User size={12} className="text-[var(--primary)]" />
+                    <div className="mt-3 rounded-md border border-white/[0.06] bg-white/[0.02] p-2">
+                        <div className="flex items-center gap-2 mb-2 px-1">
+                            <div className="flex h-5 w-5 items-center justify-center rounded-[4px] bg-white text-black">
+                                <User size={12} strokeWidth={2.5} />
                             </div>
-                            <span className="text-[11px] font-medium text-foreground/70 truncate">Admin</span>
+                            <span className="text-[12px] font-medium text-zinc-300 truncate">Admin</span>
                         </div>
                         <button
                             onClick={() => window.location.href = "/login"}
                             className={cn(
-                                "w-full flex items-center gap-2 rounded-md px-2 py-2 text-[12px] font-medium",
-                                "text-muted-foreground hover:text-rose-400 hover:bg-rose-500/8",
+                                "w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-[12px] font-medium",
+                                "text-zinc-400 hover:text-white hover:bg-white/5",
                                 "transition-colors"
                             )}
                         >
-                            <LogOut size={13} strokeWidth={1.5} />
+                            <LogOut size={14} strokeWidth={1.5} />
                             Log out
                         </button>
                     </div>
@@ -404,28 +398,28 @@ export function Sidebar({ className }: SidebarProps) {
                         onClick={() => window.location.href = "/login"}
                         title="Log out"
                         className={cn(
-                            "flex w-full items-center justify-center rounded-md px-2 py-2 mt-1",
-                            "text-muted-foreground hover:text-rose-400 hover:bg-rose-500/8",
+                            "flex w-full items-center justify-center rounded-md px-2 py-2 mt-2",
+                            "text-zinc-500 hover:text-white hover:bg-white/5",
                             "transition-colors"
                         )}
                     >
-                        <LogOut size={14} strokeWidth={1.5} />
+                        <LogOut size={16} strokeWidth={1.5} />
                     </button>
                 )}
 
                 {/* Health + Version */}
                 <div className={cn(
-                    "flex items-center text-[11px] text-muted-foreground mt-3",
-                    collapsed ? "justify-center" : "gap-2 px-2"
+                    "flex items-center mt-3",
+                    collapsed ? "justify-center" : "justify-between px-2"
                 )}>
                     <div className={cn(
                         "h-1.5 w-1.5 rounded-full transition-colors duration-500",
-                        health === "online" ? "bg-emerald-500" :
-                            health === "offline" ? "bg-rose-500" :
-                                "bg-amber-500 animate-pulse"
+                        health === "online" ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" :
+                            health === "offline" ? "bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.5)]" :
+                                "bg-amber-500 animate-pulse shadow-[0_0_8px_rgba(245,158,11,0.5)]"
                     )} />
                     {!collapsed && (
-                        <span className="font-mono text-[10px] text-muted-foreground/60">v0.8.0</span>
+                        <span className="font-mono text-[10px] text-zinc-600 tracking-widest uppercase">v0.8.0</span>
                     )}
                 </div>
             </div>

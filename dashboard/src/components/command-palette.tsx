@@ -32,7 +32,7 @@ export function CommandPalette() {
         command();
     }, []);
 
-    const groups: { heading: string; items: { icon: any; name: string; shortcut?: string; action: () => void }[] }[] = [
+    const groups: { heading: string; items: { icon: React.ElementType; name: string; shortcut?: string; action: () => void }[] }[] = [
         {
             heading: "Navigation",
             items: [

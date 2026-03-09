@@ -501,7 +501,7 @@ export const createService = (data: {
   const payload = { ...data, project_id: undefined };
   if (typeof window !== "undefined") {
     const pid = localStorage.getItem("trueflow_project_id");
-    if (pid) (payload as any).project_id = pid;
+    if (pid) (payload as Record<string, unknown>).project_id = pid;
   }
   return api<Service>("/services", {
     method: "POST",
@@ -580,7 +580,7 @@ export async function revokeApiKey(id: string): Promise<boolean> {
   return true;
 }
 
-export async function getWhoAmI(): Promise<any> {
+export async function getWhoAmI(): Promise<Record<string, unknown>> {
   return api("/auth/whoami");
 }
 
@@ -597,7 +597,7 @@ export interface UsageMeter {
 
 export async function getUsage(period?: string): Promise<UsageMeter> {
   const query = period ? `?period=${period}` : "";
-  const res: any = await api(`/billing/usage${query}`);
+  const res: Record<string, unknown> | null = await api(`/billing/usage${query}`);
   if (!res) {
     const d = new Date();
     return {
@@ -613,9 +613,9 @@ export async function getUsage(period?: string): Promise<UsageMeter> {
   // The backend serializes some numeric types (like Rust Decimal or BigInt)
   // as strings to preserve precision. We cast them to JS numbers for the UI.
   return {
-    org_id: res.org_id,
-    period: res.period,
-    updated_at: res.updated_at,
+    org_id: String(res.org_id || ""),
+    period: String(res.period || ""),
+    updated_at: String(res.updated_at || ""),
     total_requests: Number(res.total_requests) || 0,
     total_tokens_used: Number(res.total_tokens_used) || 0,
     total_spend_usd: Number(res.total_spend_usd) || 0,
