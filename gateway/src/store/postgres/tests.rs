@@ -18,10 +18,22 @@ fn test_spend_by_dimension_serialization_contract() {
 
     // Verify exact field names (API contract)
     assert!(json.get("dimension").is_some(), "missing 'dimension' field");
-    assert!(json.get("total_cost_usd").is_some(), "missing 'total_cost_usd' field");
-    assert!(json.get("request_count").is_some(), "missing 'request_count' field");
-    assert!(json.get("total_prompt_tokens").is_some(), "missing 'total_prompt_tokens' field");
-    assert!(json.get("total_completion_tokens").is_some(), "missing 'total_completion_tokens' field");
+    assert!(
+        json.get("total_cost_usd").is_some(),
+        "missing 'total_cost_usd' field"
+    );
+    assert!(
+        json.get("request_count").is_some(),
+        "missing 'request_count' field"
+    );
+    assert!(
+        json.get("total_prompt_tokens").is_some(),
+        "missing 'total_prompt_tokens' field"
+    );
+    assert!(
+        json.get("total_completion_tokens").is_some(),
+        "missing 'total_completion_tokens' field"
+    );
 
     // Verify actual values (not just existence — prevents false positive)
     assert_eq!(json["dimension"], "gpt-4o");
@@ -56,7 +68,7 @@ fn test_spend_by_dimension_roundtrip() {
 /// This simulates what the handler does: summing breakdown rows.
 #[test]
 fn test_breakdown_total_aggregation() {
-    let rows = vec![
+    let rows = [
         SpendByDimension {
             dimension: "gpt-4o".into(),
             total_cost_usd: 100.0,
@@ -84,8 +96,16 @@ fn test_breakdown_total_aggregation() {
     let total_cost: f64 = rows.iter().map(|r| r.total_cost_usd).sum();
     let total_requests: i64 = rows.iter().map(|r| r.request_count).sum();
 
-    assert!((total_cost - 155.50).abs() < 0.001, "expected 155.50, got {}", total_cost);
-    assert_eq!(total_requests, 3700, "expected 3700 requests, got {}", total_requests);
+    assert!(
+        (total_cost - 155.50).abs() < 0.001,
+        "expected 155.50, got {}",
+        total_cost
+    );
+    assert_eq!(
+        total_requests, 3700,
+        "expected 3700 requests, got {}",
+        total_requests
+    );
 }
 
 /// Test edge case: empty breakdown (no spend data).

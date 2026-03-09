@@ -60,10 +60,7 @@ pub struct TeamSpend {
 ///
 /// Returns `Ok(())` if within budget or no budget set,
 /// or `Err(reason)` if budget exceeded.
-pub async fn check_team_budget(
-    pool: &sqlx::PgPool,
-    team: &Team,
-) -> Result<(), String> {
+pub async fn check_team_budget(pool: &sqlx::PgPool, team: &Team) -> Result<(), String> {
     let max_budget = match team.max_budget_usd {
         Some(b) => b,
         None => return Ok(()), // No budget limit
@@ -82,24 +79,21 @@ pub async fn check_team_budget(
             let days_since_monday = now.weekday().num_days_from_monday();
             now - chrono::Duration::days(days_since_monday as i64)
         }
-        "monthly" => chrono::NaiveDate::from_ymd_opt(now.year(), now.month(), 1)
-            .unwrap_or(now),
-        "yearly" => chrono::NaiveDate::from_ymd_opt(now.year(), 1, 1)
-            .unwrap_or(now),
+        "monthly" => chrono::NaiveDate::from_ymd_opt(now.year(), now.month(), 1).unwrap_or(now),
+        "yearly" => chrono::NaiveDate::from_ymd_opt(now.year(), 1, 1).unwrap_or(now),
         _ => return Ok(()), // Unknown duration, allow
     };
 
     // 5D-3 FIX: Use FOR UPDATE to serialize concurrent budget checks.
     // This acquires a row-level lock so only one request at a time can
     // read/compare the spend value, preventing the TOCTOU race.
-    let spend: Option<TeamSpend> = sqlx::query_as(
-        "SELECT * FROM team_spend WHERE team_id = $1 AND period = $2 FOR UPDATE"
-    )
-    .bind(team.id)
-    .bind(period_start)
-    .fetch_optional(pool)
-    .await
-    .unwrap_or(None);
+    let spend: Option<TeamSpend> =
+        sqlx::query_as("SELECT * FROM team_spend WHERE team_id = $1 AND period = $2 FOR UPDATE")
+            .bind(team.id)
+            .bind(period_start)
+            .fetch_optional(pool)
+            .await
+            .unwrap_or(None);
 
     if let Some(s) = spend {
         if s.total_spend_usd >= max_budget {
@@ -130,10 +124,10 @@ pub async fn record_team_spend(
             let days_since_monday = now.weekday().num_days_from_monday();
             now - chrono::Duration::days(days_since_monday as i64)
         }
-        Some("monthly") => chrono::NaiveDate::from_ymd_opt(now.year(), now.month(), 1)
-            .unwrap_or(now),
-        Some("yearly") => chrono::NaiveDate::from_ymd_opt(now.year(), 1, 1)
-            .unwrap_or(now),
+        Some("monthly") => {
+            chrono::NaiveDate::from_ymd_opt(now.year(), now.month(), 1).unwrap_or(now)
+        }
+        Some("yearly") => chrono::NaiveDate::from_ymd_opt(now.year(), 1, 1).unwrap_or(now),
         _ => now, // Default to daily
     };
 
@@ -159,25 +153,17 @@ pub async fn record_team_spend(
 }
 
 /// Resolve a team by ID, returning None if not found or inactive.
-pub async fn get_team(
-    pool: &sqlx::PgPool,
-    team_id: Uuid,
-) -> Option<Team> {
-    sqlx::query_as::<_, Team>(
-        "SELECT * FROM teams WHERE id = $1 AND is_active = true"
-    )
-    .bind(team_id)
-    .fetch_optional(pool)
-    .await
-    .unwrap_or(None)
+pub async fn get_team(pool: &sqlx::PgPool, team_id: Uuid) -> Option<Team> {
+    sqlx::query_as::<_, Team>("SELECT * FROM teams WHERE id = $1 AND is_active = true")
+        .bind(team_id)
+        .fetch_optional(pool)
+        .await
+        .unwrap_or(None)
 }
 
 /// Check if a model is allowed by the team's model restrictions.
 /// Falls back to allowing all if no restrictions set.
-pub fn check_team_model_access(
-    model: &str,
-    team: &Team,
-) -> Result<(), String> {
+pub fn check_team_model_access(model: &str, team: &Team) -> Result<(), String> {
     if model.is_empty() {
         return Ok(());
     }
@@ -209,7 +195,9 @@ pub fn check_team_model_access(
 
     Err(format!(
         "Model '{}' is not allowed by team '{}'. Team allowed: [{}]",
-        model, team.name, patterns.join(", ")
+        model,
+        team.name,
+        patterns.join(", ")
     ))
 }
 

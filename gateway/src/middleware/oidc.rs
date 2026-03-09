@@ -127,17 +127,23 @@ pub async fn get_jwks(jwks_uri: &str) -> anyhow::Result<Jwks> {
     let resp = reqwest::get(jwks_uri).await?;
     let jwks: Jwks = resp.json().await?;
 
-    JWKS_CACHE.insert(jwks_uri.to_string(), CachedJwks {
-        jwks: jwks.clone(),
-        fetched_at: Utc::now(),
-    });
+    JWKS_CACHE.insert(
+        jwks_uri.to_string(),
+        CachedJwks {
+            jwks: jwks.clone(),
+            fetched_at: Utc::now(),
+        },
+    );
 
     Ok(jwks)
 }
 
 /// Discover OIDC configuration from issuer URL.
 pub async fn discover(issuer_url: &str) -> anyhow::Result<OidcDiscovery> {
-    let url = format!("{}/.well-known/openid-configuration", issuer_url.trim_end_matches('/'));
+    let url = format!(
+        "{}/.well-known/openid-configuration",
+        issuer_url.trim_end_matches('/')
+    );
     tracing::info!(url = %url, "OIDC discovery");
     let resp = reqwest::get(&url).await?;
     let discovery: OidcDiscovery = resp.json().await?;
@@ -179,16 +185,24 @@ fn extract_alg(token: &str) -> Option<String> {
 fn decoding_key_from_jwk(jwk: &Jwk) -> anyhow::Result<jsonwebtoken::DecodingKey> {
     match jwk.kty.as_str() {
         "RSA" => {
-            let n = jwk.n.as_deref()
+            let n = jwk
+                .n
+                .as_deref()
                 .ok_or_else(|| anyhow::anyhow!("RSA JWK missing 'n' field"))?;
-            let e = jwk.e.as_deref()
+            let e = jwk
+                .e
+                .as_deref()
                 .ok_or_else(|| anyhow::anyhow!("RSA JWK missing 'e' field"))?;
             Ok(jsonwebtoken::DecodingKey::from_rsa_components(n, e)?)
         }
         "EC" => {
-            let x = jwk.x.as_deref()
+            let x = jwk
+                .x
+                .as_deref()
                 .ok_or_else(|| anyhow::anyhow!("EC JWK missing 'x' field"))?;
-            let y = jwk.y.as_deref()
+            let y = jwk
+                .y
+                .as_deref()
                 .ok_or_else(|| anyhow::anyhow!("EC JWK missing 'y' field"))?;
             Ok(jsonwebtoken::DecodingKey::from_ec_components(x, y)?)
         }
@@ -208,7 +222,7 @@ fn alg_from_str(alg: &str) -> anyhow::Result<jsonwebtoken::Algorithm> {
         "PS384" => Ok(jsonwebtoken::Algorithm::PS384),
         "PS512" => Ok(jsonwebtoken::Algorithm::PS512),
         "EdDSA" => Ok(jsonwebtoken::Algorithm::EdDSA),
-        other   => Err(anyhow::anyhow!("Unsupported JWT algorithm: {}", other)),
+        other => Err(anyhow::anyhow!("Unsupported JWT algorithm: {}", other)),
     }
 }
 
@@ -234,21 +248,22 @@ pub async fn verify_jwt_signature(
 
     // 3. Extract kid + alg from JWT header
     let kid = extract_kid(token);
-    let alg_str = extract_alg(token)
-        .ok_or_else(|| anyhow::anyhow!("JWT header missing 'alg' field"))?;
+    let alg_str =
+        extract_alg(token).ok_or_else(|| anyhow::anyhow!("JWT header missing 'alg' field"))?;
     let algorithm = alg_from_str(&alg_str)?;
 
     // 4. Find the matching JWK
     let jwk = if let Some(ref kid_val) = kid {
-        jwks.keys.iter()
+        jwks.keys
+            .iter()
             .find(|k| k.kid.as_deref() == Some(kid_val))
             .ok_or_else(|| anyhow::anyhow!("No JWK found with kid='{}'", kid_val))?
     } else {
         // No kid in header — use the first key that matches the algorithm & use=sig
-        jwks.keys.iter()
+        jwks.keys
+            .iter()
             .find(|k| {
-                k.key_use.as_deref() != Some("enc") &&
-                k.alg.as_deref().is_none_or(|a| a == alg_str)
+                k.key_use.as_deref() != Some("enc") && k.alg.as_deref().is_none_or(|a| a == alg_str)
             })
             .ok_or_else(|| anyhow::anyhow!("No suitable JWK found in JWKS"))?
     };
@@ -267,20 +282,19 @@ pub async fn verify_jwt_signature(
     validation.validate_exp = true;
 
     // 7. Decode + verify
-    let token_data = jsonwebtoken::decode::<serde_json::Value>(
-        token,
-        &decoding_key,
-        &validation,
-    ).map_err(|e| anyhow::anyhow!("JWT signature verification failed: {}", e))?;
+    let token_data = jsonwebtoken::decode::<serde_json::Value>(token, &decoding_key, &validation)
+        .map_err(|e| anyhow::anyhow!("JWT signature verification failed: {}", e))?;
 
     let raw = token_data.claims;
 
     // 8. Extract standard claims
-    let sub = raw.get("sub")
+    let sub = raw
+        .get("sub")
         .and_then(|v| v.as_str())
         .ok_or_else(|| anyhow::anyhow!("JWT missing 'sub' claim"))?
         .to_string();
-    let exp = raw.get("exp")
+    let exp = raw
+        .get("exp")
         .and_then(|v| v.as_i64())
         .ok_or_else(|| anyhow::anyhow!("JWT missing 'exp' claim"))?;
 
@@ -288,7 +302,11 @@ pub async fn verify_jwt_signature(
         sub,
         email: raw.get("email").and_then(|v| v.as_str()).map(String::from),
         name: raw.get("name").and_then(|v| v.as_str()).map(String::from),
-        iss: raw.get("iss").and_then(|v| v.as_str()).unwrap_or_default().to_string(),
+        iss: raw
+            .get("iss")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default()
+            .to_string(),
         aud: raw.get("aud").and_then(|v| v.as_str()).map(String::from),
         exp,
         iat: raw.get("iat").and_then(|v| v.as_i64()),
@@ -299,16 +317,13 @@ pub async fn verify_jwt_signature(
 /// Full OIDC validation pipeline: verify signature → extract claims → map to RBAC.
 ///
 /// Call this from the auth middleware when a Bearer JWT is received.
-pub async fn validate_jwt(
-    token: &str,
-    provider: &OidcProvider,
-) -> anyhow::Result<OidcAuthResult> {
+pub async fn validate_jwt(token: &str, provider: &OidcProvider) -> anyhow::Result<OidcAuthResult> {
     let claims = verify_jwt_signature(token, provider).await?;
     Ok(map_claims_to_rbac(&claims, provider))
 }
 
 /// Decode JWT claims **without** cryptographic verification.
-/// 
+///
 /// **DEPRECATED** — use `verify_jwt_signature()` for production validation.
 /// Kept for backward-compatible unit tests and non-IdP fallback paths.
 #[allow(dead_code)]
@@ -320,16 +335,19 @@ pub fn decode_claims(token: &str) -> anyhow::Result<OidcClaims> {
 
     use base64::Engine;
     let engine = base64::engine::general_purpose::URL_SAFE_NO_PAD;
-    let payload_bytes = engine.decode(parts[1])
+    let payload_bytes = engine
+        .decode(parts[1])
         .map_err(|e| anyhow::anyhow!("JWT payload decode error: {}", e))?;
     let raw: serde_json::Value = serde_json::from_slice(&payload_bytes)?;
 
-    let sub = raw.get("sub")
+    let sub = raw
+        .get("sub")
         .and_then(|v| v.as_str())
         .ok_or_else(|| anyhow::anyhow!("JWT missing 'sub' claim"))?
         .to_string();
 
-    let exp = raw.get("exp")
+    let exp = raw
+        .get("exp")
         .and_then(|v| v.as_i64())
         .ok_or_else(|| anyhow::anyhow!("JWT missing 'exp' claim"))?;
 
@@ -342,7 +360,11 @@ pub fn decode_claims(token: &str) -> anyhow::Result<OidcClaims> {
         sub,
         email: raw.get("email").and_then(|v| v.as_str()).map(String::from),
         name: raw.get("name").and_then(|v| v.as_str()).map(String::from),
-        iss: raw.get("iss").and_then(|v| v.as_str()).unwrap_or_default().to_string(),
+        iss: raw
+            .get("iss")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default()
+            .to_string(),
         aud: raw.get("aud").and_then(|v| v.as_str()).map(String::from),
         exp,
         iat: raw.get("iat").and_then(|v| v.as_i64()),
@@ -361,14 +383,12 @@ pub fn decode_claims(token: &str) -> anyhow::Result<OidcClaims> {
 /// ```
 ///
 /// This means: look for `custom:trueflow_role` in the JWT claims → use as role.
-pub fn map_claims_to_rbac(
-    claims: &OidcClaims,
-    provider: &OidcProvider,
-) -> OidcAuthResult {
+pub fn map_claims_to_rbac(claims: &OidcClaims, provider: &OidcProvider) -> OidcAuthResult {
     let mapping = &provider.claim_mapping;
 
     // Extract role from mapped claim, fall back to provider default
-    let role = mapping.get("role")
+    let role = mapping
+        .get("role")
         .and_then(|v| v.as_str())
         .and_then(|claim_path| claims.raw.get(claim_path))
         .and_then(|v| v.as_str())
@@ -376,7 +396,8 @@ pub fn map_claims_to_rbac(
         .to_string();
 
     // Extract scopes from mapped claim, fall back to provider defaults
-    let scopes = mapping.get("scopes")
+    let scopes = mapping
+        .get("scopes")
         .and_then(|v| v.as_str())
         .and_then(|claim_path| claims.raw.get(claim_path))
         .and_then(|v| v.as_str())
@@ -506,8 +527,8 @@ mod tests {
         let claims = decode_claims(&token).unwrap();
         let result = map_claims_to_rbac(&claims, &provider);
 
-        assert_eq!(result.role, "viewer");  // default
-        assert_eq!(result.scopes, vec!["audit:read"]);  // default
+        assert_eq!(result.role, "viewer"); // default
+        assert_eq!(result.scopes, vec!["audit:read"]); // default
     }
 
     #[test]

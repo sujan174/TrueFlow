@@ -10,7 +10,6 @@
 //!   C — Policy + Redact Interaction (3 tests)
 //!   D — Guardrail False Positive Regression (2 tests)
 
-use std::collections::HashMap;
 use axum::http::{HeaderMap, Method, Uri};
 use gateway::middleware::fields::RequestContext;
 use gateway::middleware::guardrail::check_content;
@@ -19,6 +18,7 @@ use gateway::middleware::redact::apply_redact;
 use gateway::middleware::sanitize;
 use gateway::models::policy::*;
 use serde_json::json;
+use std::collections::HashMap;
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -86,7 +86,9 @@ fn test_policy_deny_plus_audit_sanitization() {
     let outcome = evaluate_pre_flight(&[policy], &ctx);
 
     // 1. Verify the deny fires
-    let denies: Vec<_> = outcome.actions.iter()
+    let denies: Vec<_> = outcome
+        .actions
+        .iter()
         .filter(|a| matches!(&a.action, Action::Deny { .. }))
         .collect();
     assert_eq!(denies.len(), 1, "Deny policy must fire");
@@ -128,7 +130,8 @@ fn test_redact_and_sanitize_no_double_redaction() {
     // Verify no double-redaction: should NOT have nested markers
     assert!(
         !sanitized_str.contains("[REDACTED_SSN[REDACTED"),
-        "Must not double-redact: '{}'", sanitized_str
+        "Must not double-redact: '{}'",
+        sanitized_str
     );
     // Original SSN must be gone
     assert!(
@@ -182,7 +185,9 @@ fn test_shadow_and_enforce_coexist() {
         "Shadow mode must produce shadow_violations"
     );
     // Enforce produces blocking actions
-    let denies: Vec<_> = outcome.actions.iter()
+    let denies: Vec<_> = outcome
+        .actions
+        .iter()
         .filter(|a| matches!(&a.action, Action::Deny { .. }))
         .collect();
     assert_eq!(denies.len(), 1, "Enforce policy must produce a deny action");
@@ -206,10 +211,16 @@ fn test_empty_body_policies_still_evaluate() {
     let policy = deny_policy("block-delete", "request.method", "eq", json!("DELETE"));
     let outcome = evaluate_pre_flight(&[policy], &ctx);
 
-    let denies: Vec<_> = outcome.actions.iter()
+    let denies: Vec<_> = outcome
+        .actions
+        .iter()
         .filter(|a| matches!(&a.action, Action::Deny { .. }))
         .collect();
-    assert_eq!(denies.len(), 1, "Policy evaluating method must work even with no body");
+    assert_eq!(
+        denies.len(),
+        1,
+        "Policy evaluating method must work even with no body"
+    );
 }
 
 /// STATE: Non-JSON body bytes passed to sanitize_response → must not panic.
@@ -245,7 +256,9 @@ fn test_null_body_fields_no_panic() {
     let outcome = evaluate_pre_flight(&[policy], &ctx);
 
     // Null model != "gpt-4o" → should NOT trigger deny
-    let denies: Vec<_> = outcome.actions.iter()
+    let denies: Vec<_> = outcome
+        .actions
+        .iter()
         .filter(|a| matches!(&a.action, Action::Deny { .. }))
         .collect();
     assert!(
@@ -261,7 +274,10 @@ fn test_null_body_fields_no_panic() {
 fn test_sanitize_empty_bytes_no_panic() {
     let result = sanitize::sanitize_response(b"", "application/json");
     assert!(result.redacted_types.is_empty(), "Empty input has no PII");
-    assert!(result.body.is_empty() || result.body == b"", "Empty input produces empty output");
+    assert!(
+        result.body.is_empty() || result.body == b"",
+        "Empty input produces empty output"
+    );
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -291,19 +307,27 @@ fn test_redact_both_direction_applies_to_request_and_response() {
         !req_content.contains("user@example.com"),
         "Email must be redacted from request body"
     );
-    assert!(!req_result.matched_types.is_empty(), "Request PII must be detected");
+    assert!(
+        !req_result.matched_types.is_empty(),
+        "Request PII must be detected"
+    );
 
     // Response body
     let mut response_body = json!({
         "choices": [{"message": {"content": "I found bob@corp.com in the records"}}]
     });
     let resp_result = apply_redact(&mut response_body, &action, false);
-    let resp_content = response_body["choices"][0]["message"]["content"].as_str().unwrap();
+    let resp_content = response_body["choices"][0]["message"]["content"]
+        .as_str()
+        .unwrap();
     assert!(
         !resp_content.contains("bob@corp.com"),
         "Email must be redacted from response body"
     );
-    assert!(!resp_result.matched_types.is_empty(), "Response PII must be detected");
+    assert!(
+        !resp_result.matched_types.is_empty(),
+        "Response PII must be detected"
+    );
 }
 
 /// STATE: Block mode sets should_block=true, which should prevent further processing.
@@ -322,7 +346,10 @@ fn test_block_mode_short_circuits_on_match() {
     });
     let result = apply_redact(&mut body, &action, true);
 
-    assert!(result.should_block, "Block mode must set should_block on PII match");
+    assert!(
+        result.should_block,
+        "Block mode must set should_block on PII match"
+    );
     // Both PII types should be matched
     assert!(
         result.matched_types.len() >= 2,
@@ -347,12 +374,14 @@ fn test_tokenize_mode_deserializes() {
         "direction": "request",
         "patterns": ["ssn"],
         "on_match": "tokenize"
-    })).unwrap();
+    }))
+    .unwrap();
 
     match &action {
         Action::Redact { on_match, .. } => {
             assert_eq!(
-                *on_match, RedactOnMatch::Tokenize,
+                *on_match,
+                RedactOnMatch::Tokenize,
                 "Tokenize mode must deserialize correctly"
             );
         }
@@ -439,10 +468,16 @@ fn test_guardrail_empty_messages_array() {
     let body_empty = json!({"messages": []});
     let result = check_content(&body_empty, &action);
     assert!(!result.blocked, "Empty messages must not be blocked");
-    assert!(result.matched_patterns.is_empty(), "No patterns should match empty input");
+    assert!(
+        result.matched_patterns.is_empty(),
+        "No patterns should match empty input"
+    );
 
     // No messages field at all
     let body_missing = json!({"model": "gpt-4o"});
     let result2 = check_content(&body_missing, &action);
-    assert!(!result2.blocked, "Missing messages field must not be blocked");
+    assert!(
+        !result2.blocked,
+        "Missing messages field must not be blocked"
+    );
 }

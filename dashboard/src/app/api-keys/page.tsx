@@ -117,32 +117,33 @@ export default function ApiKeysPage() {
                     description="Create an API key to access the Management API programmatically."
                     actionLabel="Create your first key"
                     onAction={() => setCreateOpen(true)}
+                    className="bg-black border-white/10"
                 />
             ) : (
                 <div className="grid gap-3 animate-fade-in duration-500">
-                    <Card>
+                    <div className="bg-black border border-white/10 rounded-lg overflow-hidden">
                         <DataTable
                             columns={columns}
                             data={keys}
                             searchKey="name"
                             meta={{ onRevoke: setRevokeKeyData }}
                         />
-                    </Card>
+                    </div>
                 </div>
             )}
 
             {/* Revoke Dialog */}
             <Dialog open={!!revokeKeyData} onOpenChange={(open) => !open && setRevokeKeyData(null)}>
-                <DialogContent>
+                <DialogContent className="bg-zinc-950 border-rose-500/20 text-white">
                     <DialogHeader>
-                        <DialogTitle>Revoke API Key</DialogTitle>
-                        <DialogDescription>
-                            Are you sure you want to revoke <span className="font-mono font-medium text-foreground">{revokeKeyData?.name}</span>?
+                        <DialogTitle className="text-rose-500 font-medium">Revoke API Key</DialogTitle>
+                        <DialogDescription className="pt-1 text-zinc-400 text-[13px]">
+                            Are you sure you want to revoke <span className="font-mono font-medium text-white">{revokeKeyData?.name}</span>?
                             This action cannot be undone and any applications using this key will immediately lose access.
                         </DialogDescription>
                     </DialogHeader>
                     <DialogFooter>
-                        <Button variant="outline" onClick={() => setRevokeKeyData(null)}>Cancel</Button>
+                        <Button variant="ghost" onClick={() => setRevokeKeyData(null)} className="text-zinc-400 hover:text-white hover:bg-white/5">Cancel</Button>
                         <Button variant="destructive" onClick={handleRevoke}>
                             Revoke Key
                         </Button>
@@ -191,17 +192,17 @@ function CreateKeyForm({ onSuccess, createdKey, onClose }: { onSuccess: (k: Crea
         return (
             <div className="space-y-4">
                 <DialogHeader>
-                    <DialogTitle>API Key Created</DialogTitle>
-                    <DialogDescription>
+                    <DialogTitle className="text-white">API Key Created</DialogTitle>
+                    <DialogDescription className="text-zinc-500">
                         Please copy your API key now. It will not be shown again.
                     </DialogDescription>
                 </DialogHeader>
-                <div className="p-4 bg-muted rounded-md border break-all font-mono text-sm relative group">
+                <div className="p-4 bg-black border border-white/10 rounded-md break-all font-mono text-sm relative group text-zinc-300">
                     {createdKey.key}
                     <Button
                         variant="ghost"
                         size="icon"
-                        className="absolute top-2 right-2 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity bg-background/50 hover:bg-background"
+                        className="absolute top-2 right-2 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-white/10 text-zinc-400 hover:text-white"
                         onClick={() => {
                             navigator.clipboard.writeText(createdKey.key);
                             toast.success("Copied to clipboard");
@@ -210,8 +211,8 @@ function CreateKeyForm({ onSuccess, createdKey, onClose }: { onSuccess: (k: Crea
                         <Copy className="h-3 w-3" />
                     </Button>
                 </div>
-                <DialogFooter>
-                    <Button onClick={onClose}>Done</Button>
+                <DialogFooter className="border-t border-white/10 pt-4">
+                    <Button onClick={onClose} className="bg-white text-black hover:bg-zinc-200">Done</Button>
                 </DialogFooter>
             </div>
         );
@@ -220,27 +221,27 @@ function CreateKeyForm({ onSuccess, createdKey, onClose }: { onSuccess: (k: Crea
     return (
         <form onSubmit={handleSubmit} className="space-y-4">
             <DialogHeader>
-                <DialogTitle>Create API Key</DialogTitle>
-                <DialogDescription>Created a scoped API key for management access.</DialogDescription>
+                <DialogTitle className="text-white">Create API Key</DialogTitle>
+                <DialogDescription className="text-zinc-500">Create a scoped API key for management access.</DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-2">
                 <div className="space-y-2">
-                    <Label htmlFor="name">Name</Label>
-                    <Input id="name" placeholder="e.g. CI/CD Pipeline" value={name} onChange={e => setName(e.target.value)} required />
+                    <Label htmlFor="name" className="text-zinc-400 text-xs uppercase tracking-widest">Name</Label>
+                    <Input id="name" placeholder="e.g. CI/CD Pipeline" value={name} onChange={e => setName(e.target.value)} className="bg-black border-white/10 text-white placeholder:text-zinc-600 focus-visible:ring-white/20" required />
                 </div>
                 <div className="space-y-2">
-                    <Label htmlFor="role">Role</Label>
+                    <Label htmlFor="role" className="text-zinc-400 text-xs uppercase tracking-widest">Role</Label>
                     <select
                         id="role"
                         value={role}
                         onChange={(e) => setRole(e.target.value)}
-                        className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1"
+                        className="flex h-10 w-full items-center justify-between rounded-md border border-white/10 bg-black px-3 py-2 text-sm ring-offset-background placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-white/20 text-white disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1"
                     >
                         <option value="readonly">Read Only</option>
                         <option value="member">Member</option>
                         <option value="admin">Admin</option>
                     </select>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-[10px] text-zinc-500">
                         {role === "admin" ? "Admins have full access." :
                             role === "readonly" ? "Read-only access to all resources." :
                                 "Can manage resources but not keys/users."}
@@ -248,21 +249,21 @@ function CreateKeyForm({ onSuccess, createdKey, onClose }: { onSuccess: (k: Crea
                 </div>
                 {role !== "admin" && role !== "readonly" && (
                     <div className="space-y-2">
-                        <Label>Scopes</Label>
-                        <div className="grid grid-cols-2 gap-2 text-sm">
+                        <Label className="text-zinc-400 text-xs uppercase tracking-widest">Scopes</Label>
+                        <div className="grid grid-cols-2 gap-2 text-sm bg-black border border-white/10 p-3 rounded-md">
                             {availableScopes.map(scope => (
                                 <div key={scope} className="flex items-center space-x-2">
                                     <input
                                         type="checkbox"
                                         id={scope}
-                                        className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                                        className="h-4 w-4 rounded border-white/20 bg-black text-white focus:ring-white/20"
                                         checked={scopes.includes(scope)}
                                         onChange={(e) => {
                                             if (e.target.checked) setScopes([...scopes, scope]);
                                             else setScopes(scopes.filter(s => s !== scope));
                                         }}
                                     />
-                                    <label htmlFor={scope} className="text-sm leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                                    <label htmlFor={scope} className="text-[11px] text-zinc-400 leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
                                         {scope}
                                     </label>
                                 </div>
@@ -271,9 +272,9 @@ function CreateKeyForm({ onSuccess, createdKey, onClose }: { onSuccess: (k: Crea
                     </div>
                 )}
             </div>
-            <DialogFooter>
-                <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
-                <Button type="submit" disabled={isSubmitting || !name}>
+            <DialogFooter className="border-t border-white/10 pt-4">
+                <Button type="button" variant="ghost" className="text-zinc-400 hover:text-white hover:bg-white/5" onClick={onClose}>Cancel</Button>
+                <Button type="submit" disabled={isSubmitting || !name} className="bg-white text-black hover:bg-zinc-200">
                     {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                     Create Key
                 </Button>

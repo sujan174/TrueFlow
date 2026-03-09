@@ -80,7 +80,7 @@ async function proxyHandler(req: NextRequest, { params }: { params: Promise<{ pa
             method: req.method,
             headers,
             body: req.body,
-            // @ts-ignore: duplex is needed for streaming bodies in some node versions/fetch implementations
+            // @ts-expect-error: duplex is needed for streaming bodies in some node versions/fetch implementations
             duplex: "half",
         });
 

@@ -1,6 +1,6 @@
+use super::PgStore;
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
-use super::PgStore;
 
 impl PgStore {
     pub async fn create_approval_request(
@@ -45,13 +45,18 @@ impl PgStore {
         }
     }
 
-    pub async fn get_approval_status(&self, request_id: Uuid, project_id: Uuid) -> anyhow::Result<String> {
-        let status: Option<String> =
-            sqlx::query_scalar("SELECT status FROM approval_requests WHERE id = $1 AND project_id = $2")
-                .bind(request_id)
-                .bind(project_id)
-                .fetch_optional(&self.pool)
-                .await?;
+    pub async fn get_approval_status(
+        &self,
+        request_id: Uuid,
+        project_id: Uuid,
+    ) -> anyhow::Result<String> {
+        let status: Option<String> = sqlx::query_scalar(
+            "SELECT status FROM approval_requests WHERE id = $1 AND project_id = $2",
+        )
+        .bind(request_id)
+        .bind(project_id)
+        .fetch_optional(&self.pool)
+        .await?;
         Ok(status.unwrap_or_else(|| "expired".to_string()))
     }
 
@@ -61,7 +66,7 @@ impl PgStore {
         limit: i64,
         offset: i64,
     ) -> anyhow::Result<Vec<crate::models::approval::ApprovalRequest>> {
-        let limit = limit.min(1000).max(1); // Cap at 1000, minimum 1
+        let limit = limit.clamp(1, 1000); // Cap at 1000, minimum 1
         let rows = sqlx::query_as::<_, crate::models::approval::ApprovalRequest>(
             "SELECT * FROM approval_requests WHERE project_id = $1 AND status = 'pending' ORDER BY created_at ASC LIMIT $2 OFFSET $3"
         )
@@ -131,7 +136,7 @@ impl PgStore {
         &self,
         id: Uuid,
         project_id: Uuid,
-        decision: &str,    // "approved" | "rejected"
+        decision: &str, // "approved" | "rejected"
         reviewer_id: Option<Uuid>,
     ) -> anyhow::Result<bool> {
         let result = sqlx::query(

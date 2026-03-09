@@ -1,4 +1,4 @@
-use crate::api::handlers::{PaginationParams, verify_project_ownership};
+use crate::api::handlers::{verify_project_ownership, PaginationParams};
 use crate::api::AuthContext;
 use crate::AppState;
 use axum::{
@@ -20,7 +20,8 @@ pub async fn get_request_volume(
     Extension(auth): Extension<AuthContext>,
     Query(params): Query<PaginationParams>,
 ) -> Result<Json<Vec<crate::models::analytics::VolumeStat>>, StatusCode> {
-    auth.require_scope("analytics:read").map_err(|_| StatusCode::FORBIDDEN)?;
+    auth.require_scope("analytics:read")
+        .map_err(|_| StatusCode::FORBIDDEN)?;
     let project_id = params.project_id.unwrap_or_else(default_project_id);
     verify_project_ownership(&state, auth.org_id, project_id).await?;
 
@@ -42,7 +43,8 @@ pub async fn get_status_distribution(
     Extension(auth): Extension<AuthContext>,
     Query(params): Query<PaginationParams>,
 ) -> Result<Json<Vec<crate::models::analytics::StatusStat>>, StatusCode> {
-    auth.require_scope("analytics:read").map_err(|_| StatusCode::FORBIDDEN)?;
+    auth.require_scope("analytics:read")
+        .map_err(|_| StatusCode::FORBIDDEN)?;
     let project_id = params.project_id.unwrap_or_else(default_project_id);
     verify_project_ownership(&state, auth.org_id, project_id).await?;
 
@@ -64,7 +66,8 @@ pub async fn get_latency_percentiles(
     Extension(auth): Extension<AuthContext>,
     Query(params): Query<PaginationParams>,
 ) -> Result<Json<crate::models::analytics::LatencyStat>, StatusCode> {
-    auth.require_scope("analytics:read").map_err(|_| StatusCode::FORBIDDEN)?;
+    auth.require_scope("analytics:read")
+        .map_err(|_| StatusCode::FORBIDDEN)?;
     let project_id = params.project_id.unwrap_or_else(default_project_id);
     verify_project_ownership(&state, auth.org_id, project_id).await?;
 

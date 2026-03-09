@@ -1,6 +1,6 @@
-use uuid::Uuid;
-use super::PgStore;
 use super::types::SessionEntity;
+use super::PgStore;
+use uuid::Uuid;
 
 impl PgStore {
     /// Upsert a session — create on first request, update `updated_at` on subsequent.
@@ -44,7 +44,7 @@ impl PgStore {
     ) -> anyhow::Result<Option<SessionEntity>> {
         // Get current status first
         let current = sqlx::query_scalar::<_, Option<String>>(
-            "SELECT status FROM sessions WHERE session_id = $1 AND project_id = $2"
+            "SELECT status FROM sessions WHERE session_id = $1 AND project_id = $2",
         )
         .bind(session_id)
         .bind(project_id)
@@ -54,18 +54,18 @@ impl PgStore {
         let current_status = match current {
             Some(Some(s)) => s,
             Some(None) => return Ok(None), // Session not found
-            None => return Ok(None), // Query failed
+            None => return Ok(None),       // Query failed
         };
 
         // Validate transition
-        let valid = match (current_status.as_str(), new_status) {
-            ("active", "paused") => true,
-            ("active", "completed") => true,
-            ("active", "expired") => true,
-            ("paused", "active") => true,
-            ("paused", "expired") => true,
-            _ => false,
-        };
+        let valid = matches!(
+            (current_status.as_str(), new_status),
+            ("active", "paused")
+                | ("active", "completed")
+                | ("active", "expired")
+                | ("paused", "active")
+                | ("paused", "expired")
+        );
 
         if !valid {
             tracing::warn!(

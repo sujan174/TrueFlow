@@ -25,7 +25,10 @@ pub async fn expire_orphaned_sessions(pool: &PgPool) -> anyhow::Result<u64> {
 
     let count = result.rows_affected();
     if count > 0 {
-        info!(count, "session_cleanup: marked orphaned sessions as expired");
+        info!(
+            count,
+            "session_cleanup: marked orphaned sessions as expired"
+        );
     }
 
     Ok(count)

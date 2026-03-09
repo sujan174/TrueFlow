@@ -45,19 +45,19 @@ function StatCard({
     loading?: boolean
 }) {
     return (
-        <Card className="glass-card hover-lift">
+        <Card className="bg-black border-white/10 hover:border-white/20 transition-colors">
             <CardContent className="p-4 flex items-center gap-4">
-                <div className={cn("p-2.5 rounded-md transition-colors", color)}>
-                    <Icon className="h-5 w-5" />
+                <div className={cn("flex h-10 w-10 items-center justify-center rounded-lg border transition-colors", color)}>
+                    <Icon className="h-4 w-4" />
                 </div>
                 <div className="min-w-0 flex-1">
-                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">{label}</p>
+                    <p className="text-[11px] font-medium text-zinc-500 uppercase tracking-widest mb-1">{label}</p>
                     {loading ? (
-                        <div className="h-7 w-24 bg-muted/50 rounded shimmer my-0.5" />
+                        <div className="h-7 w-24 bg-white/5 rounded my-0.5 animate-pulse" />
                     ) : (
-                        <p className="text-xl font-bold tabular-nums tracking-tight">{value}</p>
+                        <p className="text-xl font-semibold tabular-nums tracking-tight text-white">{value}</p>
                     )}
-                    {sub && <p className="text-[10px] text-muted-foreground truncate">{sub}</p>}
+                    {sub && <p className="text-[10px] text-zinc-500 truncate">{sub}</p>}
                 </div>
             </CardContent>
         </Card>
@@ -99,21 +99,31 @@ export default function AuditPage() {
 
     // Live Stream Effect
     useEffect(() => {
+        let active = true;
         if (!isLive) return;
 
         // Reset to historical data when starting live mode to avoid empty flash
-        setLiveLogs(historicalLogs.slice(0, 50));
+        if (active) {
+            setTimeout(() => {
+                if (active) setLiveLogs([...historicalLogs].slice(0, 50));
+            }, 0);
+        }
 
         const cleanup = streamAuditLogs((log) => {
             // Check filter
             if (selectedToken !== "all" && log.token_id !== selectedToken) return;
 
-            setLiveLogs(prev => {
-                const newLogs = [log, ...prev];
-                return newLogs.slice(0, 500); // Keep buffer capped
-            });
+            if (active) {
+                setLiveLogs(prev => {
+                    const newLogs = [log, ...prev];
+                    return newLogs.slice(0, 500); // Keep buffer capped
+                });
+            }
         });
-        return cleanup;
+        return () => {
+            active = false;
+            cleanup();
+        };
     }, [isLive, selectedToken, historicalLogs]);
 
     const handleRowClick = useCallback((log: AuditLog) => {
@@ -137,7 +147,11 @@ export default function AuditPage() {
     return (
         <div className="space-y-4">
             {/* Controls */}
-            <div className="flex items-center justify-end animate-fade-in mb-2">
+            <div className="flex items-center justify-between animate-fade-in mb-2">
+                <div>
+                    <h1 className="text-lg font-semibold tracking-tight text-white">Audit Logs</h1>
+                    <p className="text-xs text-zinc-500 mt-0.5">Real-time gateway traffic analysis and debugging.</p>
+                </div>
                 {/* Controls */}
                 <div className="flex items-center gap-3">
                     {isLive && (
@@ -150,13 +164,13 @@ export default function AuditPage() {
                         variant={isLive ? "destructive" : "outline"}
                         size="sm"
                         onClick={() => setIsLive(!isLive)}
-                        className={cn("gap-2 min-w-[100px] transition-all")}
+                        className={cn("gap-2 min-w-[100px] transition-all", !isLive && "bg-black border-white/10 text-zinc-400 hover:text-white hover:bg-white/5")}
                     >
                         {isLive ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
                         {isLive ? "Pause" : "Live View"}
                     </Button>
 
-                    <div className="h-6 w-px bg-border/60" />
+                    <div className="h-6 w-px bg-white/10" />
 
                     {/* Filter */}
                     <div className="flex items-center gap-2">
@@ -165,23 +179,23 @@ export default function AuditPage() {
                                 value={selectedToken}
                                 onValueChange={(val) => handleFilterChange(val)}
                             >
-                                <SelectTrigger className="pl-9">
+                                <SelectTrigger className="pl-9 bg-black border-white/10 text-zinc-300">
                                     <SelectValue />
                                 </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="all">All Tokens</SelectItem>
+                                <SelectContent className="bg-zinc-950 border-white/10 text-zinc-300">
+                                    <SelectItem value="all" className="focus:bg-white/5 focus:text-white">All Tokens</SelectItem>
                                     {tokens.map(t => (
-                                        <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                                        <SelectItem key={t.id} value={t.id} className="focus:bg-white/5 focus:text-white">{t.name}</SelectItem>
                                     ))}
                                 </SelectContent>
                             </Select>
-                            <Filter className="absolute left-3 top-2.5 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+                            <Filter className="absolute left-3 top-2.5 h-3.5 w-3.5 text-zinc-500 pointer-events-none" />
                         </div>
                         {selectedToken !== "all" && (
                             <Button
                                 variant="ghost"
                                 size="icon"
-                                className="h-9 w-9"
+                                className="h-9 w-9 text-zinc-500 hover:text-white hover:bg-white/5"
                                 onClick={() => handleFilterChange("all")}
                                 title="Clear filter"
                             >
@@ -190,14 +204,14 @@ export default function AuditPage() {
                         )}
                     </div>
 
-                    <div className="h-6 w-px bg-border/60" />
+                    <div className="h-6 w-px bg-white/10" />
 
                     <Button
                         variant="outline"
                         size="sm"
                         onClick={() => refreshLogs()}
                         disabled={isLoading || isLive}
-                        className="gap-2"
+                        className="gap-2 bg-black border-white/10 text-zinc-400 hover:text-white hover:bg-white/5"
                     >
                         <RefreshCw className={cn("h-3.5 w-3.5", isLoading && "animate-spin")} />
                         Refresh
@@ -211,28 +225,28 @@ export default function AuditPage() {
                     icon={Activity}
                     label="Visible Requests"
                     value={logs.length.toLocaleString()}
-                    color="bg-blue-500/10 text-blue-500"
+                    color="bg-blue-500/10 text-blue-400 border-blue-500/20 group-hover:bg-blue-500/20"
                     loading={isLoading && !isLive}
                 />
                 <StatCard
                     icon={Clock}
                     label="Avg Latency"
                     value={`${avgLatency}ms`}
-                    color="bg-emerald-500/10 text-emerald-500"
+                    color="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 group-hover:bg-emerald-500/20"
                     loading={isLoading && !isLive}
                 />
                 <StatCard
                     icon={DollarSign}
                     label="Total Cost"
                     value={`$${totalCost.toFixed(4)}`}
-                    color="bg-amber-500/10 text-amber-500"
+                    color="bg-amber-500/10 text-amber-400 border-amber-500/20 group-hover:bg-amber-500/20"
                     loading={isLoading && !isLive}
                 />
                 <StatCard
                     icon={Cpu}
                     label="Tokens Processed"
                     value={totalTokens.toLocaleString()}
-                    color="bg-violet-500/10 text-violet-500"
+                    color="bg-violet-500/10 text-violet-400 border-violet-500/20 group-hover:bg-violet-500/20"
                     loading={isLoading && !isLive}
                 />
             </div>
@@ -248,9 +262,10 @@ export default function AuditPage() {
                         description={selectedToken !== "all" ? "No logs match the current filter." : "Send your first request to the gateway to see it here."}
                         actionLabel={selectedToken !== "all" ? "Clear Filter" : undefined}
                         onAction={selectedToken !== "all" ? () => handleFilterChange("all") : undefined}
+                        className="bg-black/50"
                     />
                 ) : (
-                    <div className="rounded-md border border-border/60 bg-card/50 backdrop-blur-sm overflow-hidden shadow-sm">
+                    <div className="rounded-md border border-white/10 bg-black overflow-hidden shadow-sm">
                         <DataTable
                             columns={columns}
                             data={logs}

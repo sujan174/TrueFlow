@@ -48,7 +48,10 @@ mod cc_regex_tests {
         let input = "ID 1 2 3 4 5 6 7 8 9 0 1 2 3 end";
         let result = sanitize_stream_content(input);
         let output = String::from_utf8(result.body).unwrap();
-        assert_eq!(output, input, "Scattered single digits should NOT be redacted as CC");
+        assert_eq!(
+            output, input,
+            "Scattered single digits should NOT be redacted as CC"
+        );
     }
 }
 

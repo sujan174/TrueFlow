@@ -40,7 +40,7 @@ pub(super) fn to_f64(v: &Value) -> Option<f64> {
             } else {
                 None
             }
-        },
+        }
         Value::String(s) => {
             let val: f64 = s.parse().ok()?;
             // Validate: reject NaN, Infinity, and extremely large values
@@ -49,7 +49,7 @@ pub(super) fn to_f64(v: &Value) -> Option<f64> {
             } else {
                 None
             }
-        },
+        }
         _ => None,
     }
 }
@@ -234,4 +234,3 @@ pub(super) fn value_as_str(v: &Value) -> Option<String> {
         _ => None,
     }
 }
-

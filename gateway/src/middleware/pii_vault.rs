@@ -47,7 +47,6 @@ pub fn generate_token(project_id: Uuid, pii_type: &str, plaintext: &str) -> Stri
     // birthday collisions. At 64-bit, collision probability is non-negligible at ~300M
     // tokens/project/type. At 128-bit, the birthday bound is ~10^18 tokens.
     format!("tok_pii_{}_{}", pii_type, &hash[..32])
-
 }
 
 /// A PII match found during JSON tree walking.
@@ -89,9 +88,23 @@ pub async fn tokenize_in_value(
     let mut successful_tokens: Vec<(String, String, String)> = Vec::new(); // (matched_value, token, pattern_name)
 
     for m in &pii_matches {
-        match store_token(pool, vault, &m.token, &m.pattern_name, &m.matched_value, project_id, audit_log_id).await {
+        match store_token(
+            pool,
+            vault,
+            &m.token,
+            &m.pattern_name,
+            &m.matched_value,
+            project_id,
+            audit_log_id,
+        )
+        .await
+        {
             Ok(()) => {
-                successful_tokens.push((m.matched_value.clone(), m.token.clone(), m.pattern_name.clone()));
+                successful_tokens.push((
+                    m.matched_value.clone(),
+                    m.token.clone(),
+                    m.pattern_name.clone(),
+                ));
             }
             Err(e) => {
                 tracing::warn!(
@@ -258,24 +271,28 @@ pub async fn rehydrate_token(
     let envelope: serde_json::Value = serde_json::from_slice(&envelope_bytes)?;
 
     let encrypted_dek = hex::decode(
-        envelope["dek"].as_str().ok_or_else(|| anyhow::anyhow!("missing dek"))?
+        envelope["dek"]
+            .as_str()
+            .ok_or_else(|| anyhow::anyhow!("missing dek"))?,
     )?;
     let dek_nonce = hex::decode(
-        envelope["dek_nonce"].as_str().ok_or_else(|| anyhow::anyhow!("missing dek_nonce"))?
+        envelope["dek_nonce"]
+            .as_str()
+            .ok_or_else(|| anyhow::anyhow!("missing dek_nonce"))?,
     )?;
     let encrypted_secret = hex::decode(
-        envelope["secret"].as_str().ok_or_else(|| anyhow::anyhow!("missing secret"))?
+        envelope["secret"]
+            .as_str()
+            .ok_or_else(|| anyhow::anyhow!("missing secret"))?,
     )?;
     let secret_nonce = hex::decode(
-        envelope["secret_nonce"].as_str().ok_or_else(|| anyhow::anyhow!("missing secret_nonce"))?
+        envelope["secret_nonce"]
+            .as_str()
+            .ok_or_else(|| anyhow::anyhow!("missing secret_nonce"))?,
     )?;
 
-    let plaintext = vault.decrypt_string(
-        &encrypted_dek,
-        &dek_nonce,
-        &encrypted_secret,
-        &secret_nonce,
-    )?;
+    let plaintext =
+        vault.decrypt_string(&encrypted_dek, &dek_nonce, &encrypted_secret, &secret_nonce)?;
 
     Ok(Some(plaintext))
 }
@@ -336,7 +353,10 @@ mod tests {
         let p2 = Uuid::parse_str("00000000-0000-0000-0000-000000000002").unwrap();
         let t1 = generate_token(p1, "ssn", "123-45-6789");
         let t2 = generate_token(p2, "ssn", "123-45-6789");
-        assert_ne!(t1, t2, "Same value in different projects must produce different tokens");
+        assert_ne!(
+            t1, t2,
+            "Same value in different projects must produce different tokens"
+        );
     }
 
     #[test]
@@ -361,16 +381,23 @@ mod tests {
         });
 
         let email_re = regex::Regex::new(r"(?i)[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}").unwrap();
-        let patterns = vec![PiiPattern { name: "email".to_string(), regex: email_re }];
+        let patterns = vec![PiiPattern {
+            name: "email".to_string(),
+            regex: email_re,
+        }];
         let project_id = Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap();
 
         let mut matches = Vec::new();
         collect_pii_matches(&v, &patterns, project_id, "", &mut matches);
 
         assert_eq!(matches.len(), 2);
-        assert!(matches.iter().any(|m| m.matched_value == "alice@example.com"));
+        assert!(matches
+            .iter()
+            .any(|m| m.matched_value == "alice@example.com"));
         assert!(matches.iter().any(|m| m.matched_value == "bob@test.org"));
-        assert!(matches.iter().all(|m| m.token.starts_with("tok_pii_email_")));
+        assert!(matches
+            .iter()
+            .all(|m| m.token.starts_with("tok_pii_email_")));
     }
 
     #[test]

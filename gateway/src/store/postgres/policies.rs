@@ -1,6 +1,6 @@
-use uuid::Uuid;
-use super::PgStore;
 use super::types::{PolicyRow, PolicyVersionRow};
+use super::PgStore;
+use uuid::Uuid;
 
 impl PgStore {
     pub async fn get_policies_for_token(
@@ -35,7 +35,11 @@ impl PgStore {
                 match serde_json::from_value(r) {
                     Ok(c) => Some(c),
                     Err(e) => {
-                        tracing::error!("Failed to deserialize retry config for policy {}: {}", row.id, e);
+                        tracing::error!(
+                            "Failed to deserialize retry config for policy {}: {}",
+                            row.id,
+                            e
+                        );
                         None
                     }
                 }
@@ -55,8 +59,13 @@ impl PgStore {
         Ok(policies)
     }
 
-    pub async fn list_policies(&self, project_id: Uuid, limit: i64, offset: i64) -> anyhow::Result<Vec<PolicyRow>> {
-        let limit = limit.min(1000).max(1); // Cap at 1000, minimum 1
+    pub async fn list_policies(
+        &self,
+        project_id: Uuid,
+        limit: i64,
+        offset: i64,
+    ) -> anyhow::Result<Vec<PolicyRow>> {
+        let limit = limit.clamp(1, 1000); // Cap at 1000, minimum 1
         let rows = sqlx::query_as::<_, PolicyRow>(
             "SELECT id, project_id, name, mode, phase, rules, retry, is_active, created_at FROM policies WHERE project_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3"
         )

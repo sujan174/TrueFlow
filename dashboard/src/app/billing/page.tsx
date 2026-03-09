@@ -163,7 +163,7 @@ export default function BillingPage() {
                                     />
                                     <Tooltip
                                         content={<CustomTooltip
-                                            valueFormatter={(v: any) => typeof v === 'number' ? `$${v.toFixed(4)}` : v}
+                                            valueFormatter={(v: number | string) => typeof v === 'number' ? `$${v.toFixed(4)}` : v}
                                         />}
                                         cursor={{ stroke: 'var(--border)', strokeWidth: 1, strokeDasharray: '4 4' }}
                                     />

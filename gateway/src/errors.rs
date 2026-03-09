@@ -51,7 +51,10 @@ pub enum AppError {
     PayloadTooLarge,
 
     #[error("content blocked: {reason}")]
-    ContentBlocked { reason: String, details: Option<Value> },
+    ContentBlocked {
+        reason: String,
+        details: Option<Value>,
+    },
 
     #[error("all upstreams exhausted")]
     AllUpstreamsExhausted { details: Option<Value> },
@@ -252,10 +255,9 @@ impl AppError {
 
         // Retry-After header for rate limit responses
         if matches!(self, AppError::RateLimitExceeded) {
-            response.headers_mut().insert(
-                "retry-after",
-                axum::http::HeaderValue::from_static("60"),
-            );
+            response
+                .headers_mut()
+                .insert("retry-after", axum::http::HeaderValue::from_static("60"));
         }
 
         response
@@ -265,6 +267,8 @@ impl AppError {
 /// Convenience: convert old-style `SpendCapReached` (no message) usages
 impl From<&str> for AppError {
     fn from(msg: &str) -> Self {
-        AppError::SpendCapReached { message: msg.to_string() }
+        AppError::SpendCapReached {
+            message: msg.to_string(),
+        }
     }
 }

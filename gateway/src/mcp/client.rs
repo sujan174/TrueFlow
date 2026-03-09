@@ -113,84 +113,85 @@ impl McpClient {
         method: &str,
         params: Option<Value>,
         retry_on_401: bool,
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Value, String>> + Send + '_>> {
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Value, String>> + Send + '_>>
+    {
         let method = method.to_string();
         Box::pin(async move {
-        let req = JsonRpcRequest::new(self.next_id(), &method, params.clone());
+            let req = JsonRpcRequest::new(self.next_id(), &method, params.clone());
 
-        let mut http_req = self
-            .http
-            .post(&self.endpoint)
-            .header("Content-Type", "application/json")
-            .header("Accept", "application/json, text/event-stream");
+            let mut http_req = self
+                .http
+                .post(&self.endpoint)
+                .header("Content-Type", "application/json")
+                .header("Accept", "application/json, text/event-stream");
 
-        // Attach auth header
-        if let Some(auth_header) = self.resolve_auth_header().await? {
-            http_req = http_req.header("Authorization", auth_header);
-        }
-
-        // Attach session ID if we have one
-        if let Ok(guard) = self.session_id.lock() {
-            if let Some(sid) = guard.as_ref() {
-                http_req = http_req.header("Mcp-Session-Id", sid.clone());
+            // Attach auth header
+            if let Some(auth_header) = self.resolve_auth_header().await? {
+                http_req = http_req.header("Authorization", auth_header);
             }
-        }
 
-        let resp = http_req
-            .json(&req)
-            .send()
-            .await
-            .map_err(|e| format!("MCP request failed: {}", e))?;
-
-        // Capture session ID from response headers
-        if let Some(sid) = resp.headers().get("mcp-session-id") {
-            if let Ok(sid_str) = sid.to_str() {
-                if let Ok(mut guard) = self.session_id.lock() {
-                    *guard = Some(sid_str.to_string());
+            // Attach session ID if we have one
+            if let Ok(guard) = self.session_id.lock() {
+                if let Some(sid) = guard.as_ref() {
+                    http_req = http_req.header("Mcp-Session-Id", sid.clone());
                 }
             }
-        }
 
-        let status = resp.status();
+            let resp = http_req
+                .json(&req)
+                .send()
+                .await
+                .map_err(|e| format!("MCP request failed: {}", e))?;
 
-        // Handle 401: refresh OAuth token and retry once
-        if status == reqwest::StatusCode::UNAUTHORIZED && retry_on_401 {
-            if let McpAuth::OAuth { manager, server_id } = &self.auth {
-                tracing::info!(
-                    server_id = %server_id,
-                    "MCP server returned 401, attempting token refresh and retry"
-                );
-                // Force refresh by getting a new token
-                let _ = manager.get_valid_token(server_id).await;
-                return self.rpc_inner(&method, params, false).await;
+            // Capture session ID from response headers
+            if let Some(sid) = resp.headers().get("mcp-session-id") {
+                if let Ok(sid_str) = sid.to_str() {
+                    if let Ok(mut guard) = self.session_id.lock() {
+                        *guard = Some(sid_str.to_string());
+                    }
+                }
             }
-        }
 
-        if !status.is_success() {
-            let body = resp.text().await.unwrap_or_default();
-            return Err(format!("MCP server returned {}: {}", status, body));
-        }
+            let status = resp.status();
 
-        // Parse JSON-RPC response
-        let body = resp
-            .text()
-            .await
-            .map_err(|e| format!("Failed to read MCP response: {}", e))?;
-        let rpc_resp: JsonRpcResponse = serde_json::from_str(&body).map_err(|e| {
-            format!(
-                "Invalid JSON-RPC response: {} (body: {})",
-                e,
-                &body[..body.len().min(200)]
-            )
-        })?;
+            // Handle 401: refresh OAuth token and retry once
+            if status == reqwest::StatusCode::UNAUTHORIZED && retry_on_401 {
+                if let McpAuth::OAuth { manager, server_id } = &self.auth {
+                    tracing::info!(
+                        server_id = %server_id,
+                        "MCP server returned 401, attempting token refresh and retry"
+                    );
+                    // Force refresh by getting a new token
+                    let _ = manager.get_valid_token(server_id).await;
+                    return self.rpc_inner(&method, params, false).await;
+                }
+            }
 
-        if let Some(err) = rpc_resp.error {
-            return Err(format!("{}", err));
-        }
+            if !status.is_success() {
+                let body = resp.text().await.unwrap_or_default();
+                return Err(format!("MCP server returned {}: {}", status, body));
+            }
 
-        rpc_resp
-            .result
-            .ok_or_else(|| "MCP response missing both result and error".to_string())
+            // Parse JSON-RPC response
+            let body = resp
+                .text()
+                .await
+                .map_err(|e| format!("Failed to read MCP response: {}", e))?;
+            let rpc_resp: JsonRpcResponse = serde_json::from_str(&body).map_err(|e| {
+                format!(
+                    "Invalid JSON-RPC response: {} (body: {})",
+                    e,
+                    &body[..body.len().min(200)]
+                )
+            })?;
+
+            if let Some(err) = rpc_resp.error {
+                return Err(format!("{}", err));
+            }
+
+            rpc_resp
+                .result
+                .ok_or_else(|| "MCP response missing both result and error".to_string())
         })
     }
 
@@ -324,11 +325,17 @@ mod tests {
     #[test]
     fn test_auth_debug_format() {
         assert_eq!(format!("{:?}", McpAuth::None), "McpAuth::None");
-        assert_eq!(format!("{:?}", McpAuth::Bearer("secret".into())), "McpAuth::Bearer(****)");
+        assert_eq!(
+            format!("{:?}", McpAuth::Bearer("secret".into())),
+            "McpAuth::Bearer(****)"
+        );
 
         let mgr = Arc::new(OAuthTokenManager::new());
         let id = Uuid::nil();
-        let oauth = McpAuth::OAuth { manager: mgr, server_id: id };
+        let oauth = McpAuth::OAuth {
+            manager: mgr,
+            server_id: id,
+        };
         assert!(format!("{:?}", oauth).contains("McpAuth::OAuth"));
     }
 

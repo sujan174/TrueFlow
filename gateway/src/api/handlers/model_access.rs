@@ -3,8 +3,7 @@ use std::sync::Arc;
 use axum::{
     extract::{Path, State},
     http::StatusCode,
-    Extension,
-    Json,
+    Extension, Json,
 };
 
 use crate::api::AuthContext;
@@ -14,9 +13,10 @@ pub async fn list_model_access_groups(
     State(state): State<Arc<AppState>>,
     Extension(auth): Extension<AuthContext>,
 ) -> Result<Json<Vec<crate::middleware::model_access::ModelAccessGroup>>, StatusCode> {
-    auth.require_scope("tokens:read").map_err(|_| StatusCode::FORBIDDEN)?;
+    auth.require_scope("tokens:read")
+        .map_err(|_| StatusCode::FORBIDDEN)?;
     let rows = sqlx::query_as::<_, crate::middleware::model_access::ModelAccessGroup>(
-        "SELECT * FROM model_access_groups WHERE project_id = $1 ORDER BY name"
+        "SELECT * FROM model_access_groups WHERE project_id = $1 ORDER BY name",
     )
     .bind(auth.default_project_id())
     .fetch_all(state.db.pool())
@@ -34,9 +34,13 @@ pub async fn create_model_access_group(
     Extension(auth): Extension<AuthContext>,
     Json(body): Json<serde_json::Value>,
 ) -> Result<Json<crate::middleware::model_access::ModelAccessGroup>, StatusCode> {
-    auth.require_scope("tokens:write").map_err(|_| StatusCode::FORBIDDEN)?;
+    auth.require_scope("tokens:write")
+        .map_err(|_| StatusCode::FORBIDDEN)?;
 
-    let name = body.get("name").and_then(|v| v.as_str()).ok_or(StatusCode::BAD_REQUEST)?;
+    let name = body
+        .get("name")
+        .and_then(|v| v.as_str())
+        .ok_or(StatusCode::BAD_REQUEST)?;
     let description = body.get("description").and_then(|v| v.as_str());
     let models = body.get("models").ok_or(StatusCode::BAD_REQUEST)?;
 
@@ -54,7 +58,7 @@ pub async fn create_model_access_group(
     let row = sqlx::query_as::<_, crate::middleware::model_access::ModelAccessGroup>(
         r#"INSERT INTO model_access_groups (project_id, name, description, models)
            VALUES ($1, $2, $3, $4)
-           RETURNING *"#
+           RETURNING *"#,
     )
     .bind(auth.default_project_id())
     .bind(name)
@@ -81,7 +85,8 @@ pub async fn update_model_access_group(
     Path(group_id): Path<uuid::Uuid>,
     Json(body): Json<serde_json::Value>,
 ) -> Result<Json<crate::middleware::model_access::ModelAccessGroup>, StatusCode> {
-    auth.require_scope("tokens:write").map_err(|_| StatusCode::FORBIDDEN)?;
+    auth.require_scope("tokens:write")
+        .map_err(|_| StatusCode::FORBIDDEN)?;
 
     let name = body.get("name").and_then(|v| v.as_str());
     let description = body.get("description").and_then(|v| v.as_str());
@@ -94,7 +99,7 @@ pub async fn update_model_access_group(
             models = COALESCE($5, models),
             updated_at = NOW()
            WHERE id = $1 AND project_id = $2
-           RETURNING *"#
+           RETURNING *"#,
     )
     .bind(group_id)
     .bind(auth.default_project_id())
@@ -120,19 +125,18 @@ pub async fn delete_model_access_group(
     Extension(auth): Extension<AuthContext>,
     Path(group_id): Path<uuid::Uuid>,
 ) -> Result<StatusCode, StatusCode> {
-    auth.require_scope("tokens:write").map_err(|_| StatusCode::FORBIDDEN)?;
+    auth.require_scope("tokens:write")
+        .map_err(|_| StatusCode::FORBIDDEN)?;
 
-    let result = sqlx::query(
-        "DELETE FROM model_access_groups WHERE id = $1 AND project_id = $2"
-    )
-    .bind(group_id)
-    .bind(auth.default_project_id())
-    .execute(state.db.pool())
-    .await
-    .map_err(|e| {
-        tracing::error!("Failed to delete model access group: {}", e);
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+    let result = sqlx::query("DELETE FROM model_access_groups WHERE id = $1 AND project_id = $2")
+        .bind(group_id)
+        .bind(auth.default_project_id())
+        .execute(state.db.pool())
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to delete model access group: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
 
     if result.rows_affected() == 0 {
         Err(StatusCode::NOT_FOUND)

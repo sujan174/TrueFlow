@@ -140,8 +140,8 @@ impl WebhookEvent {
 /// Compute HMAC-SHA256 of `payload` using `secret`.
 /// Returns lowercase hex digest (e.g. "sha256=<hex>").
 fn hmac_sha256_hex(secret: &str, payload: &[u8]) -> String {
-    let mut mac = Hmac::<Sha256>::new_from_slice(secret.as_bytes())
-        .expect("HMAC can take key of any size");
+    let mut mac =
+        Hmac::<Sha256>::new_from_slice(secret.as_bytes()).expect("HMAC can take key of any size");
     mac.update(payload);
     let result = mac.finalize();
     let bytes = result.into_bytes();
@@ -187,8 +187,7 @@ impl WebhookNotifier {
             .map_err(|e| anyhow::anyhow!("webhook serialize error: {}", e))?;
         let delivery_id = uuid::Uuid::new_v4().to_string();
         let timestamp = chrono::Utc::now().timestamp().to_string();
-        let signature = signing_secret
-            .map(|s| hmac_sha256_hex(s, &payload));
+        let signature = signing_secret.map(|s| hmac_sha256_hex(s, &payload));
 
         let backoff_secs: &[u64] = &[0, 1, 5, 25];
 
@@ -216,10 +215,7 @@ impl WebhookNotifier {
                 req = req.header("x-trueflow-signature", sig.as_str());
             }
 
-            let result = req
-                .body(payload.clone())
-                .send()
-                .await;
+            let result = req.body(payload.clone()).send().await;
 
             match result {
                 Ok(resp) if resp.status().is_success() => {
@@ -266,7 +262,10 @@ impl WebhookNotifier {
             delivery_id = %delivery_id,
             "webhook delivery failed after all retries"
         );
-        Err(anyhow::anyhow!("webhook delivery failed after 3 retries: {}", url))
+        Err(anyhow::anyhow!(
+            "webhook delivery failed after 3 retries: {}",
+            url
+        ))
     }
 
     /// Send without signing (backwards compat for env-var driven config webhooks).
@@ -328,7 +327,8 @@ mod tests {
 
     #[test]
     fn test_policy_violation_event_type() {
-        let event = WebhookEvent::policy_violation("tok1", "my-token", "proj1", "deny-all", "blocked");
+        let event =
+            WebhookEvent::policy_violation("tok1", "my-token", "proj1", "deny-all", "blocked");
         assert_eq!(event.event_type, "policy_violation");
         assert_eq!(event.token_id, "tok1");
         assert_eq!(event.details["policy"], "deny-all");
@@ -337,7 +337,8 @@ mod tests {
 
     #[test]
     fn test_rate_limit_event_type() {
-        let event = WebhookEvent::rate_limit_exceeded("tok1", "my-token", "proj1", "rl-policy", 100, 60);
+        let event =
+            WebhookEvent::rate_limit_exceeded("tok1", "my-token", "proj1", "rl-policy", 100, 60);
         assert_eq!(event.event_type, "rate_limit_exceeded");
         assert_eq!(event.details["max_requests"], 100);
         assert_eq!(event.details["window_secs"], 60);
@@ -345,7 +346,8 @@ mod tests {
 
     #[test]
     fn test_spend_cap_event_type() {
-        let event = WebhookEvent::spend_cap_exceeded("tok1", "my-token", "proj1", "daily cap exceeded");
+        let event =
+            WebhookEvent::spend_cap_exceeded("tok1", "my-token", "proj1", "daily cap exceeded");
         assert_eq!(event.event_type, "spend_cap_exceeded");
         assert_eq!(event.details["reason"], "daily cap exceeded");
     }

@@ -4,7 +4,6 @@
 //! engine. The proxy handler calls `evaluate_pre_flight()` and `evaluate_post_flight()`
 //! and executes the returned actions.
 
-
 // use crate::cache::TieredCache;
 // use crate::errors::AppError;
 use crate::models::policy::{EvalOutcome, Phase, Policy};
@@ -49,9 +48,6 @@ pub fn parse_window_secs(window: &str) -> Option<u64> {
         _ => None,
     }
 }
-
-
-
 
 #[cfg(test)]
 mod tests {

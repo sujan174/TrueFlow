@@ -93,8 +93,9 @@ export default function ModelAccessGroupsPage() {
             setCreateOpen(false);
             resetForm();
             toast.success(`Group "${name}" created`);
-        } catch (e: any) {
-            toast.error(e.message || "Failed to create");
+        } catch (e: unknown) {
+            const err = e as Error;
+            toast.error(err.message || "Failed to create");
         } finally {
             setSaving(false);
         }
@@ -111,8 +112,9 @@ export default function ModelAccessGroupsPage() {
             mutate();
             setEditGroup(null);
             toast.success("Group updated");
-        } catch (e: any) {
-            toast.error(e.message || "Failed to update");
+        } catch (e: unknown) {
+            const err = e as Error;
+            toast.error(err.message || "Failed to update");
         } finally {
             setSaving(false);
         }
@@ -124,8 +126,9 @@ export default function ModelAccessGroupsPage() {
             await deleteModelAccessGroup(g.id);
             mutate();
             toast.success(`Deleted "${g.name}"`);
-        } catch (e: any) {
-            toast.error(e.message || "Failed to delete");
+        } catch (e: unknown) {
+            const err = e as Error;
+            toast.error(err.message || "Failed to delete");
         }
     };
 

@@ -80,7 +80,10 @@ mod tests {
         // Should not panic even with no env vars set
         let hub = ObserverHub::from_env();
         assert!(hub.prometheus.is_some(), "Prometheus always enabled");
-        assert!(hub.langfuse.is_none(), "Langfuse should be None without env");
+        assert!(
+            hub.langfuse.is_none(),
+            "Langfuse should be None without env"
+        );
         assert!(hub.datadog.is_none(), "DataDog should be None without env");
     }
 }

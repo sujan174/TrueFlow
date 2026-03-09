@@ -50,7 +50,6 @@ pub enum PayloadStore {
     },
 }
 
-
 impl PayloadStore {
     /// Build a `PayloadStore` from environment variables.
     ///
@@ -85,9 +84,7 @@ impl PayloadStore {
     pub fn should_offload(&self, req_len: usize, resp_len: usize) -> bool {
         match self {
             PayloadStore::Postgres => false,
-            PayloadStore::Object { size_threshold, .. } => {
-                req_len + resp_len > *size_threshold
-            }
+            PayloadStore::Object { size_threshold, .. } => req_len + resp_len > *size_threshold,
         }
     }
 
@@ -121,12 +118,11 @@ impl PayloadStore {
             "response_headers": response_headers,
         });
 
-        let json_bytes = serde_json::to_vec(&blob)
-            .context("failed to serialize payload blob")?;
+        let json_bytes = serde_json::to_vec(&blob).context("failed to serialize payload blob")?;
 
         // Compress with zstd (typically 60-80% compression on JSON)
-        let compressed = zstd::encode_all(json_bytes.as_slice(), 3)
-            .context("failed to compress payload")?;
+        let compressed =
+            zstd::encode_all(json_bytes.as_slice(), 3).context("failed to compress payload")?;
 
         // Key: payloads/{project_id}/{YYYY-MM-DD}/{request_id}.json.zst
         let date = created_at.format("%Y-%m-%d");
@@ -159,11 +155,11 @@ impl PayloadStore {
             .await
             .context("failed to read payload bytes")?;
 
-        let decompressed = zstd::decode_all(bytes.as_ref())
-            .context("failed to decompress payload")?;
+        let decompressed =
+            zstd::decode_all(bytes.as_ref()).context("failed to decompress payload")?;
 
-        let blob: serde_json::Value = serde_json::from_slice(&decompressed)
-            .context("failed to parse payload blob")?;
+        let blob: serde_json::Value =
+            serde_json::from_slice(&decompressed).context("failed to parse payload blob")?;
 
         Ok(PayloadBodies {
             request_body: blob["request_body"].as_str().map(String::from),
@@ -214,7 +210,9 @@ fn build_object_store(url: &str) -> Result<(Box<dyn ObjectStore>, String)> {
         // (or instance metadata / IAM role in production)
         if let Ok(key) = std::env::var("AWS_ACCESS_KEY_ID") {
             if let Ok(secret) = std::env::var("AWS_SECRET_ACCESS_KEY") {
-                builder = builder.with_access_key_id(key).with_secret_access_key(secret);
+                builder = builder
+                    .with_access_key_id(key)
+                    .with_secret_access_key(secret);
             }
         }
 
@@ -230,7 +228,9 @@ fn parse_query_param(url: &str, key: &str) -> Option<String> {
     for part in query.split('&') {
         let mut kv = part.splitn(2, '=');
         if kv.next() == Some(key) {
-            return kv.next().map(|v| urlencoding::decode(v).unwrap_or_default().into_owned());
+            return kv
+                .next()
+                .map(|v| urlencoding::decode(v).unwrap_or_default().into_owned());
         }
     }
     None

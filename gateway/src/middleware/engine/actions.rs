@@ -1,7 +1,7 @@
 use serde_json::Value;
 
-use crate::models::policy::Action;
 use super::operators::glob_match;
+use crate::models::policy::Action;
 
 pub(super) fn action_name(action: &Action) -> &'static str {
     match action {
@@ -64,7 +64,10 @@ pub fn extract_tool_names(body: Option<&Value>) -> Vec<String> {
     }
 
     // OpenAI: tool_choice.function.name (forced tool selection)
-    if let Some(name) = body.pointer("/tool_choice/function/name").and_then(|v| v.as_str()) {
+    if let Some(name) = body
+        .pointer("/tool_choice/function/name")
+        .and_then(|v| v.as_str())
+    {
         if !names.contains(&name.to_string()) {
             names.push(name.to_string());
         }
@@ -96,7 +99,10 @@ pub fn evaluate_tool_scope(
 ) -> Result<(), String> {
     // Check blocked tools first (explicit deny takes priority)
     for name in tool_names {
-        if blocked_tools.iter().any(|b| b == name || glob_match(b, name)) {
+        if blocked_tools
+            .iter()
+            .any(|b| b == name || glob_match(b, name))
+        {
             return Err(format!("{}: tool '{}' is blocked", deny_message, name));
         }
     }
@@ -104,7 +110,10 @@ pub fn evaluate_tool_scope(
     // If allowed_tools is non-empty, enforce whitelist
     if !allowed_tools.is_empty() {
         for name in tool_names {
-            if !allowed_tools.iter().any(|a| a == name || glob_match(a, name)) {
+            if !allowed_tools
+                .iter()
+                .any(|a| a == name || glob_match(a, name))
+            {
                 return Err(format!(
                     "{}: tool '{}' is not in the allowed list",
                     deny_message, name

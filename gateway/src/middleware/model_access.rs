@@ -160,7 +160,7 @@ pub async fn resolve_group_models(
     }
 
     let rows = match sqlx::query_as::<_, ModelsRow>(
-        "SELECT models FROM model_access_groups WHERE id = ANY($1) AND project_id = $2"
+        "SELECT models FROM model_access_groups WHERE id = ANY($1) AND project_id = $2",
     )
     .bind(group_ids)
     .bind(project_id)

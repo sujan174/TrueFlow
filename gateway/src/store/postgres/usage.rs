@@ -1,7 +1,7 @@
+use super::types::UsageMeterRow;
+use super::PgStore;
 use chrono::NaiveDate;
 use uuid::Uuid;
-use super::PgStore;
-use super::types::UsageMeterRow;
 
 impl PgStore {
     // ── Usage Metering ───────────────────────────────────────────
@@ -70,7 +70,7 @@ impl PgStore {
         };
 
         let period_start_dt = period.and_hms_opt(0, 0, 0).unwrap().and_utc();
-        let period_end_dt   = period_end.and_hms_opt(0, 0, 0).unwrap().and_utc();
+        let period_end_dt = period_end.and_hms_opt(0, 0, 0).unwrap().and_utc();
 
         // Use sqlx::query() (runtime form) so SQLX_OFFLINE=true builds aren't affected.
         let row = sqlx::query(
@@ -93,9 +93,10 @@ impl PgStore {
         .await?;
 
         use sqlx::Row;
-        let total_requests: i64           = row.try_get("total_requests").unwrap_or(0);
-        let total_tokens: i64             = row.try_get("total_tokens").unwrap_or(0);
-        let total_spend: rust_decimal::Decimal = row.try_get("total_spend_usd")
+        let total_requests: i64 = row.try_get("total_requests").unwrap_or(0);
+        let total_tokens: i64 = row.try_get("total_tokens").unwrap_or(0);
+        let total_spend: rust_decimal::Decimal = row
+            .try_get("total_spend_usd")
             .unwrap_or(rust_decimal::Decimal::ZERO);
 
         Ok((total_requests, total_tokens, total_spend))

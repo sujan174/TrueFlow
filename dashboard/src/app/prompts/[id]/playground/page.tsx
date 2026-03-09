@@ -171,14 +171,15 @@ export default function PromptPlaygroundPage({
                         : r
                 )
             );
-        } catch (err: any) {
+        } catch (err: unknown) {
+            const error = err as Error;
             const elapsed = Math.round(performance.now() - startTime);
             setRuns((prev) =>
                 prev.map((r) =>
                     r.id === runId
                         ? {
                             ...r,
-                            response: `Error: ${err.message}`,
+                            response: `Error: ${error.message}`,
                             status: 0,
                             latencyMs: elapsed,
                             loading: false,

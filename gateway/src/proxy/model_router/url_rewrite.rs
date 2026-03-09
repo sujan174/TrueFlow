@@ -1,6 +1,11 @@
 use super::Provider;
 
-pub(crate) fn rewrite_upstream_url(provider: Provider, base_url: &str, model: &str, is_streaming: bool) -> String {
+pub(crate) fn rewrite_upstream_url(
+    provider: Provider,
+    base_url: &str,
+    model: &str,
+    is_streaming: bool,
+) -> String {
     // Strip the proxy path if the router attached it (e.g. TrueFlow added /v1/chat/completions)
     let sanitized_base = base_url
         .strip_suffix("/v1/chat/completions")
@@ -10,7 +15,11 @@ pub(crate) fn rewrite_upstream_url(provider: Provider, base_url: &str, model: &s
     match provider {
         Provider::Gemini => {
             // Gemini uses different endpoints for streaming vs non-streaming
-            let method = if is_streaming { "streamGenerateContent" } else { "generateContent" };
+            let method = if is_streaming {
+                "streamGenerateContent"
+            } else {
+                "generateContent"
+            };
             format!("{}/v1beta/models/{}:{}", sanitized_base, model, method)
         }
         Provider::Anthropic => {
@@ -19,7 +28,10 @@ pub(crate) fn rewrite_upstream_url(provider: Provider, base_url: &str, model: &s
         }
         Provider::AzureOpenAI => {
             // Azure OpenAI: {endpoint}/openai/deployments/{deployment}/chat/completions
-            if sanitized_base.to_lowercase().contains("/openai/deployments/") {
+            if sanitized_base
+                .to_lowercase()
+                .contains("/openai/deployments/")
+            {
                 // Already has the deployment path — ensure api-version is present
                 if !sanitized_base.contains("api-version") {
                     format!("{}?api-version=2024-05-01-preview", sanitized_base)
@@ -27,12 +39,19 @@ pub(crate) fn rewrite_upstream_url(provider: Provider, base_url: &str, model: &s
                     sanitized_base.to_string()
                 }
             } else {
-                format!("{}/openai/deployments/{}/chat/completions?api-version=2024-05-01-preview", sanitized_base, model)
+                format!(
+                    "{}/openai/deployments/{}/chat/completions?api-version=2024-05-01-preview",
+                    sanitized_base, model
+                )
             }
         }
         Provider::Bedrock => {
             // Bedrock Converse API: {endpoint}/model/{modelId}/converse or converse-stream
-            let action = if is_streaming { "converse-stream" } else { "converse" };
+            let action = if is_streaming {
+                "converse-stream"
+            } else {
+                "converse"
+            };
             if sanitized_base.contains("/model/") {
                 // Already has model path — just ensure correct action
                 sanitized_base.to_string()
@@ -59,4 +78,3 @@ pub(crate) fn rewrite_upstream_url(provider: Provider, base_url: &str, model: &s
         _ => base_url.to_string(),
     }
 }
-

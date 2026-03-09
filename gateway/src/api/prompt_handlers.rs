@@ -95,7 +95,13 @@ pub struct RenderResponse {
 pub fn slugify(name: &str) -> String {
     name.to_lowercase()
         .chars()
-        .map(|c| if c.is_alphanumeric() || c == '-' { c } else { '-' })
+        .map(|c| {
+            if c.is_alphanumeric() || c == '-' {
+                c
+            } else {
+                '-'
+            }
+        })
         .collect::<String>()
         .split('-')
         .filter(|s| !s.is_empty())
@@ -186,7 +192,11 @@ pub async fn list_prompts(
     // Enrich with latest version info
     let mut results = Vec::with_capacity(prompts.len());
     for p in prompts {
-        let versions = state.db.list_prompt_versions(p.id).await.unwrap_or_default();
+        let versions = state
+            .db
+            .list_prompt_versions(p.id)
+            .await
+            .unwrap_or_default();
         let latest = versions.first();
         results.push(serde_json::json!({
             "id": p.id,
@@ -222,11 +232,7 @@ pub async fn get_prompt(
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
         .ok_or(StatusCode::NOT_FOUND)?;
 
-    let versions = state
-        .db
-        .list_prompt_versions(id)
-        .await
-        .unwrap_or_default();
+    let versions = state.db.list_prompt_versions(id).await.unwrap_or_default();
 
     Ok(Json(serde_json::json!({
         "prompt": prompt,
@@ -460,7 +466,15 @@ pub async fn render_prompt_get(
     auth.require_scope("prompts:read")?;
     let project_id = auth.default_project_id();
     let empty_vars = serde_json::Map::new();
-    render_prompt_inner(&state, project_id, &slug, q.label.as_deref(), q.version, &empty_vars).await
+    render_prompt_inner(
+        &state,
+        project_id,
+        &slug,
+        q.label.as_deref(),
+        q.version,
+        &empty_vars,
+    )
+    .await
 }
 
 /// POST /prompts/by-slug/:slug/render — render with variables in body
@@ -473,7 +487,15 @@ pub async fn render_prompt_post(
     auth.require_scope("prompts:read")?;
     let project_id = auth.default_project_id();
     let variables = body.variables.unwrap_or_default();
-    render_prompt_inner(&state, project_id, &slug, body.label.as_deref(), body.version, &variables).await
+    render_prompt_inner(
+        &state,
+        project_id,
+        &slug,
+        body.label.as_deref(),
+        body.version,
+        &variables,
+    )
+    .await
 }
 
 async fn render_prompt_inner(

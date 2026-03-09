@@ -1,8 +1,9 @@
 use serde_json::{json, Value};
 
-use super::Provider;
 use super::bedrock::translate_bedrock_event_stream_to_openai;
+use super::Provider;
 
+#[allow(dead_code)]
 pub(crate) fn translate_sse_body(provider: Provider, body: &[u8], model: &str) -> Option<Vec<u8>> {
     match provider {
         Provider::Anthropic => Some(translate_anthropic_sse_to_openai(body, model)),
@@ -43,7 +44,10 @@ pub(crate) fn openai_sse_chunk(
             "finish_reason": finish_reason,
         }]
     });
-    format!("data: {}\n\n", serde_json::to_string(&chunk).unwrap_or_default())
+    format!(
+        "data: {}\n\n",
+        serde_json::to_string(&chunk).unwrap_or_default()
+    )
 }
 
 // ── Anthropic SSE → OpenAI SSE ──────────────────────────────────
@@ -107,7 +111,8 @@ pub(crate) fn translate_anthropic_sse_to_openai(body: &[u8], model: &str) -> Vec
                 // Emit role chunk
                 if !sent_role {
                     output.push_str(&openai_sse_chunk(
-                        &chunk_id, model,
+                        &chunk_id,
+                        model,
                         json!({"role": "assistant", "content": ""}),
                         None,
                     ));
@@ -126,7 +131,8 @@ pub(crate) fn translate_anthropic_sse_to_openai(body: &[u8], model: &str) -> Vec
                     // Text delta
                     if let Some(text) = delta.get("text").and_then(|t| t.as_str()) {
                         output.push_str(&openai_sse_chunk(
-                            &chunk_id, model,
+                            &chunk_id,
+                            model,
                             json!({"content": text}),
                             None,
                         ));
@@ -150,7 +156,8 @@ pub(crate) fn translate_anthropic_sse_to_openai(body: &[u8], model: &str) -> Vec
                         let name = cb.get("name").and_then(|n| n.as_str()).unwrap_or("");
                         let call_id = cb.get("id").and_then(|id| id.as_str()).unwrap_or("");
                         output.push_str(&openai_sse_chunk(
-                            &chunk_id, model,
+                            &chunk_id,
+                            model,
                             json!({"tool_calls": [{
                                 "index": index,
                                 "id": call_id,
@@ -172,7 +179,8 @@ pub(crate) fn translate_anthropic_sse_to_openai(body: &[u8], model: &str) -> Vec
                 }
 
                 // Map stop_reason → finish_reason
-                let stop = json.get("delta")
+                let stop = json
+                    .get("delta")
                     .and_then(|d| d.get("stop_reason"))
                     .and_then(|s| s.as_str());
                 let finish = match stop {
@@ -203,7 +211,10 @@ pub(crate) fn translate_anthropic_sse_to_openai(body: &[u8], model: &str) -> Vec
                             "total_tokens": prompt + completion,
                         }
                     });
-                    output.push_str(&format!("data: {}\n\n", serde_json::to_string(&chunk).unwrap_or_default()));
+                    output.push_str(&format!(
+                        "data: {}\n\n",
+                        serde_json::to_string(&chunk).unwrap_or_default()
+                    ));
                 }
             }
             "message_stop" => {
@@ -256,7 +267,8 @@ pub(crate) fn translate_gemini_sse_to_openai(body: &[u8], model: &str) -> Vec<u8
         // Emit role on first chunk
         if !sent_role {
             output.push_str(&openai_sse_chunk(
-                &chunk_id, model,
+                &chunk_id,
+                model,
                 json!({"role": "assistant", "content": ""}),
                 None,
             ));
@@ -268,7 +280,10 @@ pub(crate) fn translate_gemini_sse_to_openai(body: &[u8], model: &str) -> Vec<u8
             if let Some(pt) = usage_meta.get("promptTokenCount").and_then(|v| v.as_u64()) {
                 prompt_tokens = Some(pt);
             }
-            if let Some(ct) = usage_meta.get("candidatesTokenCount").and_then(|v| v.as_u64()) {
+            if let Some(ct) = usage_meta
+                .get("candidatesTokenCount")
+                .and_then(|v| v.as_u64())
+            {
                 completion_tokens = Some(ct);
             }
         }
@@ -276,7 +291,8 @@ pub(crate) fn translate_gemini_sse_to_openai(body: &[u8], model: &str) -> Vec<u8
         // Extract text from candidates[0].content.parts
         if let Some(candidates) = json.get("candidates").and_then(|c| c.as_array()) {
             if let Some(candidate) = candidates.first() {
-                let parts = candidate.get("content")
+                let parts = candidate
+                    .get("content")
                     .and_then(|c| c.get("parts"))
                     .and_then(|p| p.as_array());
 
@@ -285,7 +301,8 @@ pub(crate) fn translate_gemini_sse_to_openai(body: &[u8], model: &str) -> Vec<u8
                         // Text part
                         if let Some(text) = part.get("text").and_then(|t| t.as_str()) {
                             output.push_str(&openai_sse_chunk(
-                                &chunk_id, model,
+                                &chunk_id,
+                                model,
                                 json!({"content": text}),
                                 None,
                             ));
@@ -293,11 +310,13 @@ pub(crate) fn translate_gemini_sse_to_openai(body: &[u8], model: &str) -> Vec<u8
                         // Function call part
                         if let Some(fc) = part.get("functionCall") {
                             let name = fc.get("name").and_then(|n| n.as_str()).unwrap_or("");
-                            let args = fc.get("args")
+                            let args = fc
+                                .get("args")
                                 .map(|v| serde_json::to_string(v).unwrap_or_default())
                                 .unwrap_or_default();
                             output.push_str(&openai_sse_chunk(
-                                &chunk_id, model,
+                                &chunk_id,
+                                model,
                                 json!({"tool_calls": [{
                                     "index": 0,
                                     "id": format!("call_{}", uuid::Uuid::new_v4().simple()),
@@ -336,7 +355,10 @@ pub(crate) fn translate_gemini_sse_to_openai(body: &[u8], model: &str) -> Vec<u8
                             "total_tokens": pt + ct,
                         }
                     });
-                    output.push_str(&format!("data: {}\n\n", serde_json::to_string(&chunk).unwrap_or_default()));
+                    output.push_str(&format!(
+                        "data: {}\n\n",
+                        serde_json::to_string(&chunk).unwrap_or_default()
+                    ));
                 }
             }
         }
@@ -349,4 +371,3 @@ pub(crate) fn translate_gemini_sse_to_openai(body: &[u8], model: &str) -> Vec<u8
 
     output.into_bytes()
 }
-

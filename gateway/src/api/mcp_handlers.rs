@@ -88,10 +88,7 @@ pub async fn register_mcp_server(
         .map_err(|s| (s, "Forbidden".to_string()))?;
 
     if req.endpoint.is_empty() {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            "Endpoint URL is required".into(),
-        ));
+        return Err((StatusCode::BAD_REQUEST, "Endpoint URL is required".into()));
     }
 
     if req.auto_discover {
@@ -104,7 +101,11 @@ pub async fn register_mcp_server(
             project_id: auth.default_project_id(),
         };
 
-        match state.mcp_registry.register_with_discovery(discover_req).await {
+        match state
+            .mcp_registry
+            .register_with_discovery(discover_req)
+            .await
+        {
             Ok((id, tools)) => {
                 let tool_names: Vec<String> = tools.iter().map(|t| t.name.clone()).collect();
                 let servers = state.mcp_registry.list_servers().await;
@@ -303,10 +304,7 @@ pub async fn discover_mcp_server(
         .map_err(|s| (s, "Forbidden".to_string()))?;
 
     if req.endpoint.is_empty() {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            "Endpoint URL is required".into(),
-        ));
+        return Err((StatusCode::BAD_REQUEST, "Endpoint URL is required".into()));
     }
 
     state

@@ -39,7 +39,10 @@ pub fn log_async(pool: PgPool, payload_store: Arc<PayloadStore>, entry: AuditEnt
                             "audit log write failed, retrying: {}",
                             last_err.as_ref().unwrap()
                         );
-                        tokio::time::sleep(std::time::Duration::from_millis(BACKOFF_MS[attempt as usize])).await;
+                        tokio::time::sleep(std::time::Duration::from_millis(
+                            BACKOFF_MS[attempt as usize],
+                        ))
+                        .await;
                     }
                 }
             }
@@ -223,16 +226,19 @@ async fn insert_audit_log(
     if let Some(ref tool_calls_json) = entry.tool_calls {
         if let Some(calls) = tool_calls_json.as_array() {
             for (i, call) in calls.iter().enumerate() {
-                let tool_name = call.get("function")
+                let tool_name = call
+                    .get("function")
                     .and_then(|f| f.get("name"))
                     .and_then(|n| n.as_str())
                     .unwrap_or("unknown");
 
-                let tool_call_id = call.get("id")
+                let tool_call_id = call
+                    .get("id")
                     .and_then(|id| id.as_str())
                     .map(|s| s.to_string());
 
-                let arguments = call.get("function")
+                let arguments = call
+                    .get("function")
                     .and_then(|f| f.get("arguments"))
                     .and_then(|a| {
                         // Arguments may be a JSON string or already parsed JSON
@@ -280,7 +286,6 @@ async fn insert_audit_log(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::models::audit::{AuditEntry, PolicyResult};
     use uuid::Uuid;
 
@@ -364,7 +369,11 @@ mod tests {
         assert!(BACKOFF_MS[1] < BACKOFF_MS[2]);
         // Total retry budget should not exceed 3 seconds
         let total: u64 = BACKOFF_MS.iter().sum();
-        assert!(total <= 3000, "total retry budget should be ≤ 3s, got {}ms", total);
+        assert!(
+            total <= 3000,
+            "total retry budget should be ≤ 3s, got {}ms",
+            total
+        );
     }
 
     #[test]
@@ -372,8 +381,24 @@ mod tests {
         // Verify all PolicyResult variants can be formatted for the INSERT
         let cases = vec![
             (PolicyResult::Allow, "allowed", None, None),
-            (PolicyResult::Deny { policy: "p".into(), reason: "r".into() }, "denied", Some("enforce"), Some("r")),
-            (PolicyResult::ShadowDeny { policy: "p".into(), reason: "r".into() }, "allowed", Some("shadow"), Some("r")),
+            (
+                PolicyResult::Deny {
+                    policy: "p".into(),
+                    reason: "r".into(),
+                },
+                "denied",
+                Some("enforce"),
+                Some("r"),
+            ),
+            (
+                PolicyResult::ShadowDeny {
+                    policy: "p".into(),
+                    reason: "r".into(),
+                },
+                "allowed",
+                Some("shadow"),
+                Some("r"),
+            ),
             (PolicyResult::HitlApproved, "approved", Some("hitl"), None),
             (PolicyResult::HitlRejected, "rejected", Some("hitl"), None),
             (PolicyResult::HitlTimeout, "timeout", Some("hitl"), None),
@@ -381,8 +406,12 @@ mod tests {
         for (pr, expected_result, expected_mode, expected_reason) in cases {
             let (result, mode, reason) = match &pr {
                 PolicyResult::Allow => ("allowed", None, None),
-                PolicyResult::Deny { reason, .. } => ("denied", Some("enforce"), Some(reason.as_str())),
-                PolicyResult::ShadowDeny { reason, .. } => ("allowed", Some("shadow"), Some(reason.as_str())),
+                PolicyResult::Deny { reason, .. } => {
+                    ("denied", Some("enforce"), Some(reason.as_str()))
+                }
+                PolicyResult::ShadowDeny { reason, .. } => {
+                    ("allowed", Some("shadow"), Some(reason.as_str()))
+                }
                 PolicyResult::HitlApproved => ("approved", Some("hitl"), None),
                 PolicyResult::HitlRejected => ("rejected", Some("hitl"), None),
                 PolicyResult::HitlTimeout => ("timeout", Some("hitl"), None),

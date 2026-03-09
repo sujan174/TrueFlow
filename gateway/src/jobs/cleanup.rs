@@ -21,7 +21,8 @@ pub fn spawn(pool: PgPool) {
                         tracing::error!("cleanup job failed: {}", e);
                     }
                 }
-            }).await;
+            })
+            .await;
             if let Err(e) = result {
                 tracing::error!("Cleanup job panicked: {:?}", e);
                 time::sleep(Duration::from_secs(5)).await;

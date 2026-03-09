@@ -7,14 +7,13 @@
 //! through the same middleware stack that the handler uses, without requiring
 //! a running server or external dependencies (Redis, Postgres).
 
-use std::collections::HashMap;
 use axum::http::{HeaderMap, Method, Uri};
 use gateway::middleware::fields::RequestContext;
-use gateway::middleware::policy::{evaluate_pre_flight, evaluate_post_flight};
+use gateway::middleware::policy::evaluate_pre_flight;
 use gateway::middleware::sanitize;
 use gateway::models::audit::PolicyResult;
-use gateway::models::policy::{Action, Policy, Phase, PolicyMode};
-use uuid::Uuid;
+use gateway::models::policy::{Action, Policy};
+use std::collections::HashMap;
 
 /// Helper: construct a RequestContext from common test parameters.
 fn test_ctx<'a>(
@@ -71,7 +70,10 @@ fn test_happy_path_audit_trail() {
 
     // Policy should allow (no deny actions)
     assert!(
-        outcome.actions.iter().all(|a| !matches!(&a.action, Action::Deny { .. })),
+        outcome
+            .actions
+            .iter()
+            .all(|a| !matches!(&a.action, Action::Deny { .. })),
         "Happy path should not trigger any deny actions"
     );
 
@@ -89,8 +91,14 @@ fn test_happy_path_audit_trail() {
     let sanitized_body = String::from_utf8(sanitization_result.body.clone()).unwrap();
 
     // Response should pass through unchanged (no PII)
-    assert!(sanitized_body.contains("2+2 equals 4"), "Clean response should pass through");
-    assert!(sanitization_result.redacted_types.is_empty(), "No PII should be detected");
+    assert!(
+        sanitized_body.contains("2+2 equals 4"),
+        "Clean response should pass through"
+    );
+    assert!(
+        sanitization_result.redacted_types.is_empty(),
+        "No PII should be detected"
+    );
 
     // Simulate audit entry construction (the fields handler.rs populates)
     let audit_token_id = ctx.token_id;
@@ -105,8 +113,14 @@ fn test_happy_path_audit_trail() {
     assert_eq!(audit_model, "gpt-4o");
     assert_eq!(audit_status, 200);
     assert!(audit_prompt_tokens > 0, "Prompt tokens must be non-zero");
-    assert!(audit_completion_tokens > 0, "Completion tokens must be non-zero");
-    assert!(!audit_cost.is_zero(), "Cost must be non-zero for a real response");
+    assert!(
+        audit_completion_tokens > 0,
+        "Completion tokens must be non-zero"
+    );
+    assert!(
+        !audit_cost.is_zero(),
+        "Cost must be non-zero for a real response"
+    );
 }
 
 // ── TEST 2: Policy Deny — Audit Trail ─────────────────────────────────
@@ -141,7 +155,9 @@ fn test_policy_deny_audit_trail() {
     let outcome = evaluate_pre_flight(&policies, &ctx);
 
     // Must have exactly one deny action
-    let deny_actions: Vec<_> = outcome.actions.iter()
+    let deny_actions: Vec<_> = outcome
+        .actions
+        .iter()
         .filter(|a| matches!(&a.action, Action::Deny { .. }))
         .collect();
     assert_eq!(deny_actions.len(), 1, "Should have exactly one deny action");
@@ -186,18 +202,22 @@ fn test_streaming_pii_redaction_audit_trail() {
         redacted_chunk
     );
     // The redacted chunk should still be valid SSE
-    assert!(redacted_chunk.starts_with("data: "), "SSE framing must be preserved");
+    assert!(
+        redacted_chunk.starts_with("data: "),
+        "SSE framing must be preserved"
+    );
 
     // Simulate a clean SSE chunk (no PII)
     let clean_chunk = "data: {\"choices\": [{\"delta\": {\"content\": \"Hello world\"}}]}\n\n";
     let (clean_output, clean_redacted) = sanitize::redact_sse_chunk(clean_chunk);
     assert!(!clean_redacted, "Clean chunk should not trigger redaction");
-    assert_eq!(clean_output, clean_chunk, "Clean chunk should pass through unchanged");
+    assert_eq!(
+        clean_output, clean_chunk,
+        "Clean chunk should pass through unchanged"
+    );
 
     // Verify audit entry would capture the PII types
-    let full_response = format!(
-        "data: {{\"choices\": [{{\"delta\": {{\"content\": \"Your SSN is 123-45-6789\"}}}}]}}\n\n"
-    );
+    let full_response = "data: {\"choices\": [{\"delta\": {\"content\": \"Your SSN is 123-45-6789\"}}]}\n\n".to_string();
     let sanitized = sanitize::sanitize_stream_content(&full_response);
     assert!(
         !sanitized.redacted_types.is_empty(),
@@ -227,7 +247,10 @@ fn test_budget_enforcement_end_to_end() {
         monthly_limit_usd: Some(1.0),
         lifetime_limit_usd: None,
     };
-    assert!(cap.daily_limit_usd.is_some(), "Daily cap should be configured");
+    assert!(
+        cap.daily_limit_usd.is_some(),
+        "Daily cap should be configured"
+    );
 
     // Simulate current spend exceeding the daily cap
     let current_daily_spend = 0.002; // exceeds $0.001 cap
@@ -257,7 +280,8 @@ fn test_budget_enforcement_end_to_end() {
     let mut ctx = test_ctx(&method, "/v1/chat/completions", &uri, &headers, Some(&body));
 
     // Set usage counters (as handler.rs does before post-flight evaluation)
-    ctx.usage.insert("spend_today_usd".to_string(), current_daily_spend);
+    ctx.usage
+        .insert("spend_today_usd".to_string(), current_daily_spend);
 
     // Policy: deny when daily spend exceeds $0.001
     let policy_json = serde_json::json!({
@@ -276,14 +300,19 @@ fn test_budget_enforcement_end_to_end() {
     let outcome = evaluate_pre_flight(&policies, &ctx);
 
     // Should trigger a deny
-    let deny_actions: Vec<_> = outcome.actions.iter()
+    let deny_actions: Vec<_> = outcome
+        .actions
+        .iter()
         .filter(|a| matches!(&a.action, Action::Deny { .. }))
         .collect();
     assert_eq!(deny_actions.len(), 1, "Budget exceeded should trigger deny");
 
     if let Action::Deny { status, message } = &deny_actions[0].action {
         assert_eq!(*status, 402, "Budget denial should use 402 status");
-        assert!(message.contains("spend cap"), "Message should mention spend cap");
+        assert!(
+            message.contains("spend cap"),
+            "Message should mention spend cap"
+        );
     } else {
         panic!("Expected Deny action");
     }

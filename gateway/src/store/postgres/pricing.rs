@@ -1,6 +1,6 @@
-use uuid::Uuid;
-use super::PgStore;
 use super::types::ModelPricingRow;
+use super::PgStore;
+use uuid::Uuid;
 
 impl PgStore {
     // -- Model Pricing Operations --
@@ -33,7 +33,7 @@ impl PgStore {
                      output_per_m = EXCLUDED.output_per_m,
                      is_active = true,
                      updated_at = NOW()
-               RETURNING id"#
+               RETURNING id"#,
         )
         .bind(provider)
         .bind(model_pattern)

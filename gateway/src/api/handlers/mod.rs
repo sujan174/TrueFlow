@@ -1,22 +1,22 @@
-pub mod dtos;
-mod helpers;
-mod projects;
-mod tokens;
+mod analytics;
 mod approvals;
 mod audit;
-mod sessions;
-mod policies;
-mod credentials;
-mod notifications;
-mod services;
 mod auth;
-mod analytics;
-mod spend_caps;
-mod webhooks;
-mod pricing;
-mod settings;
+mod credentials;
+pub mod dtos;
+mod helpers;
 mod model_access;
+mod notifications;
+mod policies;
+mod pricing;
+mod projects;
+mod services;
+mod sessions;
+mod settings;
+mod spend_caps;
 mod teams;
+mod tokens;
+mod webhooks;
 
 // ── Re-exports: DTOs ────────────────────────────────────────
 pub use self::dtos::*;
@@ -26,78 +26,76 @@ pub use self::helpers::verify_project_ownership;
 
 // ── Re-exports: Projects ────────────────────────────────────
 pub use self::projects::{
-    list_projects, create_project, update_project, delete_project, purge_project_data,
+    create_project, delete_project, list_projects, purge_project_data, update_project,
 };
 
 // ── Re-exports: Tokens ──────────────────────────────────────
 pub use self::tokens::{
-    list_tokens, create_token, revoke_token, get_token_usage,
-    get_circuit_breaker, update_circuit_breaker,
+    create_token, get_circuit_breaker, get_token_usage, list_tokens, revoke_token,
+    update_circuit_breaker,
 };
 
 // ── Re-exports: Approvals ───────────────────────────────────
-pub use self::approvals::{list_approvals, decide_approval};
+pub use self::approvals::{decide_approval, list_approvals};
 
 // ── Re-exports: Audit ───────────────────────────────────────
-pub use self::audit::{list_audit_logs, get_audit_log, stream_audit_logs};
+pub use self::audit::{get_audit_log, list_audit_logs, stream_audit_logs};
 
 // ── Re-exports: Sessions ────────────────────────────────────
 pub use self::sessions::{
-    get_session, list_sessions, update_session_status,
-    set_session_spend_cap, get_session_entity,
+    get_session, get_session_entity, list_sessions, set_session_spend_cap, update_session_status,
 };
 
 // ── Re-exports: Policies ────────────────────────────────────
 pub use self::policies::{
-    list_policies, create_policy, update_policy, delete_policy, list_policy_versions,
+    create_policy, delete_policy, list_policies, list_policy_versions, update_policy,
 };
 
 // ── Re-exports: Credentials ─────────────────────────────────
-pub use self::credentials::{list_credentials, create_credential, delete_credential};
+pub use self::credentials::{create_credential, delete_credential, list_credentials};
 
 // ── Re-exports: Notifications ───────────────────────────────
 pub use self::notifications::{
-    list_notifications, count_unread_notifications,
-    mark_notification_read, mark_all_notifications_read,
+    count_unread_notifications, list_notifications, mark_all_notifications_read,
+    mark_notification_read,
 };
 
 // ── Re-exports: Services ────────────────────────────────────
-pub use self::services::{list_services, create_service, delete_service};
+pub use self::services::{create_service, delete_service, list_services};
 
 // ── Re-exports: Auth / API Keys ─────────────────────────────
-pub use self::auth::{list_api_keys, create_api_key, revoke_api_key, whoami};
+pub use self::auth::{create_api_key, list_api_keys, revoke_api_key, whoami};
 
 // ── Re-exports: Analytics ───────────────────────────────────
 pub use self::analytics::{
-    get_org_usage, get_token_analytics, get_token_volume,
-    get_token_status, get_token_latency, get_upstream_health,
-    get_analytics_summary, get_analytics_timeseries,
-    get_analytics_experiments, get_spend_breakdown,
+    get_analytics_experiments, get_analytics_summary, get_analytics_timeseries, get_org_usage,
+    get_spend_breakdown, get_token_analytics, get_token_latency, get_token_status,
+    get_token_volume, get_upstream_health,
 };
 
 // ── Re-exports: Spend Caps ──────────────────────────────────
-pub use self::spend_caps::{get_spend_caps, upsert_spend_cap, delete_spend_cap};
+pub use self::spend_caps::{delete_spend_cap, get_spend_caps, upsert_spend_cap};
 
 // ── Re-exports: Webhooks ────────────────────────────────────
-pub use self::webhooks::{list_webhooks, create_webhook, delete_webhook, test_webhook};
+pub use self::webhooks::{create_webhook, delete_webhook, list_webhooks, test_webhook};
 
 // ── Re-exports: Pricing ─────────────────────────────────────
-pub use self::pricing::{list_pricing, upsert_pricing, delete_pricing};
+pub use self::pricing::{delete_pricing, list_pricing, upsert_pricing};
 
 // ── Re-exports: Settings ────────────────────────────────────
 pub use self::settings::{
-    get_settings, update_settings, get_cache_stats, flush_cache,
-    rehydrate_pii_tokens, get_anomaly_events,
+    flush_cache, get_anomaly_events, get_cache_stats, get_settings, rehydrate_pii_tokens,
+    update_settings,
 };
 
 // ── Re-exports: Model Access Groups ─────────────────────────
 pub use self::model_access::{
-    list_model_access_groups, create_model_access_group,
-    update_model_access_group, delete_model_access_group,
+    create_model_access_group, delete_model_access_group, list_model_access_groups,
+    update_model_access_group,
 };
 
 // ── Re-exports: Teams ───────────────────────────────────────
 pub use self::teams::{
-    list_teams, create_team, update_team, delete_team,
-    list_team_members, add_team_member, remove_team_member, get_team_spend,
+    add_team_member, create_team, delete_team, get_team_spend, list_team_members, list_teams,
+    remove_team_member, update_team,
 };

@@ -222,7 +222,9 @@ mod tests {
             crypto.encrypt_string("sk-secret").unwrap();
         enc_dek[0] ^= 0x01;
         assert!(
-            crypto.decrypt_string(&enc_dek, &dek_nonce, &enc_secret, &secret_nonce).is_err(),
+            crypto
+                .decrypt_string(&enc_dek, &dek_nonce, &enc_secret, &secret_nonce)
+                .is_err(),
             "Tampered DEK should fail AES-GCM authentication"
         );
     }
@@ -235,7 +237,9 @@ mod tests {
             crypto.encrypt_string("sk-secret").unwrap();
         enc_secret[0] ^= 0x01;
         assert!(
-            crypto.decrypt_string(&enc_dek, &dek_nonce, &enc_secret, &secret_nonce).is_err(),
+            crypto
+                .decrypt_string(&enc_dek, &dek_nonce, &enc_secret, &secret_nonce)
+                .is_err(),
             "Tampered encrypted secret should fail"
         );
     }
@@ -248,7 +252,9 @@ mod tests {
             crypto.encrypt_string("sk-secret").unwrap();
         dek_nonce[0] ^= 0x01;
         assert!(
-            crypto.decrypt_string(&enc_dek, &dek_nonce, &enc_secret, &secret_nonce).is_err(),
+            crypto
+                .decrypt_string(&enc_dek, &dek_nonce, &enc_secret, &secret_nonce)
+                .is_err(),
             "Tampered DEK nonce should fail"
         );
     }
@@ -261,7 +267,9 @@ mod tests {
             crypto.encrypt_string("sk-secret").unwrap();
         secret_nonce[0] ^= 0x01;
         assert!(
-            crypto.decrypt_string(&enc_dek, &dek_nonce, &enc_secret, &secret_nonce).is_err(),
+            crypto
+                .decrypt_string(&enc_dek, &dek_nonce, &enc_secret, &secret_nonce)
+                .is_err(),
             "Tampered secret nonce should fail"
         );
     }
@@ -270,11 +278,15 @@ mod tests {
     #[test]
     fn test_wrong_master_key_rejected() {
         let crypto_a = VaultCrypto::new(TEST_KEY).unwrap();
-        let crypto_b = VaultCrypto::new("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff").unwrap();
+        let crypto_b =
+            VaultCrypto::new("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")
+                .unwrap();
         let (enc_dek, dek_nonce, enc_secret, secret_nonce) =
             crypto_a.encrypt_string("sk-secret").unwrap();
         assert!(
-            crypto_b.decrypt_string(&enc_dek, &dek_nonce, &enc_secret, &secret_nonce).is_err(),
+            crypto_b
+                .decrypt_string(&enc_dek, &dek_nonce, &enc_secret, &secret_nonce)
+                .is_err(),
             "Decrypting with wrong master key should fail"
         );
     }
@@ -287,7 +299,9 @@ mod tests {
             crypto.encrypt_string("sk-secret").unwrap();
         let truncated = &enc_secret[..2];
         assert!(
-            crypto.decrypt_string(&enc_dek, &dek_nonce, truncated, &secret_nonce).is_err(),
+            crypto
+                .decrypt_string(&enc_dek, &dek_nonce, truncated, &secret_nonce)
+                .is_err(),
             "Truncated ciphertext should fail"
         );
     }
@@ -299,7 +313,9 @@ mod tests {
         let (enc_dek, dek_nonce, _enc_secret, secret_nonce) =
             crypto.encrypt_string("sk-secret").unwrap();
         assert!(
-            crypto.decrypt_string(&enc_dek, &dek_nonce, &[], &secret_nonce).is_err(),
+            crypto
+                .decrypt_string(&enc_dek, &dek_nonce, &[], &secret_nonce)
+                .is_err(),
             "Empty ciphertext should fail"
         );
     }
@@ -315,6 +331,7 @@ mod tests {
     fn test_invalid_hex_master_key_rejected() {
         assert!(VaultCrypto::new(
             "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
-        ).is_err());
+        )
+        .is_err());
     }
 }

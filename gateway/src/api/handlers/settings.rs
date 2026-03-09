@@ -1,28 +1,22 @@
 use std::sync::Arc;
 
-use axum::{
-    extract::State,
-    http::StatusCode,
-    Extension,
-    Json,
-};
+use axum::{extract::State, http::StatusCode, Extension, Json};
 
+use super::dtos::{RehydrateRequest, UpdateSettingsRequest};
 use crate::api::AuthContext;
 use crate::AppState;
-use super::dtos::{UpdateSettingsRequest, RehydrateRequest};
 
 pub async fn get_settings(
     State(state): State<Arc<AppState>>,
     Extension(auth): Extension<AuthContext>,
 ) -> Result<Json<std::collections::HashMap<String, serde_json::Value>>, StatusCode> {
     auth.require_role("admin")?;
-    
-    let settings = state.db.get_all_system_settings().await
-        .map_err(|e| {
-            tracing::error!("Failed to fetch settings: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
-        
+
+    let settings = state.db.get_all_system_settings().await.map_err(|e| {
+        tracing::error!("Failed to fetch settings: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
     Ok(Json(settings))
 }
 
@@ -53,13 +47,16 @@ pub async fn update_settings(
     }
 
     for (key, value) in payload.settings {
-        state.db.set_system_setting(&key, &value, None).await
+        state
+            .db
+            .set_system_setting(&key, &value, None)
+            .await
             .map_err(|e| {
                 tracing::error!("Failed to update setting {}: {}", key, e);
                 StatusCode::INTERNAL_SERVER_ERROR
             })?;
     }
-    
+
     Ok(Json(serde_json::json!({ "success": true })))
 }
 
@@ -110,7 +107,7 @@ pub async fn get_cache_stats(
                     .unwrap_or(-1i64);
                 // Key suffix (last 12 chars) for display
                 let display_key = if key.len() > 22 {
-                    format!("{}…{}", &key[..10], &key[key.len()-8..])
+                    format!("{}…{}", &key[..10], &key[key.len() - 8..])
                 } else {
                     key.clone()
                 };
@@ -242,7 +239,8 @@ pub async fn rehydrate_pii_tokens(
     Json(payload): Json<RehydrateRequest>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     auth.require_role("admin")?;
-    auth.require_scope("pii:rehydrate").map_err(|_| StatusCode::FORBIDDEN)?;
+    auth.require_scope("pii:rehydrate")
+        .map_err(|_| StatusCode::FORBIDDEN)?;
 
     if payload.tokens.is_empty() {
         return Ok(Json(serde_json::json!({ "values": {} })));
@@ -254,11 +252,10 @@ pub async fn rehydrate_pii_tokens(
     }
 
     // Create a VaultCrypto instance for decryption
-    let vault = crate::vault::builtin::VaultCrypto::new(&state.config.master_key)
-        .map_err(|e| {
-            tracing::error!("VaultCrypto init failed in rehydrate: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+    let vault = crate::vault::builtin::VaultCrypto::new(&state.config.master_key).map_err(|e| {
+        tracing::error!("VaultCrypto init failed in rehydrate: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
     let project_id = auth.default_project_id();
 
@@ -354,7 +351,8 @@ pub async fn get_anomaly_events(
             };
 
             let threshold = baseline_mean + config.sigma_threshold * baseline_mean.sqrt();
-            let is_anomalous = current_velocity as f64 > threshold && total_points >= config.min_datapoints as u64;
+            let is_anomalous =
+                current_velocity as f64 > threshold && total_points >= config.min_datapoints as u64;
 
             events.push(serde_json::json!({
                 "token_id": token_id,

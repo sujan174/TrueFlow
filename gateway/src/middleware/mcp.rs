@@ -72,7 +72,7 @@ pub fn is_tool_permitted(
 
     // 2. Check allowlist
     match allowed {
-        None => true, // NULL = unrestricted
+        None => true,      // NULL = unrestricted
         Some([]) => false, // [] = deny all
         Some(allowed_list) => {
             // Must match at least one pattern
@@ -234,7 +234,11 @@ pub fn extract_mcp_tool_calls(response_body: &Value) -> Vec<PendingMcpCall> {
         };
 
         for tc in tool_calls {
-            let id = tc.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let id = tc
+                .get("id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
             let func_name = tc
                 .get("function")
                 .and_then(|f| f.get("name"))
@@ -248,8 +252,7 @@ pub fn extract_mcp_tool_calls(response_body: &Value) -> Vec<PendingMcpCall> {
                     .and_then(|f| f.get("arguments"))
                     .and_then(|a| a.as_str());
 
-                let arguments = args_str
-                    .and_then(|s| serde_json::from_str(s).ok());
+                let arguments = args_str.and_then(|s| serde_json::from_str(s).ok());
 
                 calls.push(PendingMcpCall {
                     tool_call_id: id,
@@ -366,7 +369,12 @@ pub async fn execute_mcp_tool_calls(
         );
 
         let result = registry
-            .execute_tool(&call.server_name, &call.tool_name, call.arguments.clone(), project_id)
+            .execute_tool(
+                &call.server_name,
+                &call.tool_name,
+                call.arguments.clone(),
+                project_id,
+            )
             .await;
 
         let content = match result {
@@ -387,7 +395,8 @@ pub async fn execute_mcp_tool_calls(
         let content_json = serde_json::json!({
             "messages": [{"role": "tool", "content": content}]
         });
-        let guardrail_result = crate::middleware::guardrail::check_content(&content_json, &guardrail_action);
+        let guardrail_result =
+            crate::middleware::guardrail::check_content(&content_json, &guardrail_action);
 
         let final_content = if guardrail_result.blocked {
             tracing::warn!(
@@ -397,8 +406,12 @@ pub async fn execute_mcp_tool_calls(
                 risk_score = %guardrail_result.risk_score,
                 "MCP tool response blocked by guardrails"
             );
-            format!("[BLOCKED] Tool response contained unsafe content: {}",
-                guardrail_result.reason.unwrap_or_else(|| "Content policy violation".to_string()))
+            format!(
+                "[BLOCKED] Tool response contained unsafe content: {}",
+                guardrail_result
+                    .reason
+                    .unwrap_or_else(|| "Content policy violation".to_string())
+            )
         } else {
             content
         };
@@ -427,9 +440,7 @@ pub fn build_continuation_body(
 ) -> Option<Vec<u8>> {
     let mut body = original_request_body.clone();
 
-    let messages = body
-        .get_mut("messages")
-        .and_then(|m| m.as_array_mut())?;
+    let messages = body.get_mut("messages").and_then(|m| m.as_array_mut())?;
 
     messages.extend(new_messages.iter().cloned());
 
@@ -726,7 +737,11 @@ mod tests {
         let filtered = filter_openai_tools(tools, None, Some(&blocked));
         assert_eq!(filtered.len(), 1);
         assert_eq!(
-            filtered[0].pointer("/function/name").unwrap().as_str().unwrap(),
+            filtered[0]
+                .pointer("/function/name")
+                .unwrap()
+                .as_str()
+                .unwrap(),
             "get_weather"
         );
     }
@@ -752,7 +767,11 @@ mod tests {
         let filtered = filter_openai_tools(tools, Some(&allowed), None);
         assert_eq!(filtered.len(), 1);
         assert_eq!(
-            filtered[0].pointer("/function/name").unwrap().as_str().unwrap(),
+            filtered[0]
+                .pointer("/function/name")
+                .unwrap()
+                .as_str()
+                .unwrap(),
             "mcp__brave__search"
         );
     }

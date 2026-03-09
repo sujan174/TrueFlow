@@ -38,16 +38,15 @@ pub struct SpendStatus {
 ///
 /// Returns `Err` with a human-readable message if any cap is exceeded.
 #[tracing::instrument(skip(cache, db))]
-pub async fn check_spend_cap(
-    cache: &TieredCache,
-    db: &sqlx::PgPool,
-    token_id: &str,
-) -> Result<()> {
+pub async fn check_spend_cap(cache: &TieredCache, db: &sqlx::PgPool, token_id: &str) -> Result<()> {
     // Load caps (Redis-cached, 5D-4 FIX)
     let caps = load_spend_caps_cached(cache, db, token_id).await?;
 
     // Nothing to enforce if no caps are configured
-    if caps.daily_limit_usd.is_none() && caps.monthly_limit_usd.is_none() && caps.lifetime_limit_usd.is_none() {
+    if caps.daily_limit_usd.is_none()
+        && caps.monthly_limit_usd.is_none()
+        && caps.lifetime_limit_usd.is_none()
+    {
         return Ok(());
     }
 
@@ -291,8 +290,8 @@ pub async fn check_and_increment_spend(
     // DB persistence (fire-and-forget, same as track_spend)
     let tid = token_id.to_string();
     let pool = db.clone();
-    let cost_decimal = rust_decimal::Decimal::from_f64_retain(cost_usd)
-        .unwrap_or(rust_decimal::Decimal::ZERO);
+    let cost_decimal =
+        rust_decimal::Decimal::from_f64_retain(cost_usd).unwrap_or(rust_decimal::Decimal::ZERO);
     tokio::spawn(async move {
         for period in &["daily", "monthly", "lifetime"] {
             if let Err(e) = update_db_spend(&pool, &tid, period, cost_decimal).await {
@@ -329,8 +328,8 @@ async fn load_spend_caps(db: &sqlx::PgPool, token_id: &str) -> Result<SpendCap> 
     for row in rows {
         let limit = row.limit_usd.to_f64().unwrap_or(0.0);
         match row.period.as_str() {
-            "daily"    => caps.daily_limit_usd    = Some(limit),
-            "monthly"  => caps.monthly_limit_usd  = Some(limit),
+            "daily" => caps.daily_limit_usd = Some(limit),
+            "monthly" => caps.monthly_limit_usd = Some(limit),
             "lifetime" => caps.lifetime_limit_usd = Some(limit),
             _ => {}
         }
@@ -362,9 +361,7 @@ async fn load_spend_caps_cached(
 
     // Populate cache (best-effort, 60s TTL)
     if let Ok(json) = serde_json::to_string(&caps) {
-        let _: () = conn.set_ex(&cache_key, &json, 60)
-            .await
-            .unwrap_or(());
+        let _: () = conn.set_ex(&cache_key, &json, 60).await.unwrap_or(());
     }
 
     Ok(caps)
@@ -465,8 +462,7 @@ pub async fn upsert_spend_cap(
     // Best-effort cache invalidation — if Redis is down, the 60s TTL
     // will expire naturally and the next request will pick up the new cap.
     let mut conn = cache.redis();
-    let _ = conn.del::<_, ()>(&cache_key)
-        .await;
+    let _ = conn.del::<_, ()>(&cache_key).await;
 
     info!(token_id, period, limit_usd = %limit_usd, "spend cap configured");
     Ok(())
@@ -489,8 +485,7 @@ pub async fn delete_spend_cap(
     // 5D-4: Bust Redis cache on delete
     let cache_key = format!("spend_caps:{}", token_id);
     let mut conn = cache.redis();
-    let _ = conn.del::<_, ()>(&cache_key)
-        .await;
+    let _ = conn.del::<_, ()>(&cache_key).await;
 
     Ok(())
 }
@@ -505,9 +500,9 @@ pub async fn get_spend_status(
     let mut conn = cache.redis();
     let now = Utc::now();
 
-    let daily_key    = format!("spend:{}:daily:{}",    token_id, now.format("%Y-%m-%d"));
-    let monthly_key  = format!("spend:{}:monthly:{}",  token_id, now.format("%Y-%m"));
-    let lifetime_key = format!("spend:{}:lifetime",    token_id);
+    let daily_key = format!("spend:{}:daily:{}", token_id, now.format("%Y-%m-%d"));
+    let monthly_key = format!("spend:{}:monthly:{}", token_id, now.format("%Y-%m"));
+    let lifetime_key = format!("spend:{}:lifetime", token_id);
 
     // INCRBYFLOAT stores values as bulk strings — get as Option<String> and parse
     let daily_spend: f64 = conn
@@ -530,11 +525,11 @@ pub async fn get_spend_status(
         .unwrap_or(0.0);
 
     Ok(SpendStatus {
-        daily_limit_usd:    caps.daily_limit_usd,
-        monthly_limit_usd:  caps.monthly_limit_usd,
+        daily_limit_usd: caps.daily_limit_usd,
+        monthly_limit_usd: caps.monthly_limit_usd,
         lifetime_limit_usd: caps.lifetime_limit_usd,
-        current_daily_usd:    daily_spend,
-        current_monthly_usd:  monthly_spend,
+        current_daily_usd: daily_spend,
+        current_monthly_usd: monthly_spend,
         current_lifetime_usd: lifetime_spend,
     })
 }
@@ -600,9 +595,15 @@ mod tests {
         // Must be in the future
         assert!(reset > now, "Daily reset must be after now");
         // Must be midnight (00:00:00)
-        assert_eq!(reset.time(), chrono::NaiveTime::from_hms_opt(0, 0, 0).unwrap());
+        assert_eq!(
+            reset.time(),
+            chrono::NaiveTime::from_hms_opt(0, 0, 0).unwrap()
+        );
         // Must be exactly 1 day ahead from the current date (not 2 days)
-        let tomorrow = (now.date_naive() + chrono::Duration::days(1)).and_hms_opt(0, 0, 0).unwrap().and_utc();
+        let tomorrow = (now.date_naive() + chrono::Duration::days(1))
+            .and_hms_opt(0, 0, 0)
+            .unwrap()
+            .and_utc();
         assert_eq!(reset, tomorrow, "Daily reset must be tomorrow at 00:00 UTC");
     }
 
@@ -614,7 +615,10 @@ mod tests {
         assert!(reset > now);
         // Must be day 1 of a month
         assert_eq!(reset.day(), 1, "Monthly reset must be 1st of next month");
-        assert_eq!(reset.time(), chrono::NaiveTime::from_hms_opt(0, 0, 0).unwrap());
+        assert_eq!(
+            reset.time(),
+            chrono::NaiveTime::from_hms_opt(0, 0, 0).unwrap()
+        );
     }
 
     #[test]
@@ -643,7 +647,11 @@ mod tests {
         let now = Utc::now();
         // Lifetime must be ~100 years in the future (36500 days)
         let years_until_reset = (reset - now).num_days() as f64 / 365.25;
-        assert!(years_until_reset > 99.0, "Lifetime reset must be ~100 years out, got {:.1}", years_until_reset);
+        assert!(
+            years_until_reset > 99.0,
+            "Lifetime reset must be ~100 years out, got {:.1}",
+            years_until_reset
+        );
     }
 
     #[test]
@@ -652,7 +660,11 @@ mod tests {
         let now = Utc::now();
         let diff = (reset - now).num_seconds();
         // Should be ~86400s (1 day) with tiny tolerance
-        assert!(diff > 86390 && diff <= 86400, "Unknown period should default to ~1 day, got {}s", diff);
+        assert!(
+            diff > 86390 && diff <= 86400,
+            "Unknown period should default to ~1 day, got {}s",
+            diff
+        );
     }
 
     // ── SpendCap struct logic ─────────────────────────────────
@@ -660,9 +672,18 @@ mod tests {
     #[test]
     fn test_spend_cap_default_has_no_limits() {
         let cap = SpendCap::default();
-        assert!(cap.daily_limit_usd.is_none(), "Default cap should have no daily limit");
-        assert!(cap.monthly_limit_usd.is_none(), "Default cap should have no monthly limit");
-        assert!(cap.lifetime_limit_usd.is_none(), "Default cap should have no lifetime limit");
+        assert!(
+            cap.daily_limit_usd.is_none(),
+            "Default cap should have no daily limit"
+        );
+        assert!(
+            cap.monthly_limit_usd.is_none(),
+            "Default cap should have no monthly limit"
+        );
+        assert!(
+            cap.lifetime_limit_usd.is_none(),
+            "Default cap should have no lifetime limit"
+        );
     }
 
     #[test]
@@ -706,7 +727,10 @@ mod tests {
     fn test_cap_exceeded_when_at_limit() {
         let limit = 10.0_f64;
         let current = 10.0_f64;
-        assert!(current >= limit, "Current == limit should be considered exceeded");
+        assert!(
+            current >= limit,
+            "Current == limit should be considered exceeded"
+        );
     }
 
     #[test]
@@ -761,7 +785,10 @@ mod tests {
     fn test_lua_denies_over_cap() {
         let (result, counter) = simulate_lua_check_and_increment(9.5, 0.6, 10.0);
         assert!(result < 0.0, "Should deny: 9.5 + 0.6 = 10.1 > 10.0");
-        assert!((counter - 9.5).abs() < f64::EPSILON, "Counter must NOT change on deny");
+        assert!(
+            (counter - 9.5).abs() < f64::EPSILON,
+            "Counter must NOT change on deny"
+        );
     }
 
     #[test]
@@ -778,13 +805,19 @@ mod tests {
         let (result_a, new_counter) = simulate_lua_check_and_increment(counter, 0.6, limit);
         counter = new_counter;
         assert!(result_a < 0.0, "Request A should be denied");
-        assert!((counter - 9.5).abs() < f64::EPSILON, "Counter unchanged after denied A");
+        assert!(
+            (counter - 9.5).abs() < f64::EPSILON,
+            "Counter unchanged after denied A"
+        );
 
         // Request B
         let (result_b, new_counter) = simulate_lua_check_and_increment(counter, 0.6, limit);
         counter = new_counter;
         assert!(result_b < 0.0, "Request B should be denied");
-        assert!((counter - 9.5).abs() < f64::EPSILON, "Counter still 9.5 after denied B — no phantom spend");
+        assert!(
+            (counter - 9.5).abs() < f64::EPSILON,
+            "Counter still 9.5 after denied B — no phantom spend"
+        );
     }
 
     #[test]
@@ -792,8 +825,14 @@ mod tests {
         // current + cost == limit should be ALLOWED (the Lua script uses > not >=)
         // Spending exactly your budget is not exceeding it
         let (result, counter) = simulate_lua_check_and_increment(9.5, 0.5, 10.0);
-        assert!(result > 0.0, "Should allow: 9.5 + 0.5 = 10.0 == limit (not exceeded)");
-        assert!((counter - 10.0).abs() < f64::EPSILON, "Counter should be updated to 10.0");
+        assert!(
+            result > 0.0,
+            "Should allow: 9.5 + 0.5 = 10.0 == limit (not exceeded)"
+        );
+        assert!(
+            (counter - 10.0).abs() < f64::EPSILON,
+            "Counter should be updated to 10.0"
+        );
     }
 
     #[test]

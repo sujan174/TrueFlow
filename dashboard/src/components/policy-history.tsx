@@ -12,14 +12,26 @@ export function PolicyHistoryDialog({ policyId, open, onOpenChange }: { policyId
     const [selectedVersion, setSelectedVersion] = useState<PolicyVersion | null>(null);
 
     useEffect(() => {
+        let active = true;
         if (open && policyId) {
-            setLoading(true);
+            setTimeout(() => {
+                if (active) setLoading(true);
+            }, 0);
             listPolicyVersions(policyId)
-                .then(setVersions)
+                .then((data) => {
+                    if (active) setVersions(data);
+                })
                 .catch(console.error)
-                .finally(() => setLoading(false));
-            setSelectedVersion(null);
+                .finally(() => {
+                    if (active) setLoading(false);
+                });
+            setTimeout(() => {
+                if (active) setSelectedVersion(null);
+            }, 0);
         }
+        return () => {
+            active = false;
+        };
     }, [open, policyId]);
 
     return (

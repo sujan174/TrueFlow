@@ -12,12 +12,12 @@
 //! These tests are HONEST — they test actual behavior, catch real bugs, and verify
 //! both positive (should match) AND negative (should NOT match) cases.
 
+use chrono::Utc;
 use gateway::middleware::model_access::{check_model_access, model_matches};
 use gateway::middleware::teams::{check_team_model_access, merge_tags, Team};
 use gateway::models::policy::RoutingStrategy;
 use serde_json::json;
 use uuid::Uuid;
-use chrono::Utc;
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Model Access — Glob Matching Edge Cases (#7)
@@ -37,7 +37,10 @@ fn test_model_matches_version_suffixes() {
     // Real-world: models often have date suffixes
     assert!(model_matches("gpt-4o-2024-08-06", "gpt-4o*"));
     assert!(model_matches("claude-3-haiku-20240307", "claude-3-haiku*"));
-    assert!(model_matches("claude-3-5-sonnet-20241022", "claude-3-5-sonnet*"));
+    assert!(model_matches(
+        "claude-3-5-sonnet-20241022",
+        "claude-3-5-sonnet*"
+    ));
     assert!(!model_matches("claude-3-opus-20240229", "claude-3-haiku*"));
 }
 
@@ -118,9 +121,18 @@ fn test_check_model_access_error_message_lists_all_patterns() {
     let err = check_model_access("llama-3-70b", Some(&allowed), &groups).unwrap_err();
     // Should list all patterns
     assert!(err.contains("gpt-4o"), "Error should list direct patterns");
-    assert!(err.contains("gpt-4o-mini"), "Error should list direct patterns");
-    assert!(err.contains("claude-3-haiku*"), "Error should list group patterns");
-    assert!(err.contains("llama-3-70b"), "Error should name the denied model");
+    assert!(
+        err.contains("gpt-4o-mini"),
+        "Error should list direct patterns"
+    );
+    assert!(
+        err.contains("claude-3-haiku*"),
+        "Error should list group patterns"
+    );
+    assert!(
+        err.contains("llama-3-70b"),
+        "Error should name the denied model"
+    );
 }
 
 #[test]
@@ -173,7 +185,13 @@ fn test_team_model_access_empty_array_allows_all() {
 
 #[test]
 fn test_team_model_access_restricts_with_exact() {
-    let team = make_team("budget-team", Some(json!(["gpt-4o-mini"])), None, None, json!({}));
+    let team = make_team(
+        "budget-team",
+        Some(json!(["gpt-4o-mini"])),
+        None,
+        None,
+        json!({}),
+    );
     assert!(check_team_model_access("gpt-4o-mini", &team).is_ok());
     assert!(check_team_model_access("gpt-4o", &team).is_err());
     assert!(check_team_model_access("claude-3-opus", &team).is_err());
@@ -181,7 +199,13 @@ fn test_team_model_access_restricts_with_exact() {
 
 #[test]
 fn test_team_model_access_restricts_with_glob() {
-    let team = make_team("budget-team", Some(json!(["gpt-3.5*", "claude-3-haiku*"])), None, None, json!({}));
+    let team = make_team(
+        "budget-team",
+        Some(json!(["gpt-3.5*", "claude-3-haiku*"])),
+        None,
+        None,
+        json!({}),
+    );
     assert!(check_team_model_access("gpt-3.5-turbo", &team).is_ok());
     assert!(check_team_model_access("gpt-3.5-turbo-0125", &team).is_ok());
     assert!(check_team_model_access("claude-3-haiku-20240307", &team).is_ok());
@@ -191,10 +215,22 @@ fn test_team_model_access_restricts_with_glob() {
 
 #[test]
 fn test_team_model_access_error_names_team() {
-    let team = make_team("ML Engineering", Some(json!(["gpt-4o"])), None, None, json!({}));
+    let team = make_team(
+        "ML Engineering",
+        Some(json!(["gpt-4o"])),
+        None,
+        None,
+        json!({}),
+    );
     let err = check_team_model_access("claude-3-opus", &team).unwrap_err();
-    assert!(err.contains("ML Engineering"), "Error should mention team name");
-    assert!(err.contains("claude-3-opus"), "Error should mention denied model");
+    assert!(
+        err.contains("ML Engineering"),
+        "Error should mention team name"
+    );
+    assert!(
+        err.contains("claude-3-opus"),
+        "Error should mention denied model"
+    );
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -247,9 +283,14 @@ fn test_routing_strategy_all_variants_deserialize() {
     ];
 
     for (json_str, expected) in strategies {
-        let deserialized: RoutingStrategy = serde_json::from_str(json_str)
-            .expect(&format!("Failed to deserialize {}", json_str));
-        assert_eq!(deserialized, expected, "Strategy {} should deserialize correctly", json_str);
+        let deserialized: RoutingStrategy =
+            serde_json::from_str(json_str)
+                .unwrap_or_else(|_| panic!("Failed to deserialize {}", json_str));
+        assert_eq!(
+            deserialized, expected,
+            "Strategy {} should deserialize correctly",
+            json_str
+        );
     }
 }
 
@@ -290,7 +331,10 @@ fn test_app_error_forbidden_exists_and_has_message() {
 
     let error = AppError::Forbidden("Model 'gpt-4o' not allowed".to_string());
     let error_str = format!("{}", error);
-    assert!(error_str.contains("gpt-4o"), "Error display should contain the reason");
+    assert!(
+        error_str.contains("gpt-4o"),
+        "Error display should contain the reason"
+    );
     assert!(error_str.contains("not allowed") || error_str.contains("forbidden"));
 }
 
@@ -366,7 +410,13 @@ fn test_combined_token_and_team_model_restriction() {
     // Scenario: Token allows gpt-4*, Team only allows gpt-4o-mini
     // Token check should pass for gpt-4o, but team should deny it
     let token_allowed = json!(["gpt-4*"]); // token level: allows all gpt-4 family
-    let team = make_team("budget-team", Some(json!(["gpt-4o-mini"])), None, None, json!({}));
+    let team = make_team(
+        "budget-team",
+        Some(json!(["gpt-4o-mini"])),
+        None,
+        None,
+        json!({}),
+    );
 
     // Token-level: gpt-4o passes
     assert!(check_model_access("gpt-4o", Some(&token_allowed), &[]).is_ok());
@@ -408,7 +458,7 @@ fn test_no_false_positive_regression_suite() {
 
     let must_deny = vec![
         "gpt-4o",
-        "gpt-4o-mini-2024",  // This one should deny since "gpt-4o-mini" is exact, not glob
+        "gpt-4o-mini-2024", // This one should deny since "gpt-4o-mini" is exact, not glob
         "gpt-4o-mini-preview",
         "gpt-4",
         "gpt-3.5-turbo",

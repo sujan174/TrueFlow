@@ -1140,9 +1140,9 @@ mod tests {
         assert!(matches!(policy.rules[1].then[0], Action::RateLimit { .. }));
         assert!(matches!(policy.rules[2].then[0], Action::Log { .. }));
     }
-    
+
     // ── Tests: Retry Config ──────────────────────────────────
-    
+
     #[test]
     fn test_retry_config_serialization() {
         let json = r#"{
@@ -1265,7 +1265,13 @@ mod tests {
         }"#;
         let action: Action = serde_json::from_str(json).unwrap();
         match action {
-            Action::ExternalGuardrail { vendor, endpoint, api_key_env, threshold, on_fail } => {
+            Action::ExternalGuardrail {
+                vendor,
+                endpoint,
+                api_key_env,
+                threshold,
+                on_fail,
+            } => {
                 assert_eq!(vendor, ExternalVendor::AzureContentSafety);
                 assert_eq!(endpoint, "https://my-resource.cognitiveservices.azure.com");
                 assert_eq!(api_key_env, Some("AZURE_KEY".to_string()));
@@ -1287,7 +1293,12 @@ mod tests {
         }"#;
         let action: Action = serde_json::from_str(json).unwrap();
         match action {
-            Action::ExternalGuardrail { vendor, threshold, on_fail, .. } => {
+            Action::ExternalGuardrail {
+                vendor,
+                threshold,
+                on_fail,
+                ..
+            } => {
                 assert_eq!(vendor, ExternalVendor::AwsComprehend);
                 assert!((threshold - 0.8).abs() < 0.01);
                 assert_eq!(on_fail, "deny"); // default fallback
@@ -1306,11 +1317,23 @@ mod tests {
         }"#;
         let action: Action = serde_json::from_str(json).unwrap();
         match action {
-            Action::ExternalGuardrail { vendor, endpoint, api_key_env, threshold, on_fail } => {
+            Action::ExternalGuardrail {
+                vendor,
+                endpoint,
+                api_key_env,
+                threshold,
+                on_fail,
+            } => {
                 assert_eq!(vendor, ExternalVendor::LlamaGuard);
                 assert_eq!(endpoint, "http://localhost:11434");
-                assert!(api_key_env.is_none(), "LlamaGuard should not require api_key_env");
-                assert!((threshold - 0.5).abs() < 0.01, "default threshold should be 0.5");
+                assert!(
+                    api_key_env.is_none(),
+                    "LlamaGuard should not require api_key_env"
+                );
+                assert!(
+                    (threshold - 0.5).abs() < 0.01,
+                    "default threshold should be 0.5"
+                );
                 assert_eq!(on_fail, "log");
             }
             _ => panic!("Expected ExternalGuardrail"),
@@ -1327,8 +1350,16 @@ mod tests {
         }"#;
         let action: Action = serde_json::from_str(json).unwrap();
         match action {
-            Action::ExternalGuardrail { threshold, on_fail, api_key_env, .. } => {
-                assert!((threshold - 0.5).abs() < 0.01, "default threshold should be 0.5");
+            Action::ExternalGuardrail {
+                threshold,
+                on_fail,
+                api_key_env,
+                ..
+            } => {
+                assert!(
+                    (threshold - 0.5).abs() < 0.01,
+                    "default threshold should be 0.5"
+                );
                 assert_eq!(on_fail, "deny", "default on_fail should be 'deny'");
                 assert!(api_key_env.is_none(), "api_key_env should default to None");
             }
@@ -1340,15 +1371,26 @@ mod tests {
     fn test_external_vendor_round_trip() {
         // Verify ExternalVendor serializes and deserializes correctly
         let vendors = vec![
-            (ExternalVendor::AzureContentSafety, "\"azure_content_safety\""),
+            (
+                ExternalVendor::AzureContentSafety,
+                "\"azure_content_safety\"",
+            ),
             (ExternalVendor::AwsComprehend, "\"aws_comprehend\""),
             (ExternalVendor::LlamaGuard, "\"llama_guard\""),
         ];
         for (variant, expected_json) in vendors {
             let serialized = serde_json::to_string(&variant).unwrap();
-            assert_eq!(serialized, expected_json, "serialization mismatch for {:?}", variant);
+            assert_eq!(
+                serialized, expected_json,
+                "serialization mismatch for {:?}",
+                variant
+            );
             let deserialized: ExternalVendor = serde_json::from_str(&serialized).unwrap();
-            assert_eq!(deserialized, variant, "round-trip mismatch for {:?}", variant);
+            assert_eq!(
+                deserialized, variant,
+                "round-trip mismatch for {:?}",
+                variant
+            );
         }
     }
 
@@ -1368,7 +1410,9 @@ mod tests {
         let rule: Rule = serde_json::from_str(json).unwrap();
         assert!(rule.async_check);
         match &rule.then[0] {
-            Action::ExternalGuardrail { vendor, threshold, .. } => {
+            Action::ExternalGuardrail {
+                vendor, threshold, ..
+            } => {
                 assert_eq!(*vendor, ExternalVendor::AzureContentSafety);
                 assert!((threshold - 3.0).abs() < 0.01);
             }

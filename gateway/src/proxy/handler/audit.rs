@@ -64,7 +64,9 @@ impl AuditBuilder {
             upstream_url: self.upstream_url,
             request_body_hash: None,
             policies_evaluated: Some(serde_json::json!(self.policies)),
-            policy_result: self.policy_result.unwrap_or(crate::models::audit::PolicyResult::Allow),
+            policy_result: self
+                .policy_result
+                .unwrap_or(crate::models::audit::PolicyResult::Allow),
             hitl_required: self.hitl_required,
             hitl_decision: self.hitl_decision,
             hitl_latency_ms: self.hitl_latency_ms,

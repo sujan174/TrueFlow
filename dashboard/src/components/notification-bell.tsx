@@ -43,17 +43,33 @@ export function NotificationBell() {
 
     // Poll for unread count, re-run if project changes
     useEffect(() => {
+        let active = true;
         if (!selectedProjectId) return; // Wait until project ID is validated by context
-        fetchUnread();
-        const interval = setInterval(fetchUnread, 10000);
-        return () => clearInterval(interval);
+        if (active) {
+            setTimeout(() => {
+                if (active) fetchUnread();
+            }, 0);
+        }
+        const interval = setInterval(() => {
+            if (active) fetchUnread();
+        }, 10000);
+        return () => {
+            active = false;
+            clearInterval(interval);
+        };
     }, [selectedProjectId]);
 
     // Fetch list when opening
     useEffect(() => {
-        if (open && selectedProjectId) {
-            fetchList();
+        let active = true;
+        if (open && selectedProjectId && active) {
+            setTimeout(() => {
+                if (active) fetchList();
+            }, 0);
         }
+        return () => {
+            active = false;
+        };
     }, [open, selectedProjectId]);
 
     const handleMarkAllRead = async (e: React.MouseEvent) => {

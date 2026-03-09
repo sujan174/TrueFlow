@@ -28,11 +28,12 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { CountUp } from "@/components/ui/count-up";
 // Native select styled to match the design system (used with <option> children)
 const Select = ({ className, children, ...props }: React.SelectHTMLAttributes<HTMLSelectElement>) => (
     <select
         className={cn(
-            "flex h-9 w-full items-center rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
+            "flex h-9 w-full items-center rounded-md border border-white/10 bg-black px-3 py-1 text-sm text-zinc-300 shadow-sm transition-colors focus:outline-none focus:ring-1 focus:ring-white/20 disabled:cursor-not-allowed disabled:opacity-50",
             className
         )}
         {...props}
@@ -104,8 +105,8 @@ export default function PoliciesPage() {
             {/* Header */}
             <div className="flex items-center justify-between gap-4">
                 <div>
-                    <h1 className="text-lg font-semibold tracking-tight">Policies</h1>
-                    <p className="text-xs text-muted-foreground mt-0.5">Traffic control rules for conditions and actions.</p>
+                    <h1 className="text-lg font-semibold tracking-tight text-white">Policies</h1>
+                    <p className="text-xs text-zinc-500 mt-0.5">Traffic control rules for conditions and actions.</p>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                     <Button variant="outline" size="sm" onClick={() => mutate()} disabled={isLoading}>
@@ -118,11 +119,13 @@ export default function PoliciesPage() {
                                 <Plus className="mr-1.5 h-3.5 w-3.5" /> New Policy
                             </Button>
                         </DialogTrigger>
-                        <DialogContent className="sm:max-w-[680px] max-h-[85vh] overflow-y-auto">
-                            <PolicyFormDialog
-                                mode="create"
-                                onSuccess={() => { setCreateOpen(false); mutate(); }}
-                            />
+                        <DialogContent className="sm:max-w-[680px] max-h-[85vh] overflow-y-auto bg-zinc-950 border-white/10 p-0">
+                            <div className="p-6">
+                                <PolicyFormDialog
+                                    mode="create"
+                                    onSuccess={() => { setCreateOpen(false); mutate(); }}
+                                />
+                            </div>
                         </DialogContent>
                     </Dialog>
                 </div>
@@ -140,11 +143,11 @@ export default function PoliciesPage() {
             <div className="animate-slide-up stagger-2">
                 {isLoading && policies.length === 0 ? (
                     <div className="space-y-4">
-                        <div className="h-10 w-[300px] bg-muted/50 rounded shimmer" />
-                        <div className="rounded-md border border-border/60 bg-card/50 h-[400px] shimmer" />
+                        <div className="h-10 w-[300px] bg-white/5 border border-white/10 rounded-md shimmer" />
+                        <div className="rounded-md border border-white/10 bg-white/[0.02] h-[400px] shimmer" />
                     </div>
                 ) : (
-                    <div className="rounded-md border border-border/60 bg-card/50 backdrop-blur-sm overflow-hidden shadow-sm">
+                    <div className="rounded-md border border-white/10 bg-black overflow-hidden shadow-sm">
                         <DataTable
                             columns={columns}
                             data={policies}
@@ -173,12 +176,14 @@ export default function PoliciesPage() {
             {/* Edit Dialog */}
             {editPolicy && (
                 <Dialog open={!!editPolicy} onOpenChange={(open) => !open && setEditPolicy(null)}>
-                    <DialogContent className="sm:max-w-[680px] max-h-[85vh] overflow-y-auto">
-                        <PolicyFormDialog
-                            mode="edit"
-                            initialPolicy={editPolicy}
-                            onSuccess={() => { setEditPolicy(null); mutate(); }}
-                        />
+                    <DialogContent className="sm:max-w-[680px] max-h-[85vh] overflow-y-auto bg-zinc-950 border-white/10 p-0">
+                        <div className="p-6">
+                            <PolicyFormDialog
+                                mode="edit"
+                                initialPolicy={editPolicy}
+                                onSuccess={() => { setEditPolicy(null); mutate(); }}
+                            />
+                        </div>
                     </DialogContent>
                 </Dialog>
             )}
@@ -205,27 +210,29 @@ function KPIMini({ icon: Icon, value, label, color, loading }: {
     loading?: boolean;
 }) {
     const bgColors = {
-        blue: "bg-blue-500/10 text-blue-500",
-        rose: "bg-rose-500/10 text-rose-500",
-        amber: "bg-amber-500/10 text-amber-500",
-        violet: "bg-violet-500/10 text-violet-500",
+        blue: "text-blue-400 bg-blue-500/10 border-blue-500/20",
+        rose: "text-rose-400 bg-rose-500/10 border-rose-500/20",
+        amber: "text-amber-400 bg-amber-500/10 border-amber-500/20",
+        violet: "text-violet-400 bg-violet-500/10 border-violet-500/20",
     };
     return (
-        <Card className="glass-card hover-lift">
-            <CardContent className="p-4 flex items-center gap-4">
-                <div className={cn("p-2.5 rounded-md transition-colors", bgColors[color])}>
+        <div className="machined-card rounded-lg p-5">
+            <div className="flex items-center gap-4">
+                <div className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-full border", bgColors[color])}>
                     <Icon className="h-5 w-5" />
                 </div>
-                <div className="min-w-0 flex-1">
-                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">{label}</p>
+                <div>
                     {loading ? (
-                        <div className="h-7 w-16 bg-muted/50 rounded shimmer my-0.5" />
+                        <div className="h-7 w-16 bg-white/5 rounded shimmer my-0.5" />
                     ) : (
-                        <p className="text-xl font-bold tabular-nums tracking-tight">{value}</p>
+                        <p className="text-2xl font-semibold tabular-nums text-white leading-none tracking-tight">
+                            <CountUp value={value} />
+                        </p>
                     )}
+                    <p className="text-[11px] font-medium text-zinc-500 uppercase tracking-widest mt-1">{label}</p>
                 </div>
-            </CardContent>
-        </Card>
+            </div>
+        </div>
     );
 }
 
@@ -238,29 +245,29 @@ function PolicyDetailPanel({ policy, onClose, onEdit, onHistory }: {
     onHistory: () => void;
 }) {
     return (
-        <div className="fixed inset-y-0 right-0 w-[480px] z-50 bg-card/95 backdrop-blur-xl border-l border-border shadow-2xl flex flex-col animate-slide-in-right">
+        <div className="fixed inset-y-0 right-0 w-[480px] z-50 bg-black/95 backdrop-blur-xl border-l border-white/10 shadow-2xl flex flex-col animate-slide-in-right">
             {/* Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
                 <div className="flex items-center gap-3 min-w-0">
-                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary/10 border border-primary/20">
-                        <ShieldAlert className="h-4 w-4 text-primary" />
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-white/5 border border-white/10">
+                        <ShieldAlert className="h-4 w-4 text-white" />
                     </div>
                     <div className="min-w-0">
-                        <h3 className="font-semibold text-sm truncate">{policy.name}</h3>
-                        <p className="text-[11px] text-muted-foreground font-mono truncate">{policy.id}</p>
+                        <h3 className="font-semibold text-sm truncate text-white">{policy.name}</h3>
+                        <p className="text-[11px] text-zinc-500 font-mono truncate">{policy.id}</p>
                     </div>
                 </div>
                 <div className="flex items-center gap-1">
-                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => {
+                    <Button variant="ghost" size="icon" className="h-7 w-7 text-zinc-500 hover:text-white hover:bg-white/5" onClick={() => {
                         navigator.clipboard.writeText(policy.id);
                         toast.success("Copied");
                     }}>
                         <Copy className="h-3.5 w-3.5" />
                     </Button>
-                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onHistory} title="View History">
+                    <Button variant="ghost" size="icon" className="h-7 w-7 text-zinc-500 hover:text-white hover:bg-white/5" onClick={onHistory} title="View History">
                         <Clock className="h-4 w-4" />
                     </Button>
-                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onClose}>
+                    <Button variant="ghost" size="icon" className="h-7 w-7 text-zinc-500 hover:text-white hover:bg-white/5" onClick={onClose}>
                         <X className="h-4 w-4" />
                     </Button>
                 </div>
@@ -271,38 +278,38 @@ function PolicyDetailPanel({ policy, onClose, onEdit, onHistory }: {
                 {/* Meta */}
                 <div className="grid grid-cols-2 gap-4">
                     <div>
-                        <p className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1">Mode</p>
+                        <p className="text-[11px] text-zinc-500 uppercase tracking-widest mb-1">Mode</p>
                         <Badge variant={policy.mode === "enforce" ? "destructive" : "warning"} dot className="capitalize">
                             {policy.mode}
                         </Badge>
                     </div>
                     <div>
-                        <p className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1">Status</p>
+                        <p className="text-[11px] text-zinc-500 uppercase tracking-widest mb-1">Status</p>
                         <Badge variant={policy.is_active ? "success" : "secondary"} dot>
                             {policy.is_active ? "Active" : "Disabled"}
                         </Badge>
                     </div>
                     <div>
-                        <p className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1">Created</p>
-                        <p className="text-sm font-mono">{formatDistanceToNow(new Date(policy.created_at), { addSuffix: true })}</p>
+                        <p className="text-[11px] text-zinc-500 uppercase tracking-widest mb-1">Created</p>
+                        <p className="text-[13px] font-mono text-zinc-300">{formatDistanceToNow(new Date(policy.created_at), { addSuffix: true })}</p>
                     </div>
                     <div>
-                        <p className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1">Rules</p>
-                        <p className="text-sm font-mono">{policy.rules?.length || 0}</p>
+                        <p className="text-[11px] text-zinc-500 uppercase tracking-widest mb-1">Rules</p>
+                        <p className="text-[13px] font-mono text-zinc-300">{policy.rules?.length || 0}</p>
                     </div>
                 </div>
 
                 {/* Rules */}
                 <div>
-                    <p className="text-[11px] text-muted-foreground uppercase tracking-wider mb-3">Rules</p>
+                    <p className="text-[11px] text-zinc-500 uppercase tracking-widest mb-3">Rules</p>
                     <div className="space-y-3">
                         {(policy.rules || []).map((rule, idx) => (
                             <RuleCard key={idx} rule={rule as Record<string, unknown>} index={idx} />
                         ))}
                         {(!policy.rules || policy.rules.length === 0) && (
-                            <div className="text-center py-8 text-muted-foreground">
+                            <div className="text-center py-8 text-zinc-600">
                                 <Filter className="h-6 w-6 mx-auto mb-2 opacity-30" />
-                                <p className="text-xs">No rules defined</p>
+                                <p className="text-[11px] uppercase tracking-widest">No rules defined</p>
                             </div>
                         )}
                     </div>
@@ -310,15 +317,15 @@ function PolicyDetailPanel({ policy, onClose, onEdit, onHistory }: {
 
                 {/* Raw JSON */}
                 <div>
-                    <p className="text-[11px] text-muted-foreground uppercase tracking-wider mb-2">Raw Definition</p>
-                    <pre className="bg-muted/30 rounded-md p-3 text-[11px] font-mono text-muted-foreground overflow-x-auto max-h-[200px]">
+                    <p className="text-[11px] text-zinc-500 uppercase tracking-widest mb-2">Raw Definition</p>
+                    <pre className="bg-white/[0.02] border border-white/10 rounded-md p-3 text-[11px] font-mono text-zinc-400 overflow-x-auto max-h-[200px]">
                         {JSON.stringify(policy.rules, null, 2)}
                     </pre>
                 </div>
             </div>
 
             {/* Footer */}
-            <div className="border-t border-border px-6 py-3 flex items-center gap-2">
+            <div className="border-t border-white/10 px-6 py-3 flex items-center gap-2">
                 <Button size="sm" className="flex-1" onClick={onEdit}>
                     Edit Policy
                 </Button>
@@ -339,14 +346,14 @@ function RuleCard({ rule, index }: { rule: Record<string, unknown>; index: numbe
     // Legacy format detection
     if (rule.type) {
         return (
-            <div className="rounded-md border border-border bg-muted/20 p-3">
+            <div className="rounded-md border border-white/10 bg-white/[0.02] p-3">
                 <div className="flex items-center gap-2 mb-2">
-                    <span className="text-[10px] font-mono text-muted-foreground bg-muted/50 px-1.5 py-0.5 rounded">
+                    <span className="text-[10px] font-mono text-zinc-500 bg-black border border-white/10 px-1.5 py-0.5 rounded">
                         #{index + 1}
                     </span>
                     <Badge variant="secondary" className="text-[10px]">{rule.type as string}</Badge>
                 </div>
-                <pre className="text-[11px] font-mono text-muted-foreground">{JSON.stringify(rule, null, 2)}</pre>
+                <pre className="text-[11px] font-mono text-zinc-500 overflow-x-auto">{JSON.stringify(rule, null, 2)}</pre>
             </div>
         );
     }
@@ -355,14 +362,14 @@ function RuleCard({ rule, index }: { rule: Record<string, unknown>; index: numbe
     const at = ACTION_TYPES.find(a => a.value === actionType);
 
     return (
-        <div className="rounded-md border border-border bg-muted/20 p-3 space-y-2">
+        <div className="rounded-md border border-white/10 bg-white/[0.02] p-3 space-y-2">
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-mono text-muted-foreground bg-muted/50 px-1.5 py-0.5 rounded">
+                    <span className="text-[10px] font-mono text-zinc-500 bg-black border border-white/10 px-1.5 py-0.5 rounded">
                         #{index + 1}
                     </span>
                     {at && <at.icon className={cn("h-3.5 w-3.5", at.color)} />}
-                    <span className="text-xs font-medium">{at?.label || actionType}</span>
+                    <span className="text-xs font-medium text-white">{at?.label || actionType}</span>
                 </div>
                 {Boolean(rule.phase) && (
                     <Badge variant="outline" className="text-[10px]">{String(rule.phase)}</Badge>
@@ -372,8 +379,8 @@ function RuleCard({ rule, index }: { rule: Record<string, unknown>; index: numbe
             {/* Condition */}
             {condition && (
                 <div className="flex items-start gap-2">
-                    <span className="text-[10px] uppercase text-muted-foreground font-semibold mt-0.5 shrink-0 w-8">IF</span>
-                    <pre className="text-[11px] font-mono text-muted-foreground bg-muted/30 rounded px-2 py-1 flex-1 overflow-x-auto">
+                    <span className="text-[10px] uppercase text-zinc-500 font-semibold mt-0.5 shrink-0 w-8 tracking-widest">IF</span>
+                    <pre className="text-[11px] font-mono text-zinc-400 bg-black border border-white/10 rounded px-2 py-1 flex-1 overflow-x-auto">
                         {JSON.stringify(condition, null, 1)}
                     </pre>
                 </div>
@@ -382,8 +389,8 @@ function RuleCard({ rule, index }: { rule: Record<string, unknown>; index: numbe
             {/* Action */}
             {action && (
                 <div className="flex items-start gap-2">
-                    <span className="text-[10px] uppercase text-muted-foreground font-semibold mt-0.5 shrink-0 w-8">DO</span>
-                    <pre className="text-[11px] font-mono text-muted-foreground bg-muted/30 rounded px-2 py-1 flex-1 overflow-x-auto">
+                    <span className="text-[10px] uppercase text-zinc-500 font-semibold mt-0.5 shrink-0 w-8 tracking-widest">DO</span>
+                    <pre className="text-[11px] font-mono text-zinc-400 bg-black border border-white/10 rounded px-2 py-1 flex-1 overflow-x-auto">
                         {JSON.stringify(action, null, 1)}
                     </pre>
                 </div>
@@ -573,8 +580,8 @@ function PolicyFormDialog({ mode, initialPolicy, onSuccess }: {
     return (
         <form onSubmit={handleSubmit}>
             <DialogHeader>
-                <DialogTitle>{mode === "edit" ? "Edit Policy" : "Create Policy"}</DialogTitle>
-                <DialogDescription>
+                <DialogTitle className="text-white">{mode === "edit" ? "Edit Policy" : "Create Policy"}</DialogTitle>
+                <DialogDescription className="text-zinc-500">
                     {mode === "edit"
                         ? "Modify the rules and configuration for this policy."
                         : "Define condition → action rules for traffic control and AI safety."}
@@ -585,7 +592,7 @@ function PolicyFormDialog({ mode, initialPolicy, onSuccess }: {
                 {/* Name + Mode */}
                 <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1.5">
-                        <Label htmlFor="name" className="text-xs">Policy Name</Label>
+                        <Label htmlFor="name" className="text-xs text-zinc-400">Policy Name</Label>
                         <Input
                             id="name"
                             value={name}
@@ -595,7 +602,7 @@ function PolicyFormDialog({ mode, initialPolicy, onSuccess }: {
                         />
                     </div>
                     <div className="space-y-1.5">
-                        <Label htmlFor="mode" className="text-xs">Mode</Label>
+                        <Label htmlFor="mode" className="text-xs text-zinc-400">Mode</Label>
                         <Select value={policyMode} onChange={(e) => setPolicyMode(e.target.value)}>
                             <option value="enforce">🔒 Blocking (Enforce)</option>
                             <option value="shadow">👁 Shadow (Log only)</option>
@@ -605,12 +612,12 @@ function PolicyFormDialog({ mode, initialPolicy, onSuccess }: {
 
                 {/* Templates */}
                 {mode === "create" && (
-                    <div className="space-y-2 pt-2 border-t">
-                        <Label className="text-xs text-muted-foreground flex items-center gap-2"><Zap className="h-3 w-3 text-amber-500" /> Start from a Template</Label>
+                    <div className="space-y-2 pt-2 border-t border-white/5">
+                        <Label className="text-xs text-zinc-500 flex items-center gap-2"><Zap className="h-3 w-3 text-amber-500" /> Start from a Template</Label>
                         <div className="flex flex-wrap gap-2">
                             <Button
                                 type="button" variant="outline" size="sm"
-                                className="text-xs h-7 px-3 bg-background hover:bg-muted"
+                                className="text-xs h-7 px-3 bg-black border-white/10 text-zinc-400 hover:text-white hover:bg-white/5"
                                 onClick={() => {
                                     setInputMode("json");
                                     setJsonRules(JSON.stringify([{
@@ -628,7 +635,7 @@ function PolicyFormDialog({ mode, initialPolicy, onSuccess }: {
 
                             <Button
                                 type="button" variant="outline" size="sm"
-                                className="text-xs h-7 px-3 bg-background hover:bg-muted"
+                                className="text-xs h-7 px-3 bg-black border-white/10 text-zinc-400 hover:text-white hover:bg-white/5"
                                 onClick={() => {
                                     setInputMode("json");
                                     setJsonRules(JSON.stringify([{
@@ -654,7 +661,7 @@ function PolicyFormDialog({ mode, initialPolicy, onSuccess }: {
 
                             <Button
                                 type="button" variant="outline" size="sm"
-                                className="text-xs h-7 px-3 bg-background hover:bg-muted"
+                                className="text-xs h-7 px-3 bg-black border-white/10 text-zinc-400 hover:text-white hover:bg-white/5"
                                 onClick={() => {
                                     setInputMode("visual");
                                     setRules([emptyRule()]);
@@ -680,12 +687,12 @@ function PolicyFormDialog({ mode, initialPolicy, onSuccess }: {
                 )}
 
                 {/* Input Mode Toggle */}
-                <div className="flex items-center gap-1 border rounded-md p-0.5 w-fit">
+                <div className="flex items-center gap-1 border border-white/10 rounded-md p-0.5 w-fit">
                     <button
                         type="button"
                         className={cn(
                             "px-3 py-2 rounded-md text-xs font-medium transition-all",
-                            inputMode === "visual" ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                            inputMode === "visual" ? "bg-white/10 text-white shadow-sm" : "text-zinc-500 hover:text-zinc-300"
                         )}
                         onClick={() => setInputMode("visual")}
                     >
@@ -695,7 +702,7 @@ function PolicyFormDialog({ mode, initialPolicy, onSuccess }: {
                         type="button"
                         className={cn(
                             "px-3 py-2 rounded-md text-xs font-medium transition-all",
-                            inputMode === "json" ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                            inputMode === "json" ? "bg-white/10 text-white shadow-sm" : "text-zinc-500 hover:text-zinc-300"
                         )}
                         onClick={() => setInputMode("json")}
                     >
@@ -715,15 +722,15 @@ function PolicyFormDialog({ mode, initialPolicy, onSuccess }: {
                                 onRemove={() => removeRule(idx)}
                             />
                         ))}
-                        <Button type="button" variant="outline" size="sm" className="w-full" onClick={addRule}>
+                        <Button type="button" variant="outline" size="sm" className="w-full bg-black border-dashed border-white/20 text-zinc-400 hover:text-white hover:bg-white/5 hover:border-white/40" onClick={addRule}>
                             <Plus className="h-3 w-3 mr-1.5" /> Add Rule
                         </Button>
                     </div>
                 ) : (
                     <div className="space-y-1.5">
-                        <Label className="text-xs">Rules JSON</Label>
+                        <Label className="text-xs text-zinc-400">Rules JSON</Label>
                         <textarea
-                            className="flex min-h-[200px] w-full rounded-md border border-input bg-muted/30 px-3 py-2 text-xs font-mono ring-offset-background focus:outline-none focus:ring-1 focus:ring-ring"
+                            className="flex min-h-[200px] w-full rounded-md border border-white/10 bg-black px-3 py-2 text-xs font-mono text-zinc-300 ring-offset-background focus:outline-none focus:ring-1 focus:ring-white/20"
                             value={jsonRules}
                             onChange={(e) => setJsonRules(e.target.value)}
                         />
@@ -731,11 +738,11 @@ function PolicyFormDialog({ mode, initialPolicy, onSuccess }: {
                 )}
             </div>
 
-            <DialogFooter>
+            <DialogFooter className="border-t border-white/10 pt-4 mt-2">
                 <DialogClose asChild>
-                    <Button type="button" variant="outline" size="sm">Cancel</Button>
+                    <Button type="button" variant="ghost" size="sm" className="text-zinc-400 hover:text-white hover:bg-white/5">Cancel</Button>
                 </DialogClose>
-                <Button type="submit" size="sm" disabled={saving}>
+                <Button type="submit" size="sm" disabled={saving} className="bg-white text-black hover:bg-zinc-200">
                     {saving ? "Saving..." : mode === "edit" ? "Update Policy" : "Create Policy"}
                 </Button>
             </DialogFooter>
@@ -755,20 +762,20 @@ function VisualRuleEditor({ rule, index, total, onUpdate, onRemove }: {
     const at = ACTION_TYPES.find(a => a.value === rule.actionType);
 
     return (
-        <div className="rounded-md border border-border bg-muted/10 p-4 space-y-4">
+        <div className="rounded-md border border-white/10 bg-white/[0.02] p-4 space-y-4">
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-mono text-muted-foreground bg-muted/50 px-1.5 py-0.5 rounded">
+                    <span className="text-[10px] font-mono text-zinc-500 bg-white/5 border border-white/10 px-1.5 py-0.5 rounded">
                         Rule #{index + 1}
                     </span>
-                    <Select value={rule.phase} onChange={(e) => onUpdate({ phase: e.target.value })} className="h-7 w-20 text-[11px]">
+                    <Select value={rule.phase} onChange={(e) => onUpdate({ phase: e.target.value })} className="h-7 w-20 text-[11px] bg-black">
                         <option value="pre">Pre</option>
                         <option value="post">Post</option>
                     </Select>
                 </div>
                 {total > 1 && (
-                    <Button type="button" variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive" onClick={onRemove}>
+                    <Button type="button" variant="ghost" size="icon" className="h-6 w-6 text-zinc-500 hover:text-rose-400 hover:bg-rose-500/10" onClick={onRemove}>
                         <X className="h-3 w-3" />
                     </Button>
                 )}
@@ -777,8 +784,8 @@ function VisualRuleEditor({ rule, index, total, onUpdate, onRemove }: {
             {/* Condition */}
             <div className="space-y-2">
                 <div className="flex items-center gap-2">
-                    <span className="text-[10px] uppercase font-semibold text-amber-400 w-8">IF</span>
-                    <Select value={rule.conditionMode} onChange={(e) => onUpdate({ conditionMode: e.target.value as "always" | "check" })} className="h-7 w-32 text-[11px]">
+                    <span className="text-[10px] uppercase tracking-widest font-semibold text-amber-500/80 w-8">IF</span>
+                    <Select value={rule.conditionMode} onChange={(e) => onUpdate({ conditionMode: e.target.value as "always" | "check" })} className="h-7 w-32 text-[11px] bg-black">
                         <option value="always">Always</option>
                         <option value="check">Condition...</option>
                     </Select>
@@ -790,7 +797,7 @@ function VisualRuleEditor({ rule, index, total, onUpdate, onRemove }: {
                                 value={rule.field}
                                 onChange={(e) => onUpdate({ field: e.target.value })}
                                 placeholder="request.path"
-                                className="h-7 text-[11px] font-mono"
+                                className="h-7 text-[11px] font-mono bg-black"
                                 list={`fields-${index}`}
                             />
                             <datalist id={`fields-${index}`}>
@@ -799,7 +806,7 @@ function VisualRuleEditor({ rule, index, total, onUpdate, onRemove }: {
                                 )))}
                             </datalist>
                         </div>
-                        <Select value={rule.operator} onChange={(e) => onUpdate({ operator: e.target.value })} className="h-7 text-[11px]">
+                        <Select value={rule.operator} onChange={(e) => onUpdate({ operator: e.target.value })} className="h-7 text-[11px] bg-black">
                             {OPERATORS.map(op => (
                                 <option key={op.value} value={op.value}>{op.label}</option>
                             ))}
@@ -808,7 +815,7 @@ function VisualRuleEditor({ rule, index, total, onUpdate, onRemove }: {
                             value={rule.value}
                             onChange={(e) => onUpdate({ value: e.target.value })}
                             placeholder="value"
-                            className="h-7 text-[11px] font-mono"
+                            className="h-7 text-[11px] font-mono bg-black"
                         />
                     </div>
                 )}
@@ -817,8 +824,8 @@ function VisualRuleEditor({ rule, index, total, onUpdate, onRemove }: {
             {/* Action */}
             <div className="space-y-2">
                 <div className="flex items-center gap-2">
-                    <span className="text-[10px] uppercase font-semibold text-emerald-400 w-8">DO</span>
-                    <Select value={rule.actionType} onChange={(e) => onUpdate({ actionType: e.target.value })} className="h-7 text-[11px]">
+                    <span className="text-[10px] uppercase tracking-widest font-semibold text-emerald-500/80 w-8">DO</span>
+                    <Select value={rule.actionType} onChange={(e) => onUpdate({ actionType: e.target.value })} className="h-7 text-[11px] bg-black">
                         {ACTION_TYPES.map(a => (
                             <option key={a.value} value={a.value}>{a.label} — {a.desc}</option>
                         ))}
@@ -833,13 +840,13 @@ function VisualRuleEditor({ rule, index, total, onUpdate, onRemove }: {
                                 type="number"
                                 value={rule.denyStatus}
                                 onChange={(e) => onUpdate({ denyStatus: parseInt(e.target.value) })}
-                                className="h-7 text-[11px] font-mono"
+                                className="h-7 text-[11px] font-mono bg-black"
                                 placeholder="403"
                             />
                             <Input
                                 value={rule.denyMessage}
                                 onChange={(e) => onUpdate({ denyMessage: e.target.value })}
-                                className="h-7 text-[11px] col-span-3"
+                                className="h-7 text-[11px] col-span-3 bg-black"
                                 placeholder="Denial message"
                             />
                         </div>
@@ -847,16 +854,16 @@ function VisualRuleEditor({ rule, index, total, onUpdate, onRemove }: {
                     {rule.actionType === "RateLimit" && (
                         <div className="grid grid-cols-3 gap-2">
                             <div className="space-y-0.5">
-                                <Label className="text-[10px] text-muted-foreground">Max requests</Label>
-                                <Input type="number" value={rule.rateMax} onChange={(e) => onUpdate({ rateMax: parseInt(e.target.value) })} className="h-7 text-[11px] font-mono" />
+                                <Label className="text-[10px] text-zinc-500">Max requests</Label>
+                                <Input type="number" value={rule.rateMax} onChange={(e) => onUpdate({ rateMax: parseInt(e.target.value) })} className="h-7 text-[11px] font-mono bg-black" />
                             </div>
                             <div className="space-y-0.5">
-                                <Label className="text-[10px] text-muted-foreground">Window</Label>
-                                <Input value={rule.rateWindow} onChange={(e) => onUpdate({ rateWindow: e.target.value })} className="h-7 text-[11px] font-mono" placeholder="60s" />
+                                <Label className="text-[10px] text-zinc-500">Window</Label>
+                                <Input value={rule.rateWindow} onChange={(e) => onUpdate({ rateWindow: e.target.value })} className="h-7 text-[11px] font-mono bg-black" placeholder="60s" />
                             </div>
                             <div className="space-y-0.5">
-                                <Label className="text-[10px] text-muted-foreground">Key</Label>
-                                <Select value={rule.rateKey} onChange={(e) => onUpdate({ rateKey: e.target.value })} className="h-7 text-[11px]">
+                                <Label className="text-[10px] text-zinc-500">Key</Label>
+                                <Select value={rule.rateKey} onChange={(e) => onUpdate({ rateKey: e.target.value })} className="h-7 text-[11px] bg-black">
                                     <option value="token">Per Token</option>
                                     <option value="ip">Per IP</option>
                                     <option value="agent">Per Agent</option>
@@ -868,62 +875,62 @@ function VisualRuleEditor({ rule, index, total, onUpdate, onRemove }: {
                     {rule.actionType === "Redact" && (
                         <div className="grid grid-cols-3 gap-2">
                             <div className="space-y-0.5">
-                                <Label className="text-[10px] text-muted-foreground">Direction</Label>
-                                <Select value={rule.redactDirection} onChange={(e) => onUpdate({ redactDirection: e.target.value })} className="h-7 text-[11px]">
+                                <Label className="text-[10px] text-zinc-500">Direction</Label>
+                                <Select value={rule.redactDirection} onChange={(e) => onUpdate({ redactDirection: e.target.value })} className="h-7 text-[11px] bg-black">
                                     <option value="Request">Request</option>
                                     <option value="Response">Response</option>
                                     <option value="Both">Both</option>
                                 </Select>
                             </div>
                             <div className="space-y-0.5">
-                                <Label className="text-[10px] text-muted-foreground">Patterns</Label>
-                                <Input value={rule.redactPatterns} onChange={(e) => onUpdate({ redactPatterns: e.target.value })} className="h-7 text-[11px] font-mono" placeholder="email,ssn,phone" />
+                                <Label className="text-[10px] text-zinc-500">Patterns</Label>
+                                <Input value={rule.redactPatterns} onChange={(e) => onUpdate({ redactPatterns: e.target.value })} className="h-7 text-[11px] font-mono bg-black" placeholder="email,ssn,phone" />
                             </div>
                             <div className="space-y-0.5">
-                                <Label className="text-[10px] text-muted-foreground">Fields</Label>
-                                <Input value={rule.redactFields} onChange={(e) => onUpdate({ redactFields: e.target.value })} className="h-7 text-[11px] font-mono" placeholder="password,secret" />
+                                <Label className="text-[10px] text-zinc-500">Fields</Label>
+                                <Input value={rule.redactFields} onChange={(e) => onUpdate({ redactFields: e.target.value })} className="h-7 text-[11px] font-mono bg-black" placeholder="password,secret" />
                             </div>
                         </div>
                     )}
                     {rule.actionType === "RequireApproval" && (
                         <div className="space-y-0.5 w-32">
-                            <Label className="text-[10px] text-muted-foreground">Timeout (sec)</Label>
-                            <Input type="number" value={rule.hitlTimeout} onChange={(e) => onUpdate({ hitlTimeout: parseInt(e.target.value) })} className="h-7 text-[11px] font-mono" />
+                            <Label className="text-[10px] text-zinc-500">Timeout (sec)</Label>
+                            <Input type="number" value={rule.hitlTimeout} onChange={(e) => onUpdate({ hitlTimeout: parseInt(e.target.value) })} className="h-7 text-[11px] font-mono bg-black" />
                         </div>
                     )}
                     {rule.actionType === "Throttle" && (
                         <div className="space-y-0.5 w-32">
-                            <Label className="text-[10px] text-muted-foreground">Delay (ms)</Label>
-                            <Input type="number" value={rule.throttleMs} onChange={(e) => onUpdate({ throttleMs: parseInt(e.target.value) })} className="h-7 text-[11px] font-mono" />
+                            <Label className="text-[10px] text-zinc-500">Delay (ms)</Label>
+                            <Input type="number" value={rule.throttleMs} onChange={(e) => onUpdate({ throttleMs: parseInt(e.target.value) })} className="h-7 text-[11px] font-mono bg-black" />
                         </div>
                     )}
                     {rule.actionType === "Log" && (
                         <div className="grid grid-cols-2 gap-2">
                             <div className="space-y-0.5">
-                                <Label className="text-[10px] text-muted-foreground">Level</Label>
-                                <Select value={rule.logLevel} onChange={(e) => onUpdate({ logLevel: e.target.value })} className="h-7 text-[11px]">
+                                <Label className="text-[10px] text-zinc-500">Level</Label>
+                                <Select value={rule.logLevel} onChange={(e) => onUpdate({ logLevel: e.target.value })} className="h-7 text-[11px] bg-black">
                                     <option value="info">Info</option>
                                     <option value="warn">Warn</option>
                                     <option value="error">Error</option>
                                 </Select>
                             </div>
                             <div className="space-y-0.5">
-                                <Label className="text-[10px] text-muted-foreground">Tags</Label>
-                                <Input value={rule.logTags} onChange={(e) => onUpdate({ logTags: e.target.value })} className="h-7 text-[11px] font-mono" placeholder="compliance,audit" />
+                                <Label className="text-[10px] text-zinc-500">Tags</Label>
+                                <Input value={rule.logTags} onChange={(e) => onUpdate({ logTags: e.target.value })} className="h-7 text-[11px] font-mono bg-black" placeholder="compliance,audit" />
                             </div>
                         </div>
                     )}
                     {rule.actionType === "Tag" && (
                         <div className="grid grid-cols-2 gap-2">
-                            <Input value={rule.tagKey} onChange={(e) => onUpdate({ tagKey: e.target.value })} className="h-7 text-[11px] font-mono" placeholder="key" />
-                            <Input value={rule.tagValue} onChange={(e) => onUpdate({ tagValue: e.target.value })} className="h-7 text-[11px] font-mono" placeholder="value" />
+                            <Input value={rule.tagKey} onChange={(e) => onUpdate({ tagKey: e.target.value })} className="h-7 text-[11px] font-mono bg-black" placeholder="key" />
+                            <Input value={rule.tagValue} onChange={(e) => onUpdate({ tagValue: e.target.value })} className="h-7 text-[11px] font-mono bg-black" placeholder="value" />
                         </div>
                     )}
                     {rule.actionType === "Transform" && (
                         <div className="space-y-0.5">
-                            <Label className="text-[10px] text-muted-foreground">Operations JSON</Label>
+                            <Label className="text-[10px] text-zinc-500">Operations JSON</Label>
                             <textarea
-                                className="flex min-h-[60px] w-full rounded-md border border-input bg-muted/30 px-2 py-1 text-[11px] font-mono focus:outline-none focus:ring-1 focus:ring-ring"
+                                className="flex min-h-[60px] w-full rounded-md border border-white/10 bg-black px-2 py-1 text-[11px] font-mono text-zinc-300 focus:outline-none focus:ring-1 focus:ring-white/20"
                                 value={rule.transformOps}
                                 onChange={(e) => onUpdate({ transformOps: e.target.value })}
                                 placeholder={'[{"AppendSystemPrompt": {"text": "Be helpful"}}]'}
@@ -934,34 +941,34 @@ function VisualRuleEditor({ rule, index, total, onUpdate, onRemove }: {
                         <div className="space-y-2">
                             <div className="grid grid-cols-2 gap-2">
                                 <div className="space-y-0.5">
-                                    <Label className="text-[10px] text-muted-foreground">
+                                    <Label className="text-[10px] text-zinc-500">
                                         Blocked Tools <span className="text-rose-400">(denylist)</span>
                                     </Label>
                                     <Input
                                         value={rule.toolScopeBlocked}
                                         onChange={(e) => onUpdate({ toolScopeBlocked: e.target.value })}
-                                        className="h-7 text-[11px] font-mono"
+                                        className="h-7 text-[11px] font-mono bg-black"
                                         placeholder="stripe.*, db.drop*"
                                     />
                                 </div>
                                 <div className="space-y-0.5">
-                                    <Label className="text-[10px] text-muted-foreground">
+                                    <Label className="text-[10px] text-zinc-500">
                                         Allowed Tools <span className="text-emerald-400">(allowlist, empty = all)</span>
                                     </Label>
                                     <Input
                                         value={rule.toolScopeAllowed}
                                         onChange={(e) => onUpdate({ toolScopeAllowed: e.target.value })}
-                                        className="h-7 text-[11px] font-mono"
+                                        className="h-7 text-[11px] font-mono bg-black"
                                         placeholder="jira.*, github.read"
                                     />
                                 </div>
                             </div>
                             <div className="space-y-0.5">
-                                <Label className="text-[10px] text-muted-foreground">Deny Message</Label>
+                                <Label className="text-[10px] text-zinc-500">Deny Message</Label>
                                 <Input
                                     value={rule.toolScopeDenyMessage}
                                     onChange={(e) => onUpdate({ toolScopeDenyMessage: e.target.value })}
-                                    className="h-7 text-[11px]"
+                                    className="h-7 text-[11px] bg-black"
                                     placeholder="Tool not permitted by policy"
                                 />
                             </div>

@@ -3,14 +3,13 @@ use std::sync::Arc;
 use axum::{
     extract::{Path, State},
     http::StatusCode,
-    Extension,
-    Json,
+    Extension, Json,
 };
 
-use crate::api::AuthContext;
-use crate::AppState;
 use super::dtos::UpsertSpendCapRequest;
 use super::helpers::verify_token_ownership;
+use crate::api::AuthContext;
+use crate::AppState;
 
 /// GET /api/v1/tokens/:id/spend — current spend status + caps for a token
 pub async fn get_spend_caps(
@@ -19,7 +18,8 @@ pub async fn get_spend_caps(
     Path(token_id): Path<String>,
 ) -> Result<Json<crate::middleware::spend::SpendStatus>, StatusCode> {
     // SEC-04: scope check
-    auth.require_scope("tokens:read").map_err(|_| StatusCode::FORBIDDEN)?;
+    auth.require_scope("tokens:read")
+        .map_err(|_| StatusCode::FORBIDDEN)?;
     // SEC-05: ownership check
     verify_token_ownership(&state, &token_id, &auth).await?;
 
@@ -41,7 +41,8 @@ pub async fn upsert_spend_cap(
 ) -> Result<StatusCode, StatusCode> {
     // SEC-04: scope check
     auth.require_role("admin")?;
-    auth.require_scope("tokens:write").map_err(|_| StatusCode::FORBIDDEN)?;
+    auth.require_scope("tokens:write")
+        .map_err(|_| StatusCode::FORBIDDEN)?;
     // SEC-05: ownership check
     verify_token_ownership(&state, &token_id, &auth).await?;
 
@@ -56,13 +57,20 @@ pub async fn upsert_spend_cap(
     }
     let project_id = auth.default_project_id();
 
-    crate::middleware::spend::upsert_spend_cap(&state.cache, state.db.pool(), &token_id, project_id, &payload.period, limit)
-        .await
-        .map(|_| StatusCode::NO_CONTENT)
-        .map_err(|e| {
-            tracing::error!("upsert_spend_cap failed: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })
+    crate::middleware::spend::upsert_spend_cap(
+        &state.cache,
+        state.db.pool(),
+        &token_id,
+        project_id,
+        &payload.period,
+        limit,
+    )
+    .await
+    .map(|_| StatusCode::NO_CONTENT)
+    .map_err(|e| {
+        tracing::error!("upsert_spend_cap failed: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })
 }
 
 /// DELETE /api/v1/tokens/:id/spend/:period — remove a spend cap
@@ -73,7 +81,8 @@ pub async fn delete_spend_cap(
 ) -> Result<StatusCode, StatusCode> {
     // SEC-04: scope check
     auth.require_role("admin")?;
-    auth.require_scope("tokens:write").map_err(|_| StatusCode::FORBIDDEN)?;
+    auth.require_scope("tokens:write")
+        .map_err(|_| StatusCode::FORBIDDEN)?;
     // SEC-05: ownership check
     verify_token_ownership(&state, &token_id, &auth).await?;
 

@@ -19,14 +19,19 @@ use uuid::Uuid;
 
 #[test]
 fn test_redact_on_match_tokenize_deserializes() {
-    let action: Action = serde_json::from_str(r#"{
+    let action: Action = serde_json::from_str(
+        r#"{
         "action": "redact",
         "patterns": ["credit_card", "ssn"],
         "on_match": "tokenize"
-    }"#).unwrap();
+    }"#,
+    )
+    .unwrap();
 
     match action {
-        Action::Redact { on_match, patterns, .. } => {
+        Action::Redact {
+            on_match, patterns, ..
+        } => {
             assert_eq!(on_match, RedactOnMatch::Tokenize);
             assert_eq!(patterns, vec!["credit_card", "ssn"]);
         }
@@ -37,22 +42,28 @@ fn test_redact_on_match_tokenize_deserializes() {
 #[test]
 fn test_redact_on_match_backwards_compatible() {
     // "redact" (default) still works
-    let action: Action = serde_json::from_str(r#"{
+    let action: Action = serde_json::from_str(
+        r#"{
         "action": "redact",
         "patterns": ["email"],
         "on_match": "redact"
-    }"#).unwrap();
+    }"#,
+    )
+    .unwrap();
     match action {
         Action::Redact { on_match, .. } => assert_eq!(on_match, RedactOnMatch::Redact),
         _ => panic!("Expected Action::Redact"),
     }
 
     // "block" still works
-    let action: Action = serde_json::from_str(r#"{
+    let action: Action = serde_json::from_str(
+        r#"{
         "action": "redact",
         "patterns": ["ssn"],
         "on_match": "block"
-    }"#).unwrap();
+    }"#,
+    )
+    .unwrap();
     match action {
         Action::Redact { on_match, .. } => assert_eq!(on_match, RedactOnMatch::Block),
         _ => panic!("Expected Action::Redact"),
@@ -62,10 +73,13 @@ fn test_redact_on_match_backwards_compatible() {
 #[test]
 fn test_redact_on_match_default_is_redact() {
     // Omitting on_match should default to "redact"
-    let action: Action = serde_json::from_str(r#"{
+    let action: Action = serde_json::from_str(
+        r#"{
         "action": "redact",
         "patterns": ["email"]
-    }"#).unwrap();
+    }"#,
+    )
+    .unwrap();
     match action {
         Action::Redact { on_match, .. } => assert_eq!(on_match, RedactOnMatch::Redact),
         _ => panic!("Expected Action::Redact"),
@@ -89,8 +103,10 @@ fn test_pii_token_deterministic_across_calls() {
         .collect();
 
     // All 100 calls must produce the same token
-    assert!(tokens.windows(2).all(|w| w[0] == w[1]),
-        "Token generation must be perfectly deterministic");
+    assert!(
+        tokens.windows(2).all(|w| w[0] == w[1]),
+        "Token generation must be perfectly deterministic"
+    );
 }
 
 #[test]
@@ -101,7 +117,10 @@ fn test_pii_token_project_isolation() {
     let t1 = pii_vault::generate_token(p1, "ssn", "123-45-6789");
     let t2 = pii_vault::generate_token(p2, "ssn", "123-45-6789");
 
-    assert_ne!(t1, t2, "Same PII in different projects must produce different tokens");
+    assert_ne!(
+        t1, t2,
+        "Same PII in different projects must produce different tokens"
+    );
     assert!(t1.starts_with("tok_pii_ssn_"));
     assert!(t2.starts_with("tok_pii_ssn_"));
 }
@@ -114,7 +133,10 @@ fn test_pii_token_type_isolation() {
     let t1 = pii_vault::generate_token(project, "email", "test@test.com");
     let t2 = pii_vault::generate_token(project, "credit_card", "test@test.com");
 
-    assert_ne!(t1, t2, "Same value with different PII types must produce different tokens");
+    assert_ne!(
+        t1, t2,
+        "Same value with different PII types must produce different tokens"
+    );
     assert!(t1.starts_with("tok_pii_email_"));
     assert!(t2.starts_with("tok_pii_credit_card_"));
 }
@@ -125,8 +147,14 @@ fn test_pii_token_no_original_value_leaked() {
     let token = pii_vault::generate_token(project, "credit_card", "4111111111111111");
 
     // The token must NOT contain ANY part of the original value
-    assert!(!token.contains("4111"), "Token must not leak original value");
-    assert!(!token.contains("1111"), "Token must not contain partial original");
+    assert!(
+        !token.contains("4111"),
+        "Token must not leak original value"
+    );
+    assert!(
+        !token.contains("1111"),
+        "Token must not contain partial original"
+    );
 
     // But must contain the type identifier (so humans can see what was tokenized)
     assert!(token.contains("credit_card"), "Token must contain PII type");
@@ -188,9 +216,15 @@ fn test_destructive_redact_unaffected_by_tokenize_addition() {
 
     let result = redact::apply_redact(&mut body, &action, true);
 
-    assert!(body["message"].as_str().unwrap().contains("[REDACTED_EMAIL]"));
+    assert!(body["message"]
+        .as_str()
+        .unwrap()
+        .contains("[REDACTED_EMAIL]"));
     assert!(body["message"].as_str().unwrap().contains("[REDACTED_SSN]"));
-    assert!(!body["message"].as_str().unwrap().contains("alice@example.com"));
+    assert!(!body["message"]
+        .as_str()
+        .unwrap()
+        .contains("alice@example.com"));
     assert!(!body["message"].as_str().unwrap().contains("123-45-6789"));
     assert_eq!(result.matched_types.len(), 2);
     assert!(!result.should_block);
@@ -211,7 +245,10 @@ fn test_block_mode_unaffected_by_tokenize_addition() {
 
     let result = redact::apply_redact(&mut body, &action, true);
 
-    assert!(result.should_block, "Block mode must still block on PII detection");
+    assert!(
+        result.should_block,
+        "Block mode must still block on PII detection"
+    );
     assert!(result.matched_types.contains(&"credit_card".to_string()));
 }
 
@@ -284,7 +321,12 @@ fn test_full_tokenize_policy_deserialization() {
     assert_eq!(policy.rules.len(), 1);
 
     match &policy.rules[0].then[0] {
-        Action::Redact { direction, patterns, on_match, .. } => {
+        Action::Redact {
+            direction,
+            patterns,
+            on_match,
+            ..
+        } => {
             assert_eq!(on_match, &RedactOnMatch::Tokenize);
             assert!(matches!(direction, RedactDirection::Request));
             assert_eq!(patterns.len(), 3);
@@ -330,14 +372,21 @@ fn test_token_very_long_value() {
 #[test]
 fn test_tool_scope_action_deserializes() {
     // Verify the new Action::ToolScope deserializes correctly from JSON
-    let action: Action = serde_json::from_str(r#"{
+    let action: Action = serde_json::from_str(
+        r#"{
         "action": "tool_scope",
         "allowed_tools": ["jira.read", "jira.search"],
         "blocked_tools": ["stripe.createCharge"]
-    }"#).unwrap();
+    }"#,
+    )
+    .unwrap();
 
     match action {
-        Action::ToolScope { allowed_tools, blocked_tools, deny_message } => {
+        Action::ToolScope {
+            allowed_tools,
+            blocked_tools,
+            deny_message,
+        } => {
             assert_eq!(allowed_tools, vec!["jira.read", "jira.search"]);
             assert_eq!(blocked_tools, vec!["stripe.createCharge"]);
             assert_eq!(deny_message, "tool not authorized for this agent");
@@ -382,7 +431,10 @@ fn test_tool_scope_no_tools_is_not_a_false_positive() {
 
     let body = json!({ "model": "gpt-4o", "messages": [{ "role": "user", "content": "Hello" }] });
     let names = extract_tool_names(Some(&body));
-    assert!(names.is_empty(), "No tools in body should produce empty tool names");
+    assert!(
+        names.is_empty(),
+        "No tools in body should produce empty tool names"
+    );
 }
 
 #[test]
@@ -402,7 +454,10 @@ fn test_tool_scope_blocked_tool_denied() {
     let result = evaluate_tool_scope(&tool_names, &[], &blocked, "tool denied");
     assert!(result.is_err());
     let err = result.unwrap_err();
-    assert!(err.contains("stripe.createCharge"), "Error should name the offending tool");
+    assert!(
+        err.contains("stripe.createCharge"),
+        "Error should name the offending tool"
+    );
     assert!(err.contains("blocked"), "Error should say 'blocked'");
 }
 
@@ -447,7 +502,10 @@ fn test_tool_scope_glob_no_false_positive() {
     let tool_names = vec!["jira.read".to_string()];
     let blocked = vec!["stripe.*".to_string()];
     let result = evaluate_tool_scope(&tool_names, &[], &blocked, "denied");
-    assert!(result.is_ok(), "Non-matching glob should not block unrelated tools");
+    assert!(
+        result.is_ok(),
+        "Non-matching glob should not block unrelated tools"
+    );
 }
 
 #[test]
@@ -457,7 +515,10 @@ fn test_tool_scope_empty_lists_allow_all_no_false_positive() {
     // Both allowed and blocked are empty → allow any tool (permissive default)
     let tool_names = vec!["anything.goes".to_string(), "every.tool".to_string()];
     let result = evaluate_tool_scope(&tool_names, &[], &[], "denied");
-    assert!(result.is_ok(), "Empty allowed/blocked lists should allow all tools");
+    assert!(
+        result.is_ok(),
+        "Empty allowed/blocked lists should allow all tools"
+    );
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -467,27 +528,35 @@ fn test_tool_scope_empty_lists_allow_all_no_false_positive() {
 #[test]
 fn test_anomaly_below_threshold_no_false_positive() {
     // If velocity is within 3σ of the mean, should NOT alert
-    let values = vec![10.0_f64; 20]; // stable baseline of 10 req/window
+    let values = [10.0_f64; 20]; // stable baseline of 10 req/window
     let mean: f64 = values.iter().sum::<f64>() / values.len() as f64;
-    let variance: f64 = values.iter().map(|v| (v - mean).powi(2)).sum::<f64>() / values.len() as f64;
+    let variance: f64 =
+        values.iter().map(|v| (v - mean).powi(2)).sum::<f64>() / values.len() as f64;
     let stddev = variance.sqrt();
     let threshold = mean + 3.0 * stddev;
 
     // With zero variance, threshold = mean = 10
     // A velocity of 10 should NOT exceed threshold
-    assert!(10.0 <= threshold, "10 req/window should NOT trigger on stable baseline of 10");
+    assert!(
+        10.0 <= threshold,
+        "10 req/window should NOT trigger on stable baseline of 10"
+    );
 }
 
 #[test]
 fn test_anomaly_far_above_threshold_detects_spike() {
-    let values = vec![10.0_f64; 20];
+    let values = [10.0_f64; 20];
     let mean: f64 = values.iter().sum::<f64>() / values.len() as f64;
-    let variance: f64 = values.iter().map(|v| (v - mean).powi(2)).sum::<f64>() / values.len() as f64;
+    let variance: f64 =
+        values.iter().map(|v| (v - mean).powi(2)).sum::<f64>() / values.len() as f64;
     let stddev = variance.sqrt();
     let threshold = mean + 3.0 * stddev;
 
     // 100 req when baseline is 10 and stddev=0 → threshold=10, 100 > 10 → anomalous
-    assert!(100.0 > threshold, "100 req/window should trigger on stable baseline of 10");
+    assert!(
+        100.0 > threshold,
+        "100 req/window should trigger on stable baseline of 10"
+    );
 }
 
 #[test]
@@ -499,7 +568,10 @@ fn test_anomaly_realistic_baseline_not_triggered() {
     let stddev = 10.0_f64;
     let threshold = mean + 3.0 * stddev;
     assert_eq!(threshold, 80.0);
-    assert!(70.0 < threshold, "70 req/window below 3σ threshold of 80 should NOT alert");
+    assert!(
+        70.0 < threshold,
+        "70 req/window below 3σ threshold of 80 should NOT alert"
+    );
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -508,8 +580,8 @@ fn test_anomaly_realistic_baseline_not_triggered() {
 
 #[test]
 fn test_oidc_expired_jwt_rejected() {
-    use gateway::middleware::oidc::decode_claims;
     use base64::Engine;
+    use gateway::middleware::oidc::decode_claims;
     let engine = base64::engine::general_purpose::URL_SAFE_NO_PAD;
     let header = engine.encode(r#"{"alg":"RS256"}"#);
     // exp = 1000 (far in the past — Unix epoch + ~16 minutes)
@@ -523,8 +595,8 @@ fn test_oidc_expired_jwt_rejected() {
 
 #[test]
 fn test_oidc_missing_sub_rejected() {
-    use gateway::middleware::oidc::decode_claims;
     use base64::Engine;
+    use gateway::middleware::oidc::decode_claims;
     let engine = base64::engine::general_purpose::URL_SAFE_NO_PAD;
     let header = engine.encode(r#"{"alg":"RS256"}"#);
     // No 'sub' claim

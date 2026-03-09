@@ -133,14 +133,12 @@ impl McpRegistry {
                     "Server requires OAuth 2.0 authentication. Please provide client_id and client_secret.".to_string()
                 })?;
                 let client_secret = req.client_secret.ok_or_else(|| {
-                    "Server requires OAuth 2.0 authentication. Please provide client_secret.".to_string()
+                    "Server requires OAuth 2.0 authentication. Please provide client_secret."
+                        .to_string()
                 })?;
 
                 // Acquire initial token
-                let scopes = disc
-                    .auth_server
-                    .scopes_supported
-                    .clone();
+                let scopes = disc.auth_server.scopes_supported.clone();
 
                 let token_resp = self
                     .oauth_manager
@@ -186,17 +184,19 @@ impl McpRegistry {
         };
 
         // Step 2: Initialize + list tools
-        let init_result = client.initialize().await.map_err(|e| {
-            format!("Failed to initialize MCP server: {}", e)
-        })?;
+        let init_result = client
+            .initialize()
+            .await
+            .map_err(|e| format!("Failed to initialize MCP server: {}", e))?;
 
         if init_result.capabilities.tools.is_none() {
             return Err("MCP server does not advertise tools capability".to_string());
         }
 
-        let tools = client.list_tools().await.map_err(|e| {
-            format!("Failed to list tools: {}", e)
-        })?;
+        let tools = client
+            .list_tools()
+            .await
+            .map_err(|e| format!("Failed to list tools: {}", e))?;
 
         // Step 3: Derive name from server info if not provided
         let server_name = name
@@ -268,9 +268,10 @@ impl McpRegistry {
         // Try connecting without auth to get server info and tools.
         // If initialization fails, the endpoint is not an MCP server — propagate the error.
         let client = McpClient::new(endpoint, None::<String>);
-        let init = client.initialize().await.map_err(|e| {
-            format!("Endpoint is not an MCP-compatible server: {}", e)
-        })?;
+        let init = client
+            .initialize()
+            .await
+            .map_err(|e| format!("Endpoint is not an MCP-compatible server: {}", e))?;
 
         let tools = client.list_tools().await.unwrap_or_default();
         let tool_count = tools.len();
@@ -295,9 +296,10 @@ impl McpRegistry {
         auth_type: String,
     ) -> Result<Vec<McpToolDef>, String> {
         // Initialize
-        let init_result = client.initialize().await.map_err(|e| {
-            format!("Failed to initialize MCP server '{}': {}", config.name, e)
-        })?;
+        let init_result = client
+            .initialize()
+            .await
+            .map_err(|e| format!("Failed to initialize MCP server '{}': {}", config.name, e))?;
 
         // Verify server supports tools
         if init_result.capabilities.tools.is_none() {
@@ -308,9 +310,10 @@ impl McpRegistry {
         }
 
         // Fetch tools
-        let tools = client.list_tools().await.map_err(|e| {
-            format!("Failed to list tools from '{}': {}", config.name, e)
-        })?;
+        let tools = client
+            .list_tools()
+            .await
+            .map_err(|e| format!("Failed to list tools from '{}': {}", config.name, e))?;
 
         tracing::info!(
             server = %config.name,
@@ -560,7 +563,9 @@ mod tests {
     #[tokio::test]
     async fn test_execute_tool_unknown_server() {
         let registry = McpRegistry::new();
-        let result = registry.execute_tool("nope", "tool", None, Uuid::nil()).await;
+        let result = registry
+            .execute_tool("nope", "tool", None, Uuid::nil())
+            .await;
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("not found"));
     }

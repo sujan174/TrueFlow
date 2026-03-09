@@ -62,11 +62,10 @@ fn sha256_hex(data: &[u8]) -> String {
 
 /// HMAC-SHA256 signing.
 fn hmac_sha256(key: &[u8], msg: &[u8]) -> Vec<u8> {
-    let mut mac = HmacSha256::new_from_slice(key)
-        .unwrap_or_else(|_| {
-            tracing::error!("HMAC init failed: invalid key");
-            std::process::exit(1);
-        });
+    let mut mac = HmacSha256::new_from_slice(key).unwrap_or_else(|_| {
+        tracing::error!("HMAC init failed: invalid key");
+        std::process::exit(1);
+    });
     mac.update(msg);
     mac.finalize().into_bytes().to_vec()
 }
@@ -109,18 +108,24 @@ pub fn sign_request(
     let date_stamp = now.format("%Y%m%d").to_string();
 
     // Parse URL for canonical URI and query string
-    let parsed_url = Url::parse(url)
-        .map_err(|e| anyhow::anyhow!("SigV4: invalid URL: {}", e))?;
-    let host = parsed_url.host_str()
+    let parsed_url = Url::parse(url).map_err(|e| anyhow::anyhow!("SigV4: invalid URL: {}", e))?;
+    let host = parsed_url
+        .host_str()
         .ok_or_else(|| anyhow::anyhow!("SigV4: URL has no host"))?;
-    let canonical_uri = if parsed_url.path().is_empty() { "/" } else { parsed_url.path() };
+    let canonical_uri = if parsed_url.path().is_empty() {
+        "/"
+    } else {
+        parsed_url.path()
+    };
 
     // Canonical query string (sorted)
-    let mut query_pairs: Vec<(String, String)> = parsed_url.query_pairs()
+    let mut query_pairs: Vec<(String, String)> = parsed_url
+        .query_pairs()
         .map(|(k, v)| (k.to_string(), v.to_string()))
         .collect();
     query_pairs.sort();
-    let canonical_querystring: String = query_pairs.iter()
+    let canonical_querystring: String = query_pairs
+        .iter()
         .map(|(k, v)| format!("{}={}", urlencoding::encode(k), urlencoding::encode(v)))
         .collect::<Vec<_>>()
         .join("&");
@@ -138,7 +143,8 @@ pub fn sign_request(
         reqwest::header::HeaderValue::from_str(&payload_hash)?,
     );
     // Ensure host header is set
-    headers.entry(reqwest::header::HOST)
+    headers
+        .entry(reqwest::header::HOST)
         .or_insert(reqwest::header::HeaderValue::from_str(host)?);
 
     // Canonical headers (sorted by lowercase name)
@@ -152,7 +158,8 @@ pub fn sign_request(
 
     let mut canonical_headers_str = String::new();
     for &name in &signed_header_list {
-        let value = headers.get(name)
+        let value = headers
+            .get(name)
             .and_then(|v| v.to_str().ok())
             .unwrap_or("");
         canonical_headers_str.push_str(&format!("{}:{}\n", name, value.trim()));
@@ -203,7 +210,9 @@ mod tests {
     #[test]
     fn test_extract_region() {
         assert_eq!(
-            extract_region("https://bedrock-runtime.us-east-1.amazonaws.com/model/anthropic.claude-3"),
+            extract_region(
+                "https://bedrock-runtime.us-east-1.amazonaws.com/model/anthropic.claude-3"
+            ),
             Some("us-east-1".to_string())
         );
         assert_eq!(
@@ -242,12 +251,22 @@ mod tests {
         );
 
         assert!(result.is_ok(), "signing should succeed");
-        assert!(headers.contains_key("authorization"), "must have Authorization");
+        assert!(
+            headers.contains_key("authorization"),
+            "must have Authorization"
+        );
         assert!(headers.contains_key("x-amz-date"), "must have X-Amz-Date");
-        assert!(headers.contains_key("x-amz-content-sha256"), "must have X-Amz-Content-Sha256");
+        assert!(
+            headers.contains_key("x-amz-content-sha256"),
+            "must have X-Amz-Content-Sha256"
+        );
 
         let auth = headers.get("authorization").unwrap().to_str().unwrap();
-        assert!(auth.starts_with("AWS4-HMAC-SHA256 Credential=AKIA"), "auth header format: {}", auth);
+        assert!(
+            auth.starts_with("AWS4-HMAC-SHA256 Credential=AKIA"),
+            "auth header format: {}",
+            auth
+        );
         assert!(auth.contains("SignedHeaders="), "must have signed headers");
         assert!(auth.contains("Signature="), "must have signature");
     }

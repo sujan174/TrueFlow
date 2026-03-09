@@ -25,12 +25,7 @@
 
 use crate::api::AuthContext;
 use crate::AppState;
-use axum::{
-    extract::State,
-    http::StatusCode,
-    response::Json,
-    Extension,
-};
+use axum::{extract::State, http::StatusCode, response::Json, Extension};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::sync::Arc;
@@ -99,7 +94,11 @@ type RuleJson = serde_json::Value;
 
 /// Expand a preset name into its policy rules.
 /// Returns `None` if the preset name is unknown.
-fn expand_preset(name: &str, topic_allowlist: &[String], topic_denylist: &[String]) -> Option<Vec<RuleJson>> {
+fn expand_preset(
+    name: &str,
+    topic_allowlist: &[String],
+    topic_denylist: &[String],
+) -> Option<Vec<RuleJson>> {
     let rules = match name {
         "pii_redaction" => vec![json!({
             "when": {"always": true},
@@ -137,7 +136,6 @@ fn expand_preset(name: &str, topic_allowlist: &[String], topic_denylist: &[Strin
                 "max_content_length": 0
             }
         })],
-
 
         "hipaa" => vec![json!({
             "when": {"always": true},
@@ -229,7 +227,6 @@ fn expand_preset(name: &str, topic_allowlist: &[String], topic_denylist: &[Strin
         })],
 
         // ── NEW: Toxicity & Profanity Presets ──
-
         "toxicity" => vec![json!({
             "when": {"always": true},
             "then": {
@@ -264,7 +261,6 @@ fn expand_preset(name: &str, topic_allowlist: &[String], topic_denylist: &[Strin
         })],
 
         // ── NEW: Business & Compliance Presets ──
-
         "competitor_block" => vec![json!({
             "when": {"always": true},
             "then": {
@@ -377,12 +373,11 @@ fn expand_preset(name: &str, topic_allowlist: &[String], topic_denylist: &[Strin
                         "fields": [],
                         "on_match": "redact"
                     }
-                })
+                }),
             ]
         }
 
         // ── Output Guardrail Presets ── (these create response-phase policies)
-
         "output_content_filter" => vec![json!({
             "when": {"always": true},
             "then": {
@@ -510,54 +505,60 @@ pub async fn enable_guardrails(
     };
 
     // ── Check for existing guardrails (idempotent upsert) ─────
-    let all_policies = state.db.list_policies(project_id, 1000, 0).await.map_err(|e| {
-        tracing::error!(error = %e, "guardrails/enable: failed to list policies");
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+    let all_policies = state
+        .db
+        .list_policies(project_id, 1000, 0)
+        .await
+        .map_err(|e| {
+            tracing::error!(error = %e, "guardrails/enable: failed to list policies");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
 
     // Match any guardrails:*:{token_id} policy (request-phase)
     let token_suffix = format!(":{}", payload.token_id);
-    let existing_input = all_policies
-        .iter()
-        .find(|p| p.name.starts_with("guardrails:") && p.name.ends_with(&token_suffix) && p.phase == "request");
+    let existing_input = all_policies.iter().find(|p| {
+        p.name.starts_with("guardrails:") && p.name.ends_with(&token_suffix) && p.phase == "request"
+    });
     // Match any guardrails-out:*:{token_id} policy (response-phase)
     let existing_output = all_policies
         .iter()
         .find(|p| p.name.starts_with("guardrails-out:") && p.name.ends_with(&token_suffix));
 
     let previous_source = existing_input.and_then(|p| {
-        p.name.strip_prefix("guardrails:")
+        p.name
+            .strip_prefix("guardrails:")
             .and_then(|rest| rest.split(':').next())
             .map(|s| s.to_string())
     });
 
     // ── Input (request-phase) policy ──────────────────────────
-    let policy_id = if !input_rules.is_empty() {
-        let policy_name = format!("guardrails:{}:{}", source, payload.token_id);
-        let rules_value = serde_json::Value::Array(input_rules);
+    let policy_id =
+        if !input_rules.is_empty() {
+            let policy_name = format!("guardrails:{}:{}", source, payload.token_id);
+            let rules_value = serde_json::Value::Array(input_rules);
 
-        if let Some(existing_policy) = existing_input{
-            state.db.update_policy(
+            if let Some(existing_policy) = existing_input {
+                state.db.update_policy(
                 existing_policy.id, project_id,
                 None, None, Some(rules_value), None, Some(&policy_name), None,
             ).await.map_err(|e| {
                 tracing::error!(error = %e, "guardrails/enable: failed to update input policy");
                 StatusCode::INTERNAL_SERVER_ERROR
             })?.map(|_| true).unwrap_or(false);
-            Some(existing_policy.id)
-        } else {
-            let id = state.db.insert_policy(
+                Some(existing_policy.id)
+            } else {
+                let id = state.db.insert_policy(
                 project_id, &policy_name, "enforce", "request", rules_value, None,
             ).await.map_err(|e| {
                 tracing::error!(error = %e, "guardrails/enable: failed to create input policy");
                 StatusCode::INTERNAL_SERVER_ERROR
             })?;
-            Some(id)
-        }
-    } else {
-        // No input presets — if there was an existing input policy, keep it
-        existing_input.map(|p| p.id)
-    };
+                Some(id)
+            }
+        } else {
+            // No input presets — if there was an existing input policy, keep it
+            existing_input.map(|p| p.id)
+        };
 
     // ── Output (response-phase) policy ────────────────────────
     let output_policy_id = if !output_rules.is_empty() {
@@ -616,7 +617,8 @@ pub async fn enable_guardrails(
         })?;
 
     let primary_policy_id = policy_id.or(output_policy_id);
-    let policy_name = primary_policy_id.map(|_| format!("guardrails:{}:{}", source, payload.token_id))
+    let policy_name = primary_policy_id
+        .map(|_| format!("guardrails:{}:{}", source, payload.token_id))
         .unwrap_or_default();
 
     tracing::info!(
@@ -650,16 +652,21 @@ pub async fn disable_guardrails(
     auth.require_role("admin")?;
 
     let project_id = auth.default_project_id();
-    let prefix = payload.policy_name_prefix
+    let prefix = payload
+        .policy_name_prefix
         .unwrap_or_else(|| "guardrails:".to_string());
     // Match both old "guardrails-auto-{token_id}" and new "guardrails:{src}:{token_id}" formats
     let token_suffix = format!(":{}", payload.token_id);
 
     // List all policies for this project and find guardrail-auto ones
-    let all_policies = state.db.list_policies(project_id, 1000, 0).await.map_err(|e| {
-        tracing::error!(error = %e, "guardrails/disable: failed to list policies");
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+    let all_policies = state
+        .db
+        .list_policies(project_id, 1000, 0)
+        .await
+        .map_err(|e| {
+            tracing::error!(error = %e, "guardrails/disable: failed to list policies");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
 
     let guardrail_ids: Vec<Uuid> = all_policies
         .iter()
@@ -733,31 +740,37 @@ pub async fn guardrails_status(
     let token_id = params.get("token_id").ok_or(StatusCode::BAD_REQUEST)?;
     let project_id = auth.default_project_id();
 
-    let all_policies = state.db.list_policies(project_id, 1000, 0).await.map_err(|e| {
-        tracing::error!(error = %e, "guardrails/status: failed to list policies");
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+    let all_policies = state
+        .db
+        .list_policies(project_id, 1000, 0)
+        .await
+        .map_err(|e| {
+            tracing::error!(error = %e, "guardrails/status: failed to list policies");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
 
     // Find guardrails policy for this token (new or legacy format)
     let token_suffix = format!(":{}", token_id);
-    let guardrail_policy = all_policies
-        .iter()
-        .find(|p| {
-            (p.name.starts_with("guardrails:") && p.name.ends_with(&token_suffix))
+    let guardrail_policy = all_policies.iter().find(|p| {
+        (p.name.starts_with("guardrails:") && p.name.ends_with(&token_suffix))
             || p.name == format!("guardrails-auto-{}", token_id)
-        });
+    });
 
     match guardrail_policy {
         Some(policy) => {
             // Extract source from "guardrails:{source}:{token_id}"
-            let source = policy.name.strip_prefix("guardrails:")
+            let source = policy
+                .name
+                .strip_prefix("guardrails:")
                 .and_then(|rest| rest.split(':').next())
                 .map(|s| s.to_string())
                 // Legacy format has no source
-                .or_else(|| if policy.name.starts_with("guardrails-auto-") {
-                    Some("unknown".to_string())
-                } else {
-                    None
+                .or_else(|| {
+                    if policy.name.starts_with("guardrails-auto-") {
+                        Some("unknown".to_string())
+                    } else {
+                        None
+                    }
                 });
 
             // Try to extract preset names from the policy rules
@@ -792,12 +805,19 @@ fn extract_preset_hints(rules: &serde_json::Value) -> Vec<String> {
             if let Some(then) = rule.get("then") {
                 match then.get("action").and_then(|a| a.as_str()) {
                     Some("content_filter") => {
-                        let has_jailbreak = then.get("block_jailbreak")
-                            .and_then(|v| v.as_bool()).unwrap_or(false);
-                        let has_code = then.get("block_code_injection")
-                            .and_then(|v| v.as_bool()).unwrap_or(false);
-                        let has_length = then.get("max_content_length")
-                            .and_then(|v| v.as_u64()).unwrap_or(0) > 0;
+                        let has_jailbreak = then
+                            .get("block_jailbreak")
+                            .and_then(|v| v.as_bool())
+                            .unwrap_or(false);
+                        let has_code = then
+                            .get("block_code_injection")
+                            .and_then(|v| v.as_bool())
+                            .unwrap_or(false);
+                        let has_length = then
+                            .get("max_content_length")
+                            .and_then(|v| v.as_u64())
+                            .unwrap_or(0)
+                            > 0;
 
                         if has_jailbreak && has_code {
                             hints.push("prompt_injection".to_string());
@@ -811,11 +831,13 @@ fn extract_preset_hints(rules: &serde_json::Value) -> Vec<String> {
                         }
                     }
                     Some("redact") => {
-                        let patterns = then.get("patterns")
+                        let patterns = then
+                            .get("patterns")
                             .and_then(|p| p.as_array())
                             .map(|a| a.len())
                             .unwrap_or(0);
-                        let on_match = then.get("on_match")
+                        let on_match = then
+                            .get("on_match")
                             .and_then(|v| v.as_str())
                             .unwrap_or("redact");
 
@@ -1050,7 +1072,9 @@ mod tests {
         assert_eq!(rules[0]["then"]["action"], "content_filter");
         assert_eq!(rules[0]["then"]["block_profanity"], true);
         // Should not enable bias (lighter filter)
-        assert!(rules[0]["then"]["block_bias"].is_null() || rules[0]["then"]["block_bias"] == false);
+        assert!(
+            rules[0]["then"]["block_bias"].is_null() || rules[0]["then"]["block_bias"] == false
+        );
     }
 
     #[test]
@@ -1137,7 +1161,10 @@ mod tests {
         // After the rename, the old "pci" name must not resolve.
         // This is a breaking change — callers using "pci" will get it in `skipped`.
         let result = expand_preset("pci", &[], &[]);
-        assert!(result.is_none(), "old 'pci' name should return None after rename");
+        assert!(
+            result.is_none(),
+            "old 'pci' name should return None after rename"
+        );
     }
 
     #[tokio::test]
@@ -1145,14 +1172,20 @@ mod tests {
         let response = list_presets().await.0;
         let presets = response["presets"].as_array().unwrap();
         let pci_preset = presets.iter().find(|p| p["name"] == "pci_pan_only");
-        assert!(pci_preset.is_some(), "pci_pan_only must appear in preset list");
+        assert!(
+            pci_preset.is_some(),
+            "pci_pan_only must appear in preset list"
+        );
         let pci = pci_preset.unwrap();
         assert!(
             pci["warning"].is_string(),
             "pci_pan_only preset must include a warning field"
         );
         let warning = pci["warning"].as_str().unwrap();
-        assert!(warning.contains("PAN only"), "warning must mention PAN only");
+        assert!(
+            warning.contains("PAN only"),
+            "warning must mention PAN only"
+        );
         assert!(warning.contains("PCI-DSS"), "warning must mention PCI-DSS");
     }
 
@@ -1170,7 +1203,10 @@ mod tests {
             "hipaa preset must include a warning field"
         );
         let warning = hipaa["warning"].as_str().unwrap();
-        assert!(warning.contains("7 of 18"), "warning must mention 7 of 18 identifiers");
+        assert!(
+            warning.contains("7 of 18"),
+            "warning must mention 7 of 18 identifiers"
+        );
         assert!(warning.contains("HIPAA"), "warning must mention HIPAA");
     }
 }

@@ -5,7 +5,7 @@ const Table = React.forwardRef<
     HTMLTableElement,
     React.HTMLAttributes<HTMLTableElement>
 >(({ className, ...props }, ref) => (
-    <div className="relative w-full overflow-auto rounded-md border bg-card">
+    <div className="relative w-full overflow-auto rounded-md border border-white/10 bg-black">
         <table
             ref={ref}
             className={cn("w-full caption-bottom text-sm", className)}
@@ -19,7 +19,7 @@ const TableHeader = React.forwardRef<
     HTMLTableSectionElement,
     React.HTMLAttributes<HTMLTableSectionElement>
 >(({ className, ...props }, ref) => (
-    <thead ref={ref} className={cn("[&_tr]:border-b", className)} {...props} />
+    <thead ref={ref} className={cn("[&_tr]:border-b [&_tr]:border-white/10 bg-white/[0.02]", className)} {...props} />
 ))
 TableHeader.displayName = "TableHeader"
 
@@ -42,7 +42,7 @@ const TableFooter = React.forwardRef<
     <tfoot
         ref={ref}
         className={cn(
-            "border-t bg-muted/50 font-medium [&>tr]:last:border-b-0",
+            "border-t border-white/10 bg-white/5 font-medium [&>tr]:last:border-b-0",
             className
         )}
         {...props}
@@ -57,7 +57,7 @@ const TableRow = React.forwardRef<
     <tr
         ref={ref}
         className={cn(
-            "border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted",
+            "border-b border-white/10 transition-colors hover:bg-white/[0.02] data-[state=selected]:bg-white/[0.04]",
             className
         )}
         {...props}
@@ -72,9 +72,9 @@ const TableHead = React.forwardRef<
     <th
         ref={ref}
         className={cn(
-            "h-10 px-4 text-left align-middle font-medium text-muted-foreground [&:has([role=checkbox])]:pr-0",
-            // Fortress Prime specific: Uppercase, smaller tracking for headers
-            "text-[11px] uppercase tracking-wider",
+            "h-9 px-4 text-left align-middle font-medium text-zinc-500 [&:has([role=checkbox])]:pr-0",
+            // Industrial Precision specific: Uppercase, tracking
+            "text-[10px] uppercase tracking-widest",
             className
         )}
         {...props}
@@ -89,9 +89,9 @@ const TableCell = React.forwardRef<
     <td
         ref={ref}
         className={cn(
-            "p-4 align-middle [&:has([role=checkbox])]:pr-0",
-            // Fortress Prime specific: Dense cells
-            "py-2.5",
+            "p-4 align-middle [&:has([role=checkbox])]:pr-0 text-zinc-300",
+            // Industrial Precision specific: Dense cells
+            "py-2.5 text-[13px]",
             className
         )}
         {...props}

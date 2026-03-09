@@ -91,7 +91,9 @@ pub fn redact_sse_chunk(chunk: &str) -> (String, bool) {
                 if !types.is_empty() {
                     redacted_any = true;
                     output.push_str("data: ");
-                    output.push_str(&serde_json::to_string(&json_val).unwrap_or_else(|_| payload.to_string()));
+                    output.push_str(
+                        &serde_json::to_string(&json_val).unwrap_or_else(|_| payload.to_string()),
+                    );
                     continue;
                 }
             }
@@ -250,11 +252,13 @@ mod tests {
         assert!(did_redact, "Should detect SSN in SSE data line");
         assert!(
             !output.contains("123-45-6789"),
-            "SSN should be redacted in output: '{}'", output
+            "SSN should be redacted in output: '{}'",
+            output
         );
         assert!(
             output.contains("[REDACTED_SSN]"),
-            "Should contain redaction marker: '{}'", output
+            "Should contain redaction marker: '{}'",
+            output
         );
         assert!(output.starts_with("data: "), "Should preserve data: prefix");
     }
@@ -275,11 +279,13 @@ mod tests {
         assert!(did_redact, "Should detect email in second data line");
         assert!(
             output.contains("Hello"),
-            "First data line should be preserved: '{}'", output
+            "First data line should be preserved: '{}'",
+            output
         );
         assert!(
             !output.contains("user@test.com"),
-            "Email should be redacted: '{}'", output
+            "Email should be redacted: '{}'",
+            output
         );
         assert!(
             output.contains("[REDACTED_EMAIL]"),
@@ -304,7 +310,8 @@ mod tests {
         assert!(did_redact, "Should detect credit card");
         assert!(
             !output.contains("4111 1111 1111 1111"),
-            "CC should be redacted: '{}'", output
+            "CC should be redacted: '{}'",
+            output
         );
         assert!(output.contains("[REDACTED_CC]"));
     }

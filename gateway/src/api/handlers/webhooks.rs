@@ -3,23 +3,21 @@ use std::sync::Arc;
 use axum::{
     extract::{Path, State},
     http::StatusCode,
-    Extension,
-    Json,
+    Extension, Json,
 };
 
+use super::dtos::{CreateWebhookRequest, TestWebhookRequest, TestWebhookResponse, WebhookRow};
+use super::helpers::validate_webhook_url;
 use crate::api::AuthContext;
 use crate::AppState;
-use super::dtos::{
-    WebhookRow, CreateWebhookRequest, TestWebhookResponse, TestWebhookRequest,
-};
-use super::helpers::validate_webhook_url;
 
 pub async fn list_webhooks(
     State(state): State<Arc<AppState>>,
     Extension(auth): Extension<AuthContext>,
 ) -> Result<Json<Vec<WebhookRow>>, StatusCode> {
     // SEC-04: scope check
-    auth.require_scope("webhooks:read").map_err(|_| StatusCode::FORBIDDEN)?;
+    auth.require_scope("webhooks:read")
+        .map_err(|_| StatusCode::FORBIDDEN)?;
 
     let project_id = auth.default_project_id();
     let rows = sqlx::query_as::<_, WebhookRow>(
@@ -45,7 +43,8 @@ pub async fn create_webhook(
 ) -> Result<(StatusCode, Json<WebhookRow>), StatusCode> {
     // SEC-04: scope check
     auth.require_role("admin")?;
-    auth.require_scope("webhooks:write").map_err(|_| StatusCode::FORBIDDEN)?;
+    auth.require_scope("webhooks:write")
+        .map_err(|_| StatusCode::FORBIDDEN)?;
     // SEC-09: validate webhook URL
     validate_webhook_url(&payload.url)?;
 
@@ -53,13 +52,14 @@ pub async fn create_webhook(
     let events = payload.events.unwrap_or_default();
 
     // Generate a 32-byte (256-bit) random signing secret shown once on creation.
-    let signing_secret: String = (0..32)
-        .map(|_| rand::random::<u8>())
-        .fold(String::with_capacity(64), |mut acc, b| {
-            use std::fmt::Write;
-            let _ = write!(acc, "{:02x}", b);
-            acc
-        });
+    let signing_secret: String =
+        (0..32)
+            .map(|_| rand::random::<u8>())
+            .fold(String::with_capacity(64), |mut acc, b| {
+                use std::fmt::Write;
+                let _ = write!(acc, "{:02x}", b);
+                acc
+            });
 
     tracing::info!(project_id = %project_id, url = %payload.url, "creating webhook with signing secret");
 
@@ -93,7 +93,8 @@ pub async fn delete_webhook(
 ) -> Result<StatusCode, StatusCode> {
     // SEC-04: scope check
     auth.require_role("admin")?;
-    auth.require_scope("webhooks:write").map_err(|_| StatusCode::FORBIDDEN)?;
+    auth.require_scope("webhooks:write")
+        .map_err(|_| StatusCode::FORBIDDEN)?;
 
     let id = uuid::Uuid::parse_str(&id_str).map_err(|_| StatusCode::BAD_REQUEST)?;
     let project_id = auth.default_project_id();
@@ -119,7 +120,8 @@ pub async fn test_webhook(
 ) -> Result<Json<TestWebhookResponse>, StatusCode> {
     // SEC-04: scope check
     auth.require_role("admin")?;
-    auth.require_scope("webhooks:write").map_err(|_| StatusCode::FORBIDDEN)?;
+    auth.require_scope("webhooks:write")
+        .map_err(|_| StatusCode::FORBIDDEN)?;
     // SEC-02: validate URL before making outbound request
     validate_webhook_url(&payload.url)?;
 

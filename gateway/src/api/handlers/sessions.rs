@@ -3,14 +3,13 @@ use std::sync::Arc;
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
-    Extension,
-    Json,
+    Extension, Json,
 };
 
+use super::dtos::{PaginationParams, SetSpendCapRequest, UpdateSessionStatusRequest};
+use super::helpers::verify_project_ownership;
 use crate::api::AuthContext;
 use crate::AppState;
-use super::dtos::{PaginationParams, UpdateSessionStatusRequest, SetSpendCapRequest};
-use super::helpers::verify_project_ownership;
 
 pub async fn get_session(
     State(state): State<Arc<AppState>>,
@@ -18,8 +17,11 @@ pub async fn get_session(
     Path(session_id): Path<String>,
     Query(params): Query<PaginationParams>,
 ) -> Result<Json<crate::store::postgres::SessionSummaryRow>, StatusCode> {
-    auth.require_scope("audit:read").map_err(|_| StatusCode::FORBIDDEN)?;
-    let project_id = params.project_id.unwrap_or_else(|| auth.default_project_id());
+    auth.require_scope("audit:read")
+        .map_err(|_| StatusCode::FORBIDDEN)?;
+    let project_id = params
+        .project_id
+        .unwrap_or_else(|| auth.default_project_id());
     verify_project_ownership(&state, auth.org_id, project_id).await?;
 
     let summary = state
@@ -44,8 +46,11 @@ pub async fn list_sessions(
     Extension(auth): Extension<AuthContext>,
     Query(params): Query<PaginationParams>,
 ) -> Result<Json<Vec<crate::store::postgres::SessionSummaryRow>>, StatusCode> {
-    auth.require_scope("audit:read").map_err(|_| StatusCode::FORBIDDEN)?;
-    let project_id = params.project_id.unwrap_or_else(|| auth.default_project_id());
+    auth.require_scope("audit:read")
+        .map_err(|_| StatusCode::FORBIDDEN)?;
+    let project_id = params
+        .project_id
+        .unwrap_or_else(|| auth.default_project_id());
     verify_project_ownership(&state, auth.org_id, project_id).await?;
     let limit = params.limit.unwrap_or(100).clamp(1, 500);
     let offset = params.offset.unwrap_or(0).max(0);
@@ -75,8 +80,11 @@ pub async fn update_session_status(
     Json(payload): Json<UpdateSessionStatusRequest>,
 ) -> Result<Json<crate::store::postgres::SessionEntity>, StatusCode> {
     auth.require_role("admin")?;
-    auth.require_scope("sessions:write").map_err(|_| StatusCode::FORBIDDEN)?;
-    let project_id = params.project_id.unwrap_or_else(|| auth.default_project_id());
+    auth.require_scope("sessions:write")
+        .map_err(|_| StatusCode::FORBIDDEN)?;
+    let project_id = params
+        .project_id
+        .unwrap_or_else(|| auth.default_project_id());
     verify_project_ownership(&state, auth.org_id, project_id).await?;
 
     // Validate status value
@@ -113,8 +121,11 @@ pub async fn set_session_spend_cap(
     Json(payload): Json<SetSpendCapRequest>,
 ) -> Result<Json<crate::store::postgres::SessionEntity>, StatusCode> {
     auth.require_role("admin")?;
-    auth.require_scope("sessions:write").map_err(|_| StatusCode::FORBIDDEN)?;
-    let project_id = params.project_id.unwrap_or_else(|| auth.default_project_id());
+    auth.require_scope("sessions:write")
+        .map_err(|_| StatusCode::FORBIDDEN)?;
+    let project_id = params
+        .project_id
+        .unwrap_or_else(|| auth.default_project_id());
     verify_project_ownership(&state, auth.org_id, project_id).await?;
 
     let session = state
@@ -146,8 +157,11 @@ pub async fn get_session_entity(
     Path(session_id): Path<String>,
     Query(params): Query<PaginationParams>,
 ) -> Result<Json<crate::store::postgres::SessionEntity>, StatusCode> {
-    auth.require_scope("audit:read").map_err(|_| StatusCode::FORBIDDEN)?;
-    let project_id = params.project_id.unwrap_or_else(|| auth.default_project_id());
+    auth.require_scope("audit:read")
+        .map_err(|_| StatusCode::FORBIDDEN)?;
+    let project_id = params
+        .project_id
+        .unwrap_or_else(|| auth.default_project_id());
     verify_project_ownership(&state, auth.org_id, project_id).await?;
 
     let session = state

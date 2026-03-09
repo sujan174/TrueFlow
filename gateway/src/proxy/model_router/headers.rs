@@ -40,7 +40,9 @@ pub(crate) fn inject_provider_headers(
             if is_streaming {
                 headers
                     .entry(reqwest::header::ACCEPT)
-                    .or_insert(HeaderValue::from_static("application/vnd.amazon.eventstream"));
+                    .or_insert(HeaderValue::from_static(
+                        "application/vnd.amazon.eventstream",
+                    ));
             }
             // Content-Type for Converse API is always application/json
             headers

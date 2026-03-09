@@ -18,10 +18,10 @@ import {
   Plus, RefreshCw, Key, Shield, Trash2, Loader2, AlertTriangle, Blocks
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { CountUp } from "@/components/ui/count-up";
 import { EmptyState } from "@/components/empty-state";
 import { PageSkeleton } from "@/components/page-skeleton";
 import { useRouter } from "next/navigation";
-import { Card } from "@/components/ui/card";
 import { DataTable } from "@/components/data-table";
 import { columns } from "./columns";
 import {
@@ -80,8 +80,10 @@ export default function TokensPage() {
   };
 
   const handleCreateToken = async (data: CreateTokenRequest) => {
+    // Generate an ID that will be consistent across retries of the same mutate request
+    const tempId = "temp-" + crypto.randomUUID();
     const tempToken: Token = {
-      id: "temp-" + Date.now(),
+      id: tempId,
       project_id: "",
       name: data.name,
       credential_id: data.credential_id || "",
@@ -121,8 +123,8 @@ export default function TokensPage() {
       {/* Header */}
       <div className="flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-lg font-semibold tracking-tight">Agents</h1>
-          <p className="text-xs text-muted-foreground mt-0.5">Virtual tokens for AI agent authentication.</p>
+          <h1 className="text-lg font-semibold tracking-tight text-white">Agents</h1>
+          <p className="text-xs text-zinc-500 mt-0.5">Virtual tokens for AI agent authentication.</p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <Button variant="outline" size="sm" onClick={() => mutateTokens()} disabled={loading}>
@@ -135,11 +137,13 @@ export default function TokensPage() {
                 <Plus className="mr-1.5 h-3.5 w-3.5" /> Create Token
               </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[480px]">
-              <CreateTokenForm
-                onSuccess={() => setCreateOpen(false)}
-                onCreate={handleCreateToken}
-              />
+            <DialogContent className="sm:max-w-[480px] bg-zinc-950 border-white/10 p-0 overflow-hidden">
+              <div className="p-6 overflow-y-auto max-h-[85vh] scrollbar-none">
+                <CreateTokenForm
+                  onSuccess={() => setCreateOpen(false)}
+                  onCreate={handleCreateToken}
+                />
+              </div>
             </DialogContent>
           </Dialog>
         </div>
@@ -147,39 +151,45 @@ export default function TokensPage() {
 
       {/* KPI Cards */}
       <div className="grid gap-4 md:grid-cols-3 animate-slide-up">
-        <Card className="glass-card hover-lift p-4">
-          <div className="flex items-center gap-3">
-            <div className="icon-circle-blue">
-              <Key className="h-4 w-4" />
+        <div className="bg-black border border-white/10 rounded-lg p-5">
+          <div className="flex items-center gap-4">
+            <div className="h-10 w-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center flex-shrink-0">
+              <Key className="h-5 w-5 text-white" />
             </div>
             <div>
-              <p className="text-xl font-semibold tabular-nums">{tokens.length}</p>
-              <p className="text-xs text-muted-foreground">Total Tokens</p>
+              <p className="text-2xl font-semibold tabular-nums text-white leading-none tracking-tight">
+                <CountUp value={tokens.length} />
+              </p>
+              <p className="text-[11px] font-medium text-zinc-500 uppercase tracking-widest mt-1">Total Tokens</p>
             </div>
           </div>
-        </Card>
-        <Card className={cn("glass-card hover-lift p-4", activeCount > 0 && "animate-glow border-emerald-500/30")}>
-          <div className="flex items-center gap-3">
-            <div className="icon-circle-emerald">
-              <Shield className="h-4 w-4" />
+        </div>
+        <div className={cn("bg-black border border-white/10 rounded-lg p-5", activeCount > 0 && "border-white/20 bg-white/[0.02]")}>
+          <div className="flex items-center gap-4">
+            <div className="h-10 w-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center flex-shrink-0">
+              <Shield className="h-5 w-5 text-white" />
             </div>
             <div>
-              <p className="text-xl font-semibold tabular-nums text-emerald-500">{activeCount}</p>
-              <p className="text-xs text-muted-foreground">Active</p>
+              <p className="text-2xl font-semibold tabular-nums text-white leading-none tracking-tight">
+                <CountUp value={activeCount} />
+              </p>
+              <p className="text-[11px] font-medium text-zinc-500 uppercase tracking-widest mt-1">Active</p>
             </div>
           </div>
-        </Card>
-        <Card className="glass-card hover-lift p-4">
-          <div className="flex items-center gap-3">
-            <div className="icon-circle-rose">
-              <Trash2 className="h-4 w-4" />
+        </div>
+        <div className="bg-black border border-white/10 rounded-lg p-5">
+          <div className="flex items-center gap-4">
+            <div className="h-10 w-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center flex-shrink-0">
+              <Trash2 className="h-5 w-5 text-zinc-500" />
             </div>
             <div>
-              <p className="text-xl font-semibold tabular-nums text-rose-500">{revokedCount}</p>
-              <p className="text-xs text-muted-foreground">Revoked</p>
+              <p className="text-2xl font-semibold tabular-nums text-zinc-400 leading-none tracking-tight">
+                <CountUp value={revokedCount} />
+              </p>
+              <p className="text-[11px] font-medium text-zinc-600 uppercase tracking-widest mt-1">Revoked</p>
             </div>
           </div>
-        </Card>
+        </div>
       </div>
 
       {/* Table */}
@@ -192,10 +202,10 @@ export default function TokensPage() {
           description="Create a virtual token to give your agents controlled access to upstream APIs."
           actionLabel="Create Token"
           onAction={() => setCreateOpen(true)}
-          className="bg-card/50 backdrop-blur-sm"
+          className="bg-black border-white/10"
         />
       ) : (
-        <div className="animate-slide-up stagger-2">
+        <div className="animate-slide-up stagger-2 bg-black border border-white/10 rounded-md overflow-hidden">
           <DataTable
             columns={columns}
             data={tokens}
@@ -211,18 +221,18 @@ export default function TokensPage() {
 
       {/* Revoke Confirmation Dialog */}
       <Dialog open={!!revokeTokenData} onOpenChange={(open) => !open && setRevokeTokenData(null)}>
-        <DialogContent>
+        <DialogContent className="bg-zinc-950 border-rose-500/20 text-white">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-destructive">
+            <DialogTitle className="flex items-center gap-2 text-rose-500 font-medium">
               <AlertTriangle className="h-5 w-5" /> Revoke Token
             </DialogTitle>
-            <DialogDescription>
-              Are you sure you want to revoke the token <span className="font-mono font-medium text-foreground">{revokeTokenData?.name}</span>?
+            <DialogDescription className="pt-1 text-zinc-400 text-[13px]">
+              Are you sure you want to revoke the token <span className="font-mono font-medium text-white">{revokeTokenData?.name}</span>?
               This action cannot be undone and any agents using this token will effectively stop working.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setRevokeTokenData(null)}>Cancel</Button>
+            <Button variant="ghost" onClick={() => setRevokeTokenData(null)}>Cancel</Button>
             <Button variant="destructive" onClick={handleRevoke}>Revoke Token</Button>
           </DialogFooter>
         </DialogContent>
@@ -284,7 +294,7 @@ function CreateTokenForm({ onSuccess, onCreate }: { onSuccess: () => void; onCre
       setLoading(true);
       const payload: CreateTokenRequest = { ...formData };
       if (mode === "passthrough") {
-        delete (payload as any).credential_id;
+        delete (payload as Record<string, unknown>).credential_id;
       }
       if (upstreamMode === "multi") {
         // Validate all URLs are filled
@@ -334,15 +344,15 @@ function CreateTokenForm({ onSuccess, onCreate }: { onSuccess: () => void; onCre
   return (
     <form onSubmit={handleSubmit}>
       <DialogHeader>
-        <DialogTitle>Create Token</DialogTitle>
-        <DialogDescription>
+        <DialogTitle className="text-white font-medium">Create Token</DialogTitle>
+        <DialogDescription className="text-zinc-500 text-[13px]">
           Issue a new virtual token for agent authentication.
         </DialogDescription>
       </DialogHeader>
       <div className="grid gap-4 py-4">
         {/* Credential Mode Selector */}
         <div className="space-y-1.5">
-          <Label className="text-xs">Credential Mode</Label>
+          <Label className="text-zinc-400 text-xs uppercase tracking-widest">Credential Mode</Label>
           <div className="grid grid-cols-2 gap-2">
             <button
               type="button"
@@ -350,8 +360,8 @@ function CreateTokenForm({ onSuccess, onCreate }: { onSuccess: () => void; onCre
               className={cn(
                 "rounded-md border px-3 py-2 text-xs font-medium transition-all",
                 mode === "managed"
-                  ? "border-primary bg-primary/10 text-primary"
-                  : "border-muted bg-muted/30 text-muted-foreground hover:bg-muted/50"
+                  ? "border-white/30 bg-white/5 text-white"
+                  : "border-white/10 bg-black text-zinc-500 hover:text-white hover:bg-white/[0.02]"
               )}
             >
               <Shield className="h-3.5 w-3.5 mx-auto mb-1" />
@@ -363,15 +373,15 @@ function CreateTokenForm({ onSuccess, onCreate }: { onSuccess: () => void; onCre
               className={cn(
                 "rounded-md border px-3 py-2 text-xs font-medium transition-all",
                 mode === "passthrough"
-                  ? "border-primary bg-primary/10 text-primary"
-                  : "border-muted bg-muted/30 text-muted-foreground hover:bg-muted/50"
+                  ? "border-white/30 bg-white/5 text-white"
+                  : "border-white/10 bg-black text-zinc-500 hover:text-white hover:bg-white/[0.02]"
               )}
             >
               <Key className="h-3.5 w-3.5 mx-auto mb-1" />
               Passthrough / BYOK
             </button>
           </div>
-          <p className="text-[10px] text-muted-foreground">
+          <p className="text-[10px] text-zinc-500">
             {mode === "managed"
               ? "TrueFlow injects credentials from the vault. Agents never see real API keys."
               : "Agents provide their own API key via X-Real-Authorization header. TrueFlow provides observability, analytics, and policies."}
@@ -379,7 +389,7 @@ function CreateTokenForm({ onSuccess, onCreate }: { onSuccess: () => void; onCre
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="name" className="text-xs">
+          <Label htmlFor="name" className="text-zinc-400 text-xs uppercase tracking-widest">
             Token Name
           </Label>
           <Input
@@ -387,13 +397,14 @@ function CreateTokenForm({ onSuccess, onCreate }: { onSuccess: () => void; onCre
             value={formData.name}
             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
             placeholder="e.g. billing-agent-v1"
+            className="bg-black border-white/10 text-white placeholder:text-zinc-600 focus-visible:ring-white/20"
             required
           />
         </div>
 
         {/* Upstream Mode Selector */}
         <div className="space-y-1.5">
-          <Label className="text-xs">Upstream Configuration</Label>
+          <Label className="text-zinc-400 text-xs uppercase tracking-widest">Upstream Configuration</Label>
           <div className="grid grid-cols-2 gap-2">
             <button
               type="button"
@@ -401,8 +412,8 @@ function CreateTokenForm({ onSuccess, onCreate }: { onSuccess: () => void; onCre
               className={cn(
                 "rounded-md border px-3 py-2 text-xs font-medium transition-all",
                 upstreamMode === "single"
-                  ? "border-primary bg-primary/10 text-primary"
-                  : "border-muted bg-muted/30 text-muted-foreground hover:bg-muted/50"
+                  ? "border-white/30 bg-white/5 text-white"
+                  : "border-white/10 bg-black text-zinc-500 hover:text-white hover:bg-white/[0.02]"
               )}
             >
               Single Upstream
@@ -413,8 +424,8 @@ function CreateTokenForm({ onSuccess, onCreate }: { onSuccess: () => void; onCre
               className={cn(
                 "rounded-md border px-3 py-2 text-xs font-medium transition-all",
                 upstreamMode === "multi"
-                  ? "border-primary bg-primary/10 text-primary"
-                  : "border-muted bg-muted/30 text-muted-foreground hover:bg-muted/50"
+                  ? "border-white/30 bg-white/5 text-white"
+                  : "border-white/10 bg-black text-zinc-500 hover:text-white hover:bg-white/[0.02]"
               )}
             >
               <Blocks className="h-3.5 w-3.5 mx-auto mb-1" />
@@ -425,7 +436,7 @@ function CreateTokenForm({ onSuccess, onCreate }: { onSuccess: () => void; onCre
 
         {upstreamMode === "single" ? (
           <div className="space-y-1.5">
-            <Label htmlFor="upstream" className="text-xs">
+            <Label htmlFor="upstream" className="text-zinc-400 text-xs uppercase tracking-widest">
               Upstream API URL
             </Label>
             <Input
@@ -433,36 +444,37 @@ function CreateTokenForm({ onSuccess, onCreate }: { onSuccess: () => void; onCre
               value={formData.upstream_url}
               onChange={(e) => setFormData({ ...formData, upstream_url: e.target.value })}
               placeholder="https://api.openai.com/v1"
+              className="bg-black border-white/10 text-white font-mono placeholder:text-zinc-600 focus-visible:ring-white/20"
               required
             />
           </div>
         ) : (
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <Label className="text-xs">Upstream Endpoints</Label>
+              <Label className="text-zinc-400 text-xs uppercase tracking-widest">Upstream Endpoints</Label>
               <button
                 type="button"
                 onClick={addUpstream}
-                className="text-[10px] text-primary hover:text-primary/80 flex items-center gap-1 transition-colors"
+                className="text-[10px] text-white hover:text-zinc-300 flex items-center gap-1 transition-colors uppercase tracking-wider"
               >
                 <Plus className="h-3 w-3" /> Add endpoint
               </button>
             </div>
-            <p className="text-[10px] text-muted-foreground">
+            <p className="text-[10px] text-zinc-500">
               Requests are distributed by weight. Higher priority endpoints are tried first on failover.
             </p>
             <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
               {upstreams.map((u, i) => (
-                <div key={i} className="rounded-md border border-border/60 bg-muted/20 p-3 space-y-2">
+                <div key={i} className="rounded-md border border-white/10 bg-white/[0.02] p-3 space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                    <span className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest">
                       Endpoint {i + 1}
                     </span>
                     {upstreams.length > 1 && (
                       <button
                         type="button"
                         onClick={() => removeUpstream(i)}
-                        className="text-rose-400 hover:text-rose-300 transition-colors"
+                        className="text-zinc-500 hover:text-rose-400 transition-colors"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
@@ -472,11 +484,11 @@ function CreateTokenForm({ onSuccess, onCreate }: { onSuccess: () => void; onCre
                     value={u.url}
                     onChange={(e) => updateUpstream(i, "url", e.target.value)}
                     placeholder="https://api.openai.com/v1"
-                    className="h-8 text-xs font-mono"
+                    className="h-8 text-[11px] font-mono bg-black border-white/10 text-white placeholder:text-zinc-600 focus-visible:ring-white/20"
                   />
                   <div className="grid grid-cols-2 gap-2">
                     <div className="space-y-1">
-                      <Label className="text-[10px] text-muted-foreground">Weight</Label>
+                      <Label className="text-[10px] text-zinc-500 uppercase tracking-widest">Weight</Label>
                       <Input
                         type="number"
                         min="0"
@@ -484,18 +496,18 @@ function CreateTokenForm({ onSuccess, onCreate }: { onSuccess: () => void; onCre
                         value={u.weight}
                         onChange={(e) => updateUpstream(i, "weight", e.target.value)}
                         placeholder="1"
-                        className="h-7 text-xs"
+                        className="h-7 text-xs bg-black border-white/10 text-white placeholder:text-zinc-600 focus-visible:ring-white/20"
                       />
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-[10px] text-muted-foreground">Priority</Label>
+                      <Label className="text-[10px] text-zinc-500 uppercase tracking-widest">Priority</Label>
                       <Input
                         type="number"
                         min="1"
                         value={u.priority}
                         onChange={(e) => updateUpstream(i, "priority", e.target.value)}
                         placeholder="1"
-                        className="h-7 text-xs"
+                        className="h-7 text-xs bg-black border-white/10 text-white placeholder:text-zinc-600 focus-visible:ring-white/20"
                       />
                     </div>
                   </div>
@@ -507,22 +519,22 @@ function CreateTokenForm({ onSuccess, onCreate }: { onSuccess: () => void; onCre
 
         {mode === "managed" && (
           <div className="space-y-1.5">
-            <Label htmlFor="cred_id" className="text-xs">
+            <Label htmlFor="cred_id" className="text-zinc-400 text-xs uppercase tracking-widest">
               Backing Credential
             </Label>
             {fetchingCreds ? (
-              <div className="h-10 w-full animate-pulse bg-muted rounded-md" />
+              <div className="h-10 w-full animate-pulse bg-white/5 border border-white/10 rounded-md" />
             ) : (
               <Select
                 value={formData.credential_id}
                 onValueChange={(val) => setFormData({ ...formData, credential_id: val })}
               >
-                <SelectTrigger>
+                <SelectTrigger className="bg-black border-white/10 text-white focus:ring-white/20">
                   <SelectValue placeholder="Select a credential..." />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="bg-zinc-950 border-white/10 text-white">
                   {credentials.filter(c => c.is_active).map((cred) => (
-                    <SelectItem key={cred.id} value={cred.id}>
+                    <SelectItem key={cred.id} value={cred.id} className="focus:bg-white/5 focus:text-white">
                       {cred.name} ({cred.provider})
                     </SelectItem>
                   ))}
@@ -530,7 +542,7 @@ function CreateTokenForm({ onSuccess, onCreate }: { onSuccess: () => void; onCre
               </Select>
             )}
             {credentials.length === 0 && !fetchingCreds && (
-              <p className="text-[10px] text-muted-foreground mt-1">
+              <p className="text-[10px] text-zinc-500 mt-1">
                 No active credentials found. Create one first.
               </p>
             )}
@@ -538,24 +550,24 @@ function CreateTokenForm({ onSuccess, onCreate }: { onSuccess: () => void; onCre
         )}
 
         {/* Advanced Options */}
-        <div className="space-y-3 pt-2 border-t border-border/50">
-          <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Advanced Options</Label>
+        <div className="space-y-3 pt-4 border-t border-white/[0.06]">
+          <Label className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest">Advanced Options</Label>
 
           {/* Team Assignment */}
           {teams.length > 0 && (
             <div className="space-y-1.5">
-              <Label htmlFor="team_id" className="text-xs">Team (optional)</Label>
+              <Label htmlFor="team_id" className="text-zinc-400 text-xs uppercase tracking-widest">Team (optional)</Label>
               <Select
                 value={formData.team_id || ""}
                 onValueChange={(val) => setFormData({ ...formData, team_id: val || undefined })}
               >
-                <SelectTrigger>
+                <SelectTrigger className="bg-black border-white/10 text-white focus:ring-white/20">
                   <SelectValue placeholder="No team assigned" />
                 </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="">No team</SelectItem>
+                <SelectContent className="bg-zinc-950 border-white/10 text-white">
+                  <SelectItem value="" className="focus:bg-white/5 focus:text-white">No team</SelectItem>
                   {teams.map((t) => (
-                    <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                    <SelectItem key={t.id} value={t.id} className="focus:bg-white/5 focus:text-white">{t.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -565,90 +577,95 @@ function CreateTokenForm({ onSuccess, onCreate }: { onSuccess: () => void; onCre
           {/* Fallback URL — single upstream only */}
           {upstreamMode === "single" && (
             <div className="space-y-1.5">
-              <Label htmlFor="fallback_url" className="text-xs">Fallback URL (optional)</Label>
+              <Label htmlFor="fallback_url" className="text-zinc-400 text-xs uppercase tracking-widest">Fallback URL (optional)</Label>
               <Input
                 id="fallback_url"
                 value={formData.fallback_url || ""}
                 onChange={(e) => setFormData({ ...formData, fallback_url: e.target.value || undefined })}
                 placeholder="https://api.backup.com/v1"
+                className="bg-black border-white/10 text-white font-mono placeholder:text-zinc-600 focus-visible:ring-white/20"
               />
-              <p className="text-[10px] text-muted-foreground">Used automatically on upstream failure.</p>
+              <p className="text-[10px] text-zinc-500">Used automatically on upstream failure.</p>
             </div>
           )}
 
           {/* Allowed Models */}
           <div className="space-y-1.5">
-            <Label htmlFor="allowed_models" className="text-xs">Allowed Models (optional)</Label>
+            <Label htmlFor="allowed_models" className="text-zinc-400 text-xs uppercase tracking-widest">Allowed Models (optional)</Label>
             <Input
               id="allowed_models"
               value={allowedModelsInput}
               onChange={(e) => setAllowedModelsInput(e.target.value)}
               placeholder="gpt-4o, claude-3-*, gemini-1.5-pro"
+              className="bg-black border-white/10 text-white font-mono placeholder:text-zinc-600 focus-visible:ring-white/20"
             />
-            <p className="text-[10px] text-muted-foreground">Comma-separated model names or glob patterns. Leave blank to allow all.</p>
+            <p className="text-[10px] text-zinc-500">Comma-separated model names or glob patterns. Leave blank to allow all.</p>
           </div>
 
           {/* Tags */}
           <div className="space-y-1.5">
-            <Label htmlFor="tags" className="text-xs">Tags (optional)</Label>
+            <Label htmlFor="tags" className="text-zinc-400 text-xs uppercase tracking-widest">Tags (optional)</Label>
             <Input
               id="tags"
               value={tagsInput}
               onChange={(e) => setTagsInput(e.target.value)}
               placeholder='{"team": "eng", "env": "prod"}'
+              className="bg-black border-white/10 text-white font-mono placeholder:text-zinc-600 focus-visible:ring-white/20"
             />
-            <p className="text-[10px] text-muted-foreground">JSON object for cost attribution and filtering.</p>
+            <p className="text-[10px] text-zinc-500">JSON object for cost attribution and filtering.</p>
           </div>
 
           {/* MCP Tool Access Control */}
           <div className="space-y-1.5">
-            <Label htmlFor="mcp_allowed_tools" className="text-xs">MCP Allowed Tools (optional)</Label>
+            <Label htmlFor="mcp_allowed_tools" className="text-zinc-400 text-xs uppercase tracking-widest">MCP Allowed Tools (optional)</Label>
             <Input
               id="mcp_allowed_tools"
               value={mcpAllowedInput}
               onChange={(e) => setMcpAllowedInput(e.target.value)}
               placeholder="mcp__slack__*, mcp__brave__search"
+              className="bg-black border-white/10 text-white font-mono placeholder:text-zinc-600 focus-visible:ring-white/20"
             />
-            <p className="text-[10px] text-muted-foreground">Comma-separated. Only these MCP tools will be injected. Glob patterns supported. Leave blank to allow all.</p>
+            <p className="text-[10px] text-zinc-500">Comma-separated. Only these MCP tools will be injected. Glob patterns supported. Leave blank to allow all.</p>
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="mcp_blocked_tools" className="text-xs">MCP Blocked Tools (optional)</Label>
+            <Label htmlFor="mcp_blocked_tools" className="text-zinc-400 text-xs uppercase tracking-widest">MCP Blocked Tools (optional)</Label>
             <Input
               id="mcp_blocked_tools"
               value={mcpBlockedInput}
               onChange={(e) => setMcpBlockedInput(e.target.value)}
               placeholder="mcp__*__delete_*, mcp__slack__admin_*"
+              className="bg-black border-white/10 text-white font-mono placeholder:text-zinc-600 focus-visible:ring-white/20"
             />
-            <p className="text-[10px] text-muted-foreground">Comma-separated. These MCP tools will be blocked even if in the allowed list. Takes priority.</p>
+            <p className="text-[10px] text-zinc-500">Comma-separated. These MCP tools will be blocked even if in the allowed list. Takes priority.</p>
           </div>
         </div>
 
         {/* Privacy & Logging */}
-        <div className="space-y-1.5 pt-2 border-t border-border/50">
-          <Label className="text-xs flex items-center gap-2">
+        <div className="space-y-1.5 pt-4 border-t border-white/[0.06]">
+          <Label className="text-zinc-400 text-xs uppercase tracking-widest flex items-center gap-2">
             Privacy & Logging
           </Label>
           <Select
             value={String(formData.log_level)}
             onValueChange={(val) => setFormData({ ...formData, log_level: parseInt(val) })}
           >
-            <SelectTrigger>
+            <SelectTrigger className="bg-black border-white/10 text-white focus:ring-white/20">
               <SelectValue />
             </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="0">Metadata Only (No payloads saved)</SelectItem>
-              <SelectItem value="1">Redacted Payload (Scrub PII keys/secrets)</SelectItem>
-              <SelectItem value="2">Full Payload (Everything saved - Best for debugging)</SelectItem>
+            <SelectContent className="bg-zinc-950 border-white/10 text-white">
+              <SelectItem value="0" className="focus:bg-white/5 focus:text-white">Metadata Only (No payloads saved)</SelectItem>
+              <SelectItem value="1" className="focus:bg-white/5 focus:text-white">Redacted Payload (Scrub PII keys/secrets)</SelectItem>
+              <SelectItem value="2" className="focus:bg-white/5 focus:text-white">Full Payload (Everything saved - Best for debugging)</SelectItem>
             </SelectContent>
           </Select>
-          <p className="text-[10px] text-muted-foreground">
-            Controls what request and response data is stored in the Gateway's audit logs.
+          <p className="text-[10px] text-zinc-500">
+            Controls what request and response data is stored in the Gateway&apos;s audit logs.
           </p>
         </div>
       </div>
-      <DialogFooter>
+      <DialogFooter className="pt-2 border-t border-white/[0.06]">
         <DialogClose asChild>
-          <Button variant="outline" type="button">Cancel</Button>
+          <Button variant="ghost" type="button">Cancel</Button>
         </DialogClose>
         <Button type="submit" disabled={loading || (mode === "managed" && !formData.credential_id)}>
           {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}

@@ -50,7 +50,10 @@ fn test_vault_different_nonce_per_encryption() {
         vault.encrypt_string("same plaintext").unwrap();
 
     // Nonces MUST differ (random 96-bit values)
-    assert_ne!(nonce_dek_1, nonce_dek_2, "DEK nonces must differ between encryptions");
+    assert_ne!(
+        nonce_dek_1, nonce_dek_2,
+        "DEK nonces must differ between encryptions"
+    );
     assert_ne!(
         nonce_secret_1, nonce_secret_2,
         "Secret nonces must differ between encryptions"
@@ -79,7 +82,10 @@ fn test_vault_wrong_key_returns_err_not_garbage() {
         vault_encrypt.encrypt_string("secret data").unwrap();
 
     let result = vault_wrong.decrypt_string(&enc_dek, &nonce_dek, &enc_secret, &nonce_secret);
-    assert!(result.is_err(), "Decryption with wrong key MUST fail, not return garbage");
+    assert!(
+        result.is_err(),
+        "Decryption with wrong key MUST fail, not return garbage"
+    );
 }
 
 /// STATE: Encrypt/decrypt round-trip preserves multi-byte Unicode characters.
@@ -90,8 +96,7 @@ fn test_vault_wrong_key_returns_err_not_garbage() {
 fn test_vault_roundtrip_unicode() {
     let vault = VaultCrypto::new(TEST_KEY).unwrap();
     let plaintext = "Hello 世界 🔐 café naïve";
-    let (enc_dek, nonce_dek, enc_secret, nonce_secret) =
-        vault.encrypt_string(plaintext).unwrap();
+    let (enc_dek, nonce_dek, enc_secret, nonce_secret) = vault.encrypt_string(plaintext).unwrap();
 
     let decrypted = vault
         .decrypt_string(&enc_dek, &nonce_dek, &enc_secret, &nonce_secret)
@@ -105,7 +110,10 @@ fn test_vault_roundtrip_unicode() {
 #[test]
 fn test_vault_short_master_key_rejected() {
     let result = VaultCrypto::new("0011223344"); // 5 bytes, not 32
-    assert!(result.is_err(), "Short master key must be rejected at construction");
+    assert!(
+        result.is_err(),
+        "Short master key must be rejected at construction"
+    );
 }
 
 /// STATE: Non-hex master key must be rejected.
@@ -113,7 +121,8 @@ fn test_vault_short_master_key_rejected() {
 /// ASSERT: VaultCrypto::new returns Err for non-hex input.
 #[test]
 fn test_vault_nonhex_master_key_rejected() {
-    let result = VaultCrypto::new("zzzz02030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f");
+    let result =
+        VaultCrypto::new("zzzz02030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f");
     assert!(result.is_err(), "Non-hex master key must be rejected");
 }
 
@@ -128,26 +137,66 @@ fn test_vault_nonhex_master_key_rejected() {
 #[test]
 fn test_every_app_error_variant_correct_status() {
     let cases: Vec<(AppError, StatusCode, &str)> = vec![
-        (AppError::TokenNotFound, StatusCode::UNAUTHORIZED, "TokenNotFound → 401"),
-        (AppError::TokenRevoked, StatusCode::UNAUTHORIZED, "TokenRevoked → 401"),
-        (AppError::CredentialMissing, StatusCode::BAD_GATEWAY, "CredentialMissing → 502"),
         (
-            AppError::PolicyDenied { policy: "p".into(), reason: "r".into() },
+            AppError::TokenNotFound,
+            StatusCode::UNAUTHORIZED,
+            "TokenNotFound → 401",
+        ),
+        (
+            AppError::TokenRevoked,
+            StatusCode::UNAUTHORIZED,
+            "TokenRevoked → 401",
+        ),
+        (
+            AppError::CredentialMissing,
+            StatusCode::BAD_GATEWAY,
+            "CredentialMissing → 502",
+        ),
+        (
+            AppError::PolicyDenied {
+                policy: "p".into(),
+                reason: "r".into(),
+            },
             StatusCode::FORBIDDEN,
             "PolicyDenied → 403",
         ),
-        (AppError::Forbidden("x".into()), StatusCode::FORBIDDEN, "Forbidden → 403"),
-        (AppError::ApprovalTimeout, StatusCode::REQUEST_TIMEOUT, "ApprovalTimeout → 408"),
-        (AppError::ApprovalRejected, StatusCode::FORBIDDEN, "ApprovalRejected → 403"),
-        (AppError::RateLimitExceeded, StatusCode::TOO_MANY_REQUESTS, "RateLimitExceeded → 429"),
         (
-            AppError::SpendCapReached { message: "cap hit".into() },
+            AppError::Forbidden("x".into()),
+            StatusCode::FORBIDDEN,
+            "Forbidden → 403",
+        ),
+        (
+            AppError::ApprovalTimeout,
+            StatusCode::REQUEST_TIMEOUT,
+            "ApprovalTimeout → 408",
+        ),
+        (
+            AppError::ApprovalRejected,
+            StatusCode::FORBIDDEN,
+            "ApprovalRejected → 403",
+        ),
+        (
+            AppError::RateLimitExceeded,
+            StatusCode::TOO_MANY_REQUESTS,
+            "RateLimitExceeded → 429",
+        ),
+        (
+            AppError::SpendCapReached {
+                message: "cap hit".into(),
+            },
             StatusCode::PAYMENT_REQUIRED,
             "SpendCapReached → 402",
         ),
-        (AppError::PayloadTooLarge, StatusCode::PAYLOAD_TOO_LARGE, "PayloadTooLarge → 413"),
         (
-            AppError::ContentBlocked { reason: "x".into(), details: None },
+            AppError::PayloadTooLarge,
+            StatusCode::PAYLOAD_TOO_LARGE,
+            "PayloadTooLarge → 413",
+        ),
+        (
+            AppError::ContentBlocked {
+                reason: "x".into(),
+                details: None,
+            },
             StatusCode::FORBIDDEN,
             "ContentBlocked → 403",
         ),
@@ -157,16 +206,24 @@ fn test_every_app_error_variant_correct_status() {
             "AllUpstreamsExhausted → 503",
         ),
         (
-            AppError::InvalidConfig { message: "x".into() },
+            AppError::InvalidConfig {
+                message: "x".into(),
+            },
             StatusCode::UNPROCESSABLE_ENTITY,
             "InvalidConfig → 422",
         ),
         (
-            AppError::ValidationError { message: "x".into() },
+            AppError::ValidationError {
+                message: "x".into(),
+            },
             StatusCode::UNPROCESSABLE_ENTITY,
             "ValidationError → 422",
         ),
-        (AppError::Upstream("x".into()), StatusCode::BAD_GATEWAY, "Upstream → 502"),
+        (
+            AppError::Upstream("x".into()),
+            StatusCode::BAD_GATEWAY,
+            "Upstream → 502",
+        ),
         (
             AppError::Internal(anyhow::anyhow!("x")),
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -189,7 +246,10 @@ fn test_rate_limit_has_retry_after_header() {
     let error = AppError::RateLimitExceeded;
     let response = error.into_response();
     let retry_after = response.headers().get("retry-after");
-    assert!(retry_after.is_some(), "RateLimitExceeded must include Retry-After header");
+    assert!(
+        retry_after.is_some(),
+        "RateLimitExceeded must include Retry-After header"
+    );
     assert_eq!(retry_after.unwrap().to_str().unwrap(), "60");
 }
 
@@ -338,7 +398,10 @@ fn test_contains_on_bool_value_no_panic() {
     // check_contains matches Value::String and Value::Array branches only.
     // Bool falls through to the `_ => false` arm.
     let result = evaluate_condition(&cond, &ctx);
-    assert!(!result, "Contains on a Bool value returns false — no type coercion");
+    assert!(
+        !result,
+        "Contains on a Bool value returns false — no type coercion"
+    );
 }
 
 /// STATE: Deeply nested All/Any combinators (depth 100) must not stack overflow.
@@ -490,7 +553,10 @@ fn test_email_complex_format_matches() {
 #[test]
 fn test_non_email_not_matched() {
     let result = sanitize_stream_content("This is not-an-email and has no PII");
-    assert!(result.redacted_types.is_empty(), "Plain text without PII must not be flagged");
+    assert!(
+        result.redacted_types.is_empty(),
+        "Plain text without PII must not be flagged"
+    );
 }
 
 /// STATE: 16-digit number matching CC pattern must be detected.
@@ -538,7 +604,10 @@ fn test_sse_chunk_redacts_ssn_in_data_line() {
 fn test_sanitize_binary_passthrough() {
     let binary_data = &[0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10]; // JPEG magic bytes
     let result = sanitize_response(binary_data, "image/jpeg");
-    assert!(result.redacted_types.is_empty(), "Binary content must not be scanned for PII");
+    assert!(
+        result.redacted_types.is_empty(),
+        "Binary content must not be scanned for PII"
+    );
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -565,7 +634,10 @@ fn test_pii_different_values_different_tokens() {
     let project = uuid::Uuid::nil();
     let token1 = pii_vault::generate_token(project, "ssn", "123-45-6789");
     let token2 = pii_vault::generate_token(project, "ssn", "987-65-4321");
-    assert_ne!(token1, token2, "Different PII values must produce different tokens");
+    assert_ne!(
+        token1, token2,
+        "Different PII values must produce different tokens"
+    );
 }
 
 /// STATE: PII token is not reversible by hashing common SSNs.
@@ -596,7 +668,10 @@ fn test_pii_token_not_trivially_reversible() {
 fn test_pii_token_format() {
     let project = uuid::Uuid::nil();
     let token = pii_vault::generate_token(project, "email", "user@test.com");
-    assert!(token.starts_with("tok_pii_email_"), "Token must start with tok_pii_email_");
+    assert!(
+        token.starts_with("tok_pii_email_"),
+        "Token must start with tok_pii_email_"
+    );
     let suffix = &token["tok_pii_email_".len()..];
     assert!(
         suffix.chars().all(|c| c.is_ascii_hexdigit()),
@@ -632,7 +707,10 @@ fn test_jwt_malformed_one_part() {
     let result = oidc::decode_claims("notavalidjwt");
     assert!(result.is_err(), "Single-segment JWT must fail");
     assert!(
-        result.unwrap_err().to_string().contains("Invalid JWT format"),
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid JWT format"),
         "Error must indicate invalid format"
     );
 }
@@ -703,7 +781,11 @@ fn test_jwt_expired_is_rejected() {
 /// ASSERT: Returns None.
 #[test]
 fn test_extract_kid_empty_string() {
-    assert_eq!(oidc::extract_kid(""), None, "extract_kid on empty string must return None");
+    assert_eq!(
+        oidc::extract_kid(""),
+        None,
+        "extract_kid on empty string must return None"
+    );
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -932,7 +1014,7 @@ fn test_redact_direction_request_skips_response() {
         "messages": [{"role": "assistant", "content": "SSN is 123-45-6789"}]
     });
     let result = apply_redact(&mut body, &action, false); // is_request = false
-    // Request-only redaction should not apply when is_request=false
+                                                          // Request-only redaction should not apply when is_request=false
     assert!(
         result.matched_types.is_empty(),
         "Request-direction redaction must not apply to response"

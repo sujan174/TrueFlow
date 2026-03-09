@@ -31,35 +31,37 @@ pub(crate) fn translate_response(provider: Provider, body: &Value, model: &str) 
 /// `is_streaming` is used to select the correct Gemini endpoint:
 ///   - false → `:generateContent`
 ///   - true  → `:streamGenerateContent`
-
 pub(crate) fn anthropic_to_openai_response(body: &Value, model: &str) -> Value {
-    let content_text = body.get("content")
+    let content_text = body
+        .get("content")
         .and_then(|c| c.as_array())
         .and_then(|arr| {
-            arr.iter().find(|block| {
-                block.get("type").and_then(|t| t.as_str()) == Some("text")
-            })
+            arr.iter()
+                .find(|block| block.get("type").and_then(|t| t.as_str()) == Some("text"))
         })
         .and_then(|block| block.get("text"))
         .and_then(|t| t.as_str())
         .unwrap_or("");
 
     // Extract tool calls
-    let tool_calls: Vec<Value> = body.get("content")
+    let tool_calls: Vec<Value> = body
+        .get("content")
         .and_then(|c| c.as_array())
         .map(|arr| {
             arr.iter()
                 .filter(|block| block.get("type").and_then(|t| t.as_str()) == Some("tool_use"))
-                .map(|block| json!({
-                    "id": block.get("id").cloned().unwrap_or(json!("")),
-                    "type": "function",
-                    "function": {
-                        "name": block.get("name").cloned().unwrap_or(json!("")),
-                        "arguments": block.get("input")
-                            .map(|v| serde_json::to_string(v).unwrap_or_default())
-                            .unwrap_or_default()
-                    }
-                }))
+                .map(|block| {
+                    json!({
+                        "id": block.get("id").cloned().unwrap_or(json!("")),
+                        "type": "function",
+                        "function": {
+                            "name": block.get("name").cloned().unwrap_or(json!("")),
+                            "arguments": block.get("input")
+                                .map(|v| serde_json::to_string(v).unwrap_or_default())
+                                .unwrap_or_default()
+                        }
+                    })
+                })
                 .collect()
         })
         .unwrap_or_default();
@@ -80,7 +82,8 @@ pub(crate) fn anthropic_to_openai_response(body: &Value, model: &str) -> Value {
         message["tool_calls"] = json!(tool_calls);
     }
 
-    let input_tokens = body.get("usage")
+    let input_tokens = body
+        .get("usage")
         .and_then(|u| u.get("input_tokens"))
         .and_then(|t| t.as_u64())
         .unwrap_or_else(|| {
@@ -94,7 +97,8 @@ pub(crate) fn anthropic_to_openai_response(body: &Value, model: &str) -> Value {
             );
             estimate
         });
-    let output_tokens = body.get("usage")
+    let output_tokens = body
+        .get("usage")
         .and_then(|u| u.get("output_tokens"))
         .and_then(|t| t.as_u64())
         .unwrap_or_else(|| {
@@ -133,29 +137,30 @@ pub(crate) fn anthropic_to_openai_response(body: &Value, model: &str) -> Value {
 
 /// Translate an OpenAI content value (string or parts array) into Gemini `parts`.
 /// Handles text, image_url (HTTP URLs → fileData, base64 data URIs → inlineData).
-
 pub(crate) fn gemini_to_openai_response(body: &Value, model: &str) -> Value {
     // Extract text from candidates[0].content.parts[0].text
     let candidates = body.get("candidates").and_then(|c| c.as_array());
 
-    let (content_text, finish_reason, tool_calls) = if let Some(candidates) = candidates {
-        if let Some(candidate) = candidates.first() {
-            let text = candidate.get("content")
-                .and_then(|c| c.get("parts"))
-                .and_then(|p| p.as_array())
-                .and_then(|parts| {
-                    parts.iter().find(|p| p.get("text").is_some())
-                })
-                .and_then(|p| p.get("text"))
-                .and_then(|t| t.as_str())
-                .unwrap_or("");
+    let (content_text, finish_reason, tool_calls) =
+        if let Some(candidates) = candidates {
+            if let Some(candidate) = candidates.first() {
+                let text = candidate
+                    .get("content")
+                    .and_then(|c| c.get("parts"))
+                    .and_then(|p| p.as_array())
+                    .and_then(|parts| parts.iter().find(|p| p.get("text").is_some()))
+                    .and_then(|p| p.get("text"))
+                    .and_then(|t| t.as_str())
+                    .unwrap_or("");
 
-            // Extract tool calls from function_call parts
-            let tools: Vec<Value> = candidate.get("content")
-                .and_then(|c| c.get("parts"))
-                .and_then(|p| p.as_array())
-                .map(|parts| {
-                    parts.iter()
+                // Extract tool calls from function_call parts
+                let tools: Vec<Value> =
+                    candidate
+                        .get("content")
+                        .and_then(|c| c.get("parts"))
+                        .and_then(|p| p.as_array())
+                        .map(|parts| {
+                            parts.iter()
                         .filter_map(|p| p.get("functionCall"))
                         .enumerate()
                         .map(|(i, fc)| json!({
@@ -169,24 +174,24 @@ pub(crate) fn gemini_to_openai_response(body: &Value, model: &str) -> Value {
                             }
                         }))
                         .collect()
-                })
-                .unwrap_or_default();
+                        })
+                        .unwrap_or_default();
 
-            let reason = match candidate.get("finishReason").and_then(|f| f.as_str()) {
-                Some("STOP") => "stop",
-                Some("MAX_TOKENS") => "length",
-                Some("SAFETY") => "content_filter",
-                Some("RECITATION") => "content_filter",
-                _ => "stop",
-            };
+                let reason = match candidate.get("finishReason").and_then(|f| f.as_str()) {
+                    Some("STOP") => "stop",
+                    Some("MAX_TOKENS") => "length",
+                    Some("SAFETY") => "content_filter",
+                    Some("RECITATION") => "content_filter",
+                    _ => "stop",
+                };
 
-            (text.to_string(), reason, tools)
+                (text.to_string(), reason, tools)
+            } else {
+                (String::new(), "stop", Vec::new())
+            }
         } else {
             (String::new(), "stop", Vec::new())
-        }
-    } else {
-        (String::new(), "stop", Vec::new())
-    };
+        };
 
     let mut message = json!({
         "role": "assistant",
@@ -196,7 +201,8 @@ pub(crate) fn gemini_to_openai_response(body: &Value, model: &str) -> Value {
         message["tool_calls"] = json!(tool_calls);
     }
 
-    let prompt_tokens = body.get("usageMetadata")
+    let prompt_tokens = body
+        .get("usageMetadata")
         .and_then(|u| u.get("promptTokenCount"))
         .and_then(|t| t.as_u64())
         .unwrap_or_else(|| {
@@ -209,7 +215,8 @@ pub(crate) fn gemini_to_openai_response(body: &Value, model: &str) -> Value {
             );
             estimate
         });
-    let completion_tokens = body.get("usageMetadata")
+    let completion_tokens = body
+        .get("usageMetadata")
         .and_then(|u| u.get("candidatesTokenCount"))
         .and_then(|t| t.as_u64())
         .unwrap_or_else(|| {
@@ -249,18 +256,17 @@ pub(crate) fn gemini_to_openai_response(body: &Value, model: &str) -> Value {
 /// into OpenAI-compatible `chat.completion.chunk` SSE events.
 /// Returns `None` if no translation is needed (OpenAI/Unknown).
 #[allow(dead_code)]
-
 pub(crate) fn bedrock_to_openai_response(body: &Value, model: &str) -> Value {
     // Extract content from output.message.content[]
-    let message = body.get("output")
-        .and_then(|o| o.get("message"));
+    let message = body.get("output").and_then(|o| o.get("message"));
 
     let (content_text, tool_calls) = if let Some(msg) = message {
         let content_blocks = msg.get("content").and_then(|c| c.as_array());
 
         let text: String = content_blocks
             .map(|blocks| {
-                blocks.iter()
+                blocks
+                    .iter()
                     .filter_map(|b| b.get("text").and_then(|t| t.as_str()))
                     .collect::<Vec<_>>()
                     .join("")
@@ -269,18 +275,21 @@ pub(crate) fn bedrock_to_openai_response(body: &Value, model: &str) -> Value {
 
         let tools: Vec<Value> = content_blocks
             .map(|blocks| {
-                blocks.iter()
+                blocks
+                    .iter()
                     .filter_map(|b| b.get("toolUse"))
-                    .map(|tu| json!({
-                        "id": tu.get("toolUseId").cloned().unwrap_or(json!("")),
-                        "type": "function",
-                        "function": {
-                            "name": tu.get("name").cloned().unwrap_or(json!("")),
-                            "arguments": tu.get("input")
-                                .map(|v| serde_json::to_string(v).unwrap_or_default())
-                                .unwrap_or_default()
-                        }
-                    }))
+                    .map(|tu| {
+                        json!({
+                            "id": tu.get("toolUseId").cloned().unwrap_or(json!("")),
+                            "type": "function",
+                            "function": {
+                                "name": tu.get("name").cloned().unwrap_or(json!("")),
+                                "arguments": tu.get("input")
+                                    .map(|v| serde_json::to_string(v).unwrap_or_default())
+                                    .unwrap_or_default()
+                            }
+                        })
+                    })
                     .collect()
             })
             .unwrap_or_default();
@@ -308,11 +317,13 @@ pub(crate) fn bedrock_to_openai_response(body: &Value, model: &str) -> Value {
         oai_message["tool_calls"] = json!(tool_calls);
     }
 
-    let input_tokens = body.get("usage")
+    let input_tokens = body
+        .get("usage")
         .and_then(|u| u.get("inputTokens"))
         .and_then(|t| t.as_u64())
         .unwrap_or(0);
-    let output_tokens = body.get("usage")
+    let output_tokens = body
+        .get("usage")
         .and_then(|u| u.get("outputTokens"))
         .and_then(|t| t.as_u64())
         .unwrap_or(0);
@@ -334,4 +345,3 @@ pub(crate) fn bedrock_to_openai_response(body: &Value, model: &str) -> Value {
         }
     })
 }
-

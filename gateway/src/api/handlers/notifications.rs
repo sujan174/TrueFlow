@@ -3,24 +3,26 @@ use std::sync::Arc;
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
-    Extension,
-    Json,
+    Extension, Json,
 };
 use serde_json::json;
 use uuid::Uuid;
 
-use crate::api::AuthContext;
-use crate::AppState;
 use super::dtos::PaginationParams;
 use super::helpers::verify_project_ownership;
+use crate::api::AuthContext;
+use crate::AppState;
 
 pub async fn list_notifications(
     State(state): State<Arc<AppState>>,
     Extension(auth): Extension<AuthContext>,
     Query(params): Query<PaginationParams>,
 ) -> Result<Json<Vec<crate::models::notification::Notification>>, StatusCode> {
-    auth.require_scope("notifications:read").map_err(|_| StatusCode::FORBIDDEN)?;
-    let project_id = params.project_id.unwrap_or_else(|| auth.default_project_id());
+    auth.require_scope("notifications:read")
+        .map_err(|_| StatusCode::FORBIDDEN)?;
+    let project_id = params
+        .project_id
+        .unwrap_or_else(|| auth.default_project_id());
     verify_project_ownership(&state, auth.org_id, project_id).await?;
     let limit = 20;
 
@@ -42,8 +44,11 @@ pub async fn count_unread_notifications(
     Extension(auth): Extension<AuthContext>,
     Query(params): Query<PaginationParams>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
-    auth.require_scope("notifications:read").map_err(|_| StatusCode::FORBIDDEN)?;
-    let project_id = params.project_id.unwrap_or_else(|| auth.default_project_id());
+    auth.require_scope("notifications:read")
+        .map_err(|_| StatusCode::FORBIDDEN)?;
+    let project_id = params
+        .project_id
+        .unwrap_or_else(|| auth.default_project_id());
     verify_project_ownership(&state, auth.org_id, project_id).await?;
 
     let count = state
@@ -65,7 +70,8 @@ pub async fn mark_notification_read(
     Path(id_str): Path<String>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     // SEC: require scope (was missing)
-    auth.require_scope("notifications:write").map_err(|_| StatusCode::FORBIDDEN)?;
+    auth.require_scope("notifications:write")
+        .map_err(|_| StatusCode::FORBIDDEN)?;
     let id = Uuid::parse_str(&id_str).map_err(|_| StatusCode::BAD_REQUEST)?;
     let project_id = auth.default_project_id();
 
@@ -88,8 +94,11 @@ pub async fn mark_all_notifications_read(
     Query(params): Query<PaginationParams>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     // SEC: require scope and project isolation (both were missing)
-    auth.require_scope("notifications:write").map_err(|_| StatusCode::FORBIDDEN)?;
-    let project_id = params.project_id.unwrap_or_else(|| auth.default_project_id());
+    auth.require_scope("notifications:write")
+        .map_err(|_| StatusCode::FORBIDDEN)?;
+    let project_id = params
+        .project_id
+        .unwrap_or_else(|| auth.default_project_id());
     verify_project_ownership(&state, auth.org_id, project_id).await?;
 
     let success = state

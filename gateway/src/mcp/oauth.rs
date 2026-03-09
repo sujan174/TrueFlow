@@ -74,7 +74,10 @@ impl std::fmt::Debug for TokenResponse {
             .field("access_token", &"[REDACTED]")
             .field("token_type", &self.token_type)
             .field("expires_in", &self.expires_in)
-            .field("refresh_token", &self.refresh_token.as_ref().map(|_| "[REDACTED]"))
+            .field(
+                "refresh_token",
+                &self.refresh_token.as_ref().map(|_| "[REDACTED]"),
+            )
             .field("scope", &self.scope)
             .finish()
     }
@@ -99,7 +102,10 @@ impl std::fmt::Debug for CachedToken {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("CachedToken")
             .field("access_token", &"[REDACTED]")
-            .field("refresh_token", &self.refresh_token.as_ref().map(|_| "[REDACTED]"))
+            .field(
+                "refresh_token",
+                &self.refresh_token.as_ref().map(|_| "[REDACTED]"),
+            )
             .field("expires_at", &self.expires_at)
             .field("token_endpoint", &self.token_endpoint)
             .field("client_id", &self.client_id)
@@ -150,7 +156,9 @@ impl Default for OAuthTokenManager {
 
 impl OAuthTokenManager {
     pub fn new() -> Self {
-        Self::try_new().expect("failed to build OAuth HTTP client: check network configuration and system resources")
+        Self::try_new().expect(
+            "failed to build OAuth HTTP client: check network configuration and system resources",
+        )
     }
 
     pub fn try_new() -> Result<Self, String> {
@@ -178,7 +186,10 @@ impl OAuthTokenManager {
 
         // Step 1: Try fetching protected resource metadata (RFC 9728)
         let resource_url = format!("{}/.well-known/oauth-protected-resource", base_url);
-        let resource_meta = self.fetch_json::<ProtectedResourceMetadata>(&resource_url).await.ok();
+        let resource_meta = self
+            .fetch_json::<ProtectedResourceMetadata>(&resource_url)
+            .await
+            .ok();
 
         // Step 2: Determine authorization server URL
         let as_url = if let Some(ref meta) = resource_meta {
@@ -195,7 +206,12 @@ impl OAuthTokenManager {
         let auth_server = self
             .fetch_json::<AuthServerMetadata>(&as_meta_url)
             .await
-            .map_err(|e| format!("Failed to discover OAuth authorization server at {}: {}", as_meta_url, e))?;
+            .map_err(|e| {
+                format!(
+                    "Failed to discover OAuth authorization server at {}: {}",
+                    as_meta_url, e
+                )
+            })?;
 
         // Determine if auth is required by probing the endpoint
         let requires_auth = self.probe_requires_auth(endpoint).await;
@@ -272,7 +288,10 @@ impl OAuthTokenManager {
         if !resp.status().is_success() {
             let status = resp.status();
             let body = resp.text().await.unwrap_or_default();
-            return Err(format!("Refresh token endpoint returned {}: {}", status, body));
+            return Err(format!(
+                "Refresh token endpoint returned {}: {}",
+                status, body
+            ));
         }
 
         resp.json()
@@ -364,8 +383,7 @@ impl OAuthTokenManager {
         client_secret: String,
         scopes: Vec<String>,
     ) {
-        let expires_at = Utc::now()
-            + Duration::seconds(token_resp.expires_in.unwrap_or(3600));
+        let expires_at = Utc::now() + Duration::seconds(token_resp.expires_in.unwrap_or(3600));
 
         let cached = CachedToken {
             access_token: token_resp.access_token.clone(),
@@ -393,12 +411,14 @@ impl OAuthTokenManager {
     // ── Private helpers ────────────────────────────────────────
 
     fn token_response_to_cached(&self, resp: &TokenResponse, prev: &CachedToken) -> CachedToken {
-        let expires_at = Utc::now()
-            + Duration::seconds(resp.expires_in.unwrap_or(3600));
+        let expires_at = Utc::now() + Duration::seconds(resp.expires_in.unwrap_or(3600));
 
         CachedToken {
             access_token: resp.access_token.clone(),
-            refresh_token: resp.refresh_token.clone().or_else(|| prev.refresh_token.clone()),
+            refresh_token: resp
+                .refresh_token
+                .clone()
+                .or_else(|| prev.refresh_token.clone()),
             expires_at,
             token_endpoint: prev.token_endpoint.clone(),
             client_id: prev.client_id.clone(),
@@ -514,7 +534,10 @@ mod tests {
         assert_eq!(resp.access_token, "eyJ...");
         assert_eq!(resp.token_type, "Bearer");
         assert_eq!(resp.expires_in, Some(3600));
-        assert_eq!(resp.refresh_token.as_deref(), Some("dGhpcyBpcyBhIHJlZnJlc2ggdG9rZW4"));
+        assert_eq!(
+            resp.refresh_token.as_deref(),
+            Some("dGhpcyBpcyBhIHJlZnJlc2ggdG9rZW4")
+        );
         assert_eq!(resp.scope.as_deref(), Some("tools:read tools:call"));
     }
 
@@ -560,7 +583,9 @@ mod tests {
         assert_eq!(meta.issuer, "https://auth.example.com");
         assert_eq!(meta.token_endpoint, "https://auth.example.com/oauth/token");
         assert!(meta.authorization_endpoint.is_some());
-        assert!(meta.grant_types_supported.contains(&"client_credentials".into()));
+        assert!(meta
+            .grant_types_supported
+            .contains(&"client_credentials".into()));
     }
 
     #[test]
@@ -594,7 +619,10 @@ mod tests {
 
         let json = serde_json::to_value(&discovery).unwrap();
         assert_eq!(json["requires_auth"], true);
-        assert_eq!(json["auth_server"]["token_endpoint"], "https://auth.example.com/token");
+        assert_eq!(
+            json["auth_server"]["token_endpoint"],
+            "https://auth.example.com/token"
+        );
     }
 
     #[tokio::test]

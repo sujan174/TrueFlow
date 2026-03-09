@@ -1,3 +1,4 @@
+use rust_decimal::Decimal;
 /// In-memory pricing cache backed by the `model_pricing` DB table.
 ///
 /// Loaded at startup and refreshed on every upsert/delete via the API.
@@ -5,7 +6,6 @@
 /// hardcoded table only if the cache is empty (e.g., before first load).
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use rust_decimal::Decimal;
 
 /// A single pricing entry held in memory.
 #[derive(Debug, Clone)]

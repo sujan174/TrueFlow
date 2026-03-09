@@ -18,11 +18,18 @@ use crate::cache::TieredCache;
 /// Any parameter NOT in this list is assumed NOT to affect the response content.
 const CACHE_KEY_FIELDS: &[&str] = &[
     // Core parameters
-    "model", "messages", "temperature", "max_tokens",
+    "model",
+    "messages",
+    "temperature",
+    "max_tokens",
     // Tool/function calling
-    "tools", "tool_choice",
+    "tools",
+    "tool_choice",
     // Sampling parameters
-    "top_p", "frequency_penalty", "presence_penalty", "seed",
+    "top_p",
+    "frequency_penalty",
+    "presence_penalty",
+    "seed",
     // Stopping conditions
     "stop",
     // Token probability manipulation
@@ -49,10 +56,7 @@ pub struct CachedResponse {
 
 /// Compute a deterministic cache key from the relevant request body fields.
 /// Returns `None` if the body doesn't contain enough info to cache (e.g., no model).
-pub fn compute_cache_key(
-    token_id: &str,
-    body: &serde_json::Value,
-) -> Option<String> {
+pub fn compute_cache_key(token_id: &str, body: &serde_json::Value) -> Option<String> {
     let obj = body.as_object()?;
 
     // Must have at least a model to cache
@@ -67,8 +71,7 @@ pub fn compute_cache_key(
     }
 
     // Sort keys for deterministic serialization (serde_json::Map is BTreeMap-backed)
-    let canonical_json = serde_json::to_string(&serde_json::Value::Object(canonical))
-        .ok()?;
+    let canonical_json = serde_json::to_string(&serde_json::Value::Object(canonical)).ok()?;
 
     let mut hasher = Sha256::new();
     hasher.update(token_id.as_bytes());
@@ -90,12 +93,7 @@ const MAX_CACHE_ENTRY_BYTES: usize = 256 * 1024;
 
 /// Store a response in cache with the given TTL.
 /// Silently skips caching if the serialized response exceeds MAX_CACHE_ENTRY_BYTES.
-pub async fn set_cached(
-    cache: &TieredCache,
-    key: &str,
-    response: &CachedResponse,
-    ttl_secs: u64,
-) {
+pub async fn set_cached(cache: &TieredCache, key: &str, response: &CachedResponse, ttl_secs: u64) {
     // Serialize first to check size before writing to Redis
     let serialized = match serde_json::to_vec(response) {
         Ok(v) => v,
@@ -167,7 +165,11 @@ pub fn should_skip_cache(
             }
         }
         // Streaming responses cannot be cached
-        if body.get("stream").and_then(|v| v.as_bool()).unwrap_or(false) {
+        if body
+            .get("stream")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false)
+        {
             return true;
         }
     }

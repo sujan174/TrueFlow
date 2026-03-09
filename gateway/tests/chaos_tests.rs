@@ -26,10 +26,15 @@ fn cc_redact_action() -> Action {
 #[test]
 fn test_cc_redaction_clean_number() {
     let action = cc_redact_action();
-    let mut body = json!({"messages": [{"role": "user", "content": "My card is 4111111111111111"}]});
+    let mut body =
+        json!({"messages": [{"role": "user", "content": "My card is 4111111111111111"}]});
     let result = apply_redact(&mut body, &action, true);
     let content = body["messages"][0]["content"].as_str().unwrap();
-    assert!(content.contains("[REDACTED_CC]"), "Clean CC not redacted: '{}'", content);
+    assert!(
+        content.contains("[REDACTED_CC]"),
+        "Clean CC not redacted: '{}'",
+        content
+    );
     assert!(result.matched_types.contains(&"credit_card".to_string()));
 }
 
@@ -42,7 +47,11 @@ fn test_cc_redaction_with_spaces() {
     });
     let result = apply_redact(&mut body, &action, true);
     let content = body["messages"][0]["content"].as_str().unwrap();
-    assert!(content.contains("[REDACTED_CC]"), "Space-separated CC not redacted: '{}'", content);
+    assert!(
+        content.contains("[REDACTED_CC]"),
+        "Space-separated CC not redacted: '{}'",
+        content
+    );
     assert!(result.matched_types.contains(&"credit_card".to_string()));
 }
 
@@ -55,7 +64,11 @@ fn test_cc_redaction_with_dashes() {
     });
     let result = apply_redact(&mut body, &action, true);
     let content = body["messages"][0]["content"].as_str().unwrap();
-    assert!(content.contains("[REDACTED_CC]"), "Dash-separated CC not redacted: '{}'", content);
+    assert!(
+        content.contains("[REDACTED_CC]"),
+        "Dash-separated CC not redacted: '{}'",
+        content
+    );
     assert!(result.matched_types.contains(&"credit_card".to_string()));
 }
 
@@ -64,7 +77,11 @@ fn test_cc_redaction_with_dashes() {
 fn test_multiple_pii_types_in_one_message() {
     let action = Action::Redact {
         direction: RedactDirection::Request,
-        patterns: vec!["credit_card".to_string(), "email".to_string(), "ssn".to_string()],
+        patterns: vec![
+            "credit_card".to_string(),
+            "email".to_string(),
+            "ssn".to_string(),
+        ],
         fields: vec![],
         on_match: RedactOnMatch::Redact,
     };
@@ -77,7 +94,12 @@ fn test_multiple_pii_types_in_one_message() {
     assert!(content.contains("[REDACTED_CC]"), "CC not redacted");
     assert!(content.contains("[REDACTED_EMAIL]"), "Email not redacted");
     assert!(content.contains("[REDACTED_SSN]"), "SSN not redacted");
-    assert_eq!(result.matched_types.len(), 3, "Should match 3 PII types, got: {:?}", result.matched_types);
+    assert_eq!(
+        result.matched_types.len(),
+        3,
+        "Should match 3 PII types, got: {:?}",
+        result.matched_types
+    );
 }
 
 /// PII with `on_match=block` MUST set `should_block = true`.
@@ -91,7 +113,10 @@ fn test_pii_block_mode_triggers_on_match() {
     };
     let mut body = json!({"messages": [{"role": "user", "content": "Card: 4111111111111111"}]});
     let result = apply_redact(&mut body, &action, true);
-    assert!(result.should_block, "on_match=block should set should_block when PII is found");
+    assert!(
+        result.should_block,
+        "on_match=block should set should_block when PII is found"
+    );
 }
 
 /// No PII in content — `should_block` must be false even with block mode.
@@ -105,7 +130,10 @@ fn test_pii_block_mode_no_false_positive() {
     };
     let mut body = json!({"messages": [{"role": "user", "content": "What is the weather today?"}]});
     let result = apply_redact(&mut body, &action, true);
-    assert!(!result.should_block, "should_block should be false when no PII");
+    assert!(
+        !result.should_block,
+        "should_block should be false when no PII"
+    );
     assert!(result.matched_types.is_empty());
 }
 
@@ -119,7 +147,13 @@ fn test_pii_deeply_nested_in_tool_calls() {
         }]}]
     });
     let result = apply_redact(&mut body, &action, true);
-    let args = body["messages"][0]["tool_calls"][0]["function"]["arguments"].as_str().unwrap();
-    assert!(args.contains("[REDACTED_CC]"), "Nested CC in tool_calls not redacted: '{}'", args);
+    let args = body["messages"][0]["tool_calls"][0]["function"]["arguments"]
+        .as_str()
+        .unwrap();
+    assert!(
+        args.contains("[REDACTED_CC]"),
+        "Nested CC in tool_calls not redacted: '{}'",
+        args
+    );
     assert!(result.matched_types.contains(&"credit_card".to_string()));
 }

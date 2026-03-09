@@ -3,20 +3,20 @@ use std::sync::Arc;
 use axum::{
     extract::{Path, State},
     http::StatusCode,
-    Extension,
-    Json,
+    Extension, Json,
 };
 use uuid::Uuid;
 
-use crate::api::{AuthContext, ApiKeyRole};
-use crate::AppState;
 use super::dtos::{CreateProjectRequest, ProjectResponse};
+use crate::api::{ApiKeyRole, AuthContext};
+use crate::AppState;
 
 pub async fn list_projects(
     State(state): State<Arc<AppState>>,
     Extension(auth): Extension<AuthContext>,
 ) -> Result<Json<Vec<ProjectResponse>>, StatusCode> {
-    auth.require_scope("projects:read").map_err(|_| StatusCode::FORBIDDEN)?;
+    auth.require_scope("projects:read")
+        .map_err(|_| StatusCode::FORBIDDEN)?;
     let projects = state.db.list_projects(auth.org_id).await.map_err(|e| {
         tracing::error!("list_projects failed: {}", e);
         StatusCode::INTERNAL_SERVER_ERROR
@@ -39,7 +39,8 @@ pub async fn create_project(
     Extension(auth): Extension<AuthContext>,
     Json(payload): Json<CreateProjectRequest>,
 ) -> Result<(StatusCode, Json<ProjectResponse>), StatusCode> {
-    auth.require_scope("projects:write").map_err(|_| StatusCode::FORBIDDEN)?;
+    auth.require_scope("projects:write")
+        .map_err(|_| StatusCode::FORBIDDEN)?;
 
     let id = state
         .db
@@ -66,7 +67,8 @@ pub async fn update_project(
     Path(id_str): Path<String>,
     Json(payload): Json<CreateProjectRequest>, // Reuse struct since it just needs name
 ) -> Result<Json<ProjectResponse>, StatusCode> {
-    auth.require_scope("projects:write").map_err(|_| StatusCode::FORBIDDEN)?;
+    auth.require_scope("projects:write")
+        .map_err(|_| StatusCode::FORBIDDEN)?;
     let id = Uuid::parse_str(&id_str).map_err(|_| StatusCode::BAD_REQUEST)?;
 
     let updated = state
@@ -147,10 +149,12 @@ pub async fn purge_project_data(
         ));
     }
 
-    let project_id = Uuid::parse_str(&id_str).map_err(|_| (
-        StatusCode::BAD_REQUEST,
-        Json(serde_json::json!({ "error": "invalid project id" })),
-    ))?;
+    let project_id = Uuid::parse_str(&id_str).map_err(|_| {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "error": "invalid project id" })),
+        )
+    })?;
 
     tracing::warn!(
         project_id = %project_id,

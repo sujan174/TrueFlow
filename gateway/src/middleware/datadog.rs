@@ -10,7 +10,7 @@
 
 use crate::models::audit::AuditEntry;
 use cadence::prelude::*;
-use cadence::{BufferedUdpMetricSink, StatsdClient, QueuingMetricSink};
+use cadence::{BufferedUdpMetricSink, QueuingMetricSink, StatsdClient};
 use rust_decimal::prelude::ToPrimitive;
 use std::net::UdpSocket;
 
@@ -32,10 +32,7 @@ impl DataDogExporter {
         let socket = UdpSocket::bind("0.0.0.0:0")?;
         socket.set_nonblocking(true)?;
 
-        let udp_sink = BufferedUdpMetricSink::from(
-            format!("{}:{}", host, port),
-            socket,
-        )?;
+        let udp_sink = BufferedUdpMetricSink::from(format!("{}:{}", host, port), socket)?;
         let queuing_sink = QueuingMetricSink::from(udp_sink);
         let client = StatsdClient::from_sink("trueflow", queuing_sink);
 

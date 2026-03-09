@@ -22,7 +22,8 @@ pub fn spawn(pool: PgPool) {
                         tracing::error!("approval expiry job failed: {}", e);
                     }
                 }
-            }).await;
+            })
+            .await;
             if let Err(e) = result {
                 tracing::error!("Approval expiry job panicked: {:?}", e);
                 time::sleep(Duration::from_secs(5)).await;
@@ -35,7 +36,7 @@ pub fn spawn(pool: PgPool) {
 async fn expire_approvals(pool: &PgPool) -> anyhow::Result<()> {
     let updated = sqlx::query(
         r#"
-        UPDATE approvals
+        UPDATE approval_requests
         SET status = 'expired'
         WHERE status = 'pending' AND expires_at < NOW()
         "#,

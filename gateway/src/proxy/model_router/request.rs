@@ -20,11 +20,9 @@ pub(crate) fn translate_request(provider: Provider, body: &Value) -> Option<Valu
 }
 
 /// Translate a provider's native response body back to OpenAI format.
-
 // ═══════════════════════════════════════════════════════════════
 // OpenAI → Anthropic (Messages API)
 // ═══════════════════════════════════════════════════════════════
-
 pub(crate) fn openai_to_anthropic_request(body: &Value) -> Value {
     let mut result = serde_json::Map::new();
 
@@ -34,7 +32,8 @@ pub(crate) fn openai_to_anthropic_request(body: &Value) -> Value {
     }
 
     // Max tokens (required by Anthropic, default 4096)
-    let max_tokens = body.get("max_tokens")
+    let max_tokens = body
+        .get("max_tokens")
         .and_then(|v| v.as_u64())
         .unwrap_or(4096);
     result.insert("max_tokens".into(), json!(max_tokens));
@@ -63,46 +62,57 @@ pub(crate) fn openai_to_anthropic_request(body: &Value) -> Value {
                         } else if content.is_array() {
                             // Convert OpenAI content parts to Anthropic format
                             let parts = content.as_array().unwrap();
-                            let anthropic_parts: Vec<Value> = parts.iter().map(|p| {
-                                let part_type = p.get("type").and_then(|t| t.as_str()).unwrap_or("text");
-                                match part_type {
-                                    "text" => json!({
-                                        "type": "text",
-                                        "text": p.get("text").cloned().unwrap_or(json!(""))
-                                    }),
-                                    "image_url" => {
-                                        let url = p.get("image_url")
-                                            .and_then(|u| u.get("url"))
-                                            .and_then(|u| u.as_str())
-                                            .unwrap_or("");
-                                        if url.starts_with("data:") {
-                                            // Base64 data URI → Anthropic base64 source block
-                                            let mime = url.split_once(';')
-                                                .and_then(|(prefix, _)| prefix.strip_prefix("data:"))
-                                                .unwrap_or("image/jpeg");
-                                            let data = url.split_once(',').map(|(_, d)| d).unwrap_or("");
-                                            json!({
-                                                "type": "image",
-                                                "source": {
-                                                    "type": "base64",
-                                                    "media_type": mime,
-                                                    "data": data
-                                                }
-                                            })
-                                        } else {
-                                            // HTTP URL → Anthropic URL source block
-                                            json!({
-                                                "type": "image",
-                                                "source": {
-                                                    "type": "url",
-                                                    "url": url
-                                                }
-                                            })
+                            let anthropic_parts: Vec<Value> = parts
+                                .iter()
+                                .map(|p| {
+                                    let part_type =
+                                        p.get("type").and_then(|t| t.as_str()).unwrap_or("text");
+                                    match part_type {
+                                        "text" => json!({
+                                            "type": "text",
+                                            "text": p.get("text").cloned().unwrap_or(json!(""))
+                                        }),
+                                        "image_url" => {
+                                            let url = p
+                                                .get("image_url")
+                                                .and_then(|u| u.get("url"))
+                                                .and_then(|u| u.as_str())
+                                                .unwrap_or("");
+                                            if url.starts_with("data:") {
+                                                // Base64 data URI → Anthropic base64 source block
+                                                let mime = url
+                                                    .split_once(';')
+                                                    .and_then(|(prefix, _)| {
+                                                        prefix.strip_prefix("data:")
+                                                    })
+                                                    .unwrap_or("image/jpeg");
+                                                let data = url
+                                                    .split_once(',')
+                                                    .map(|(_, d)| d)
+                                                    .unwrap_or("");
+                                                json!({
+                                                    "type": "image",
+                                                    "source": {
+                                                        "type": "base64",
+                                                        "media_type": mime,
+                                                        "data": data
+                                                    }
+                                                })
+                                            } else {
+                                                // HTTP URL → Anthropic URL source block
+                                                json!({
+                                                    "type": "image",
+                                                    "source": {
+                                                        "type": "url",
+                                                        "url": url
+                                                    }
+                                                })
+                                            }
                                         }
+                                        _ => p.clone(),
                                     }
-                                    _ => p.clone(),
-                                }
-                            }).collect();
+                                })
+                                .collect();
                             new_msg.insert("content".into(), json!(anthropic_parts));
                         }
                     }
@@ -171,9 +181,13 @@ pub(crate) fn openai_to_anthropic_request(body: &Value) -> Value {
     // Anthropic: {"type":"auto"} | {"type":"any"} | {"type":"tool","name":"X"}
     if let Some(tc) = body.get("tool_choice") {
         match tc.as_str() {
-            Some("auto")     => { result.insert("tool_choice".into(), json!({"type": "auto"})); }
-            Some("required") => { result.insert("tool_choice".into(), json!({"type": "any"})); }
-            Some("none")     => { /* Anthropic has no "none" — omit tool_choice and tools */ }
+            Some("auto") => {
+                result.insert("tool_choice".into(), json!({"type": "auto"}));
+            }
+            Some("required") => {
+                result.insert("tool_choice".into(), json!({"type": "any"}));
+            }
+            Some("none") => { /* Anthropic has no "none" — omit tool_choice and tools */ }
             None if tc.is_object() => {
                 // Specific function: forward as Anthropic "tool" type
                 if let Some(name) = tc.get("function").and_then(|f| f.get("name")) {
@@ -207,34 +221,44 @@ pub(crate) fn openai_to_anthropic_request(body: &Value) -> Value {
 pub(crate) fn translate_content_to_gemini_parts(content: Option<&Value>) -> Vec<Value> {
     match content {
         Some(Value::String(s)) => vec![json!({"text": s})],
-        Some(Value::Array(parts)) => parts.iter().map(|p| {
-            match p.get("type").and_then(|t| t.as_str()) {
-                Some("text") => json!({"text": p.get("text").cloned().unwrap_or(json!(""))}),
-                Some("image_url") => {
-                    let url = p.get("image_url")
-                        .and_then(|u| u.get("url"))
-                        .and_then(|u| u.as_str())
-                        .unwrap_or("");
-                    if url.starts_with("data:") {
-                        // data:image/jpeg;base64,<data> → Gemini inlineData
-                        let mime = url.split_once(';')
-                            .and_then(|(prefix, _)| prefix.strip_prefix("data:"))
-                            .unwrap_or("image/jpeg");
-                        let data = url.split_once(',').map(|(_, d)| d).unwrap_or("");
-                        json!({"inlineData": {"mimeType": mime, "data": data}})
-                    } else {
-                        // HTTP URL → Gemini fileData
-                        // Gemini requires MIME type; try to infer from URL extension
-                        let mime = if url.ends_with(".png") { "image/png" }
-                            else if url.ends_with(".gif") { "image/gif" }
-                            else if url.ends_with(".webp") { "image/webp" }
-                            else { "image/jpeg" };
-                        json!({"fileData": {"mimeType": mime, "fileUri": url}})
+        Some(Value::Array(parts)) => parts
+            .iter()
+            .map(|p| {
+                match p.get("type").and_then(|t| t.as_str()) {
+                    Some("text") => json!({"text": p.get("text").cloned().unwrap_or(json!(""))}),
+                    Some("image_url") => {
+                        let url = p
+                            .get("image_url")
+                            .and_then(|u| u.get("url"))
+                            .and_then(|u| u.as_str())
+                            .unwrap_or("");
+                        if url.starts_with("data:") {
+                            // data:image/jpeg;base64,<data> → Gemini inlineData
+                            let mime = url
+                                .split_once(';')
+                                .and_then(|(prefix, _)| prefix.strip_prefix("data:"))
+                                .unwrap_or("image/jpeg");
+                            let data = url.split_once(',').map(|(_, d)| d).unwrap_or("");
+                            json!({"inlineData": {"mimeType": mime, "data": data}})
+                        } else {
+                            // HTTP URL → Gemini fileData
+                            // Gemini requires MIME type; try to infer from URL extension
+                            let mime = if url.ends_with(".png") {
+                                "image/png"
+                            } else if url.ends_with(".gif") {
+                                "image/gif"
+                            } else if url.ends_with(".webp") {
+                                "image/webp"
+                            } else {
+                                "image/jpeg"
+                            };
+                            json!({"fileData": {"mimeType": mime, "fileUri": url}})
+                        }
                     }
+                    _ => p.clone(),
                 }
-                _ => p.clone(),
-            }
-        }).collect(),
+            })
+            .collect(),
         Some(Value::Null) | None => vec![json!({"text": ""})],
         // Fallback: not a known content type, skip
         _ => vec![],
@@ -258,9 +282,7 @@ pub(crate) fn openai_to_gemini_request(body: &Value) -> Value {
             match role {
                 "system" => {
                     // Gemini system instruction — always text; collect all
-                    let text = msg.get("content")
-                        .and_then(|c| c.as_str())
-                        .unwrap_or("");
+                    let text = msg.get("content").and_then(|c| c.as_str()).unwrap_or("");
                     if !text.is_empty() {
                         system_texts.push(text.to_string());
                     }
@@ -282,19 +304,23 @@ pub(crate) fn openai_to_gemini_request(body: &Value) -> Value {
                     // Gemini requires the function NAME, not the tool_call_id.
                     // Look up the function name from the tool_call_id by scanning
                     // preceding assistant messages for matching tool_calls.
-                    let tool_call_id = msg.get("tool_call_id")
+                    let tool_call_id = msg
+                        .get("tool_call_id")
                         .and_then(|t| t.as_str())
                         .unwrap_or("unknown");
-                    let func_name = messages.iter()
+                    let func_name = messages
+                        .iter()
                         .filter(|m| m.get("role").and_then(|r| r.as_str()) == Some("assistant"))
                         .filter_map(|m| m.get("tool_calls").and_then(|tc| tc.as_array()))
                         .flatten()
                         .find(|tc| tc.get("id").and_then(|id| id.as_str()) == Some(tool_call_id))
-                        .and_then(|tc| tc.get("function").and_then(|f| f.get("name")).and_then(|n| n.as_str()))
+                        .and_then(|tc| {
+                            tc.get("function")
+                                .and_then(|f| f.get("name"))
+                                .and_then(|n| n.as_str())
+                        })
                         .unwrap_or(tool_call_id); // Fallback to tool_call_id if lookup fails
-                    let content_val = msg.get("content")
-                        .and_then(|c| c.as_str())
-                        .unwrap_or("");
+                    let content_val = msg.get("content").and_then(|c| c.as_str()).unwrap_or("");
                     contents.push(json!({
                         "role": "user",
                         "parts": [{
@@ -312,9 +338,12 @@ pub(crate) fn openai_to_gemini_request(body: &Value) -> Value {
         result.insert("contents".into(), json!(contents));
         if !system_texts.is_empty() {
             let joined = system_texts.join("\n");
-            result.insert("systemInstruction".into(), json!({
-                "parts": [{"text": joined}]
-            }));
+            result.insert(
+                "systemInstruction".into(),
+                json!({
+                    "parts": [{"text": joined}]
+                }),
+            );
         }
     }
 
@@ -370,9 +399,12 @@ pub(crate) fn openai_to_gemini_request(body: &Value) -> Value {
             }))
         }).collect();
         if !function_declarations.is_empty() {
-            result.insert("tools".into(), json!([{
-                "functionDeclarations": function_declarations
-            }]));
+            result.insert(
+                "tools".into(),
+                json!([{
+                    "functionDeclarations": function_declarations
+                }]),
+            );
         }
     }
 
@@ -381,12 +413,16 @@ pub(crate) fn openai_to_gemini_request(body: &Value) -> Value {
     // Gemini mode: AUTO | NONE | ANY | specific function via allowedFunctionNames
     if let Some(tc) = body.get("tool_choice") {
         let (mode, allowed_names): (&str, Vec<&str>) = match tc.as_str() {
-            Some("auto")     => ("AUTO", vec![]),
-            Some("none")     => ("NONE", vec![]),
-            Some("required") => ("ANY",  vec![]),
+            Some("auto") => ("AUTO", vec![]),
+            Some("none") => ("NONE", vec![]),
+            Some("required") => ("ANY", vec![]),
             _ => {
                 // Specific function: {"type":"function","function":{"name":"X"}}
-                if let Some(name) = tc.get("function").and_then(|f| f.get("name")).and_then(|n| n.as_str()) {
+                if let Some(name) = tc
+                    .get("function")
+                    .and_then(|f| f.get("name"))
+                    .and_then(|n| n.as_str())
+                {
                     ("ANY", vec![name])
                 } else {
                     ("AUTO", vec![])
@@ -397,12 +433,14 @@ pub(crate) fn openai_to_gemini_request(body: &Value) -> Value {
         if !allowed_names.is_empty() {
             fc_config["allowedFunctionNames"] = json!(allowed_names);
         }
-        result.insert("toolConfig".into(), json!({"functionCallingConfig": fc_config}));
+        result.insert(
+            "toolConfig".into(),
+            json!({"functionCallingConfig": fc_config}),
+        );
     }
 
     Value::Object(result)
 }
-
 
 pub(crate) fn openai_to_bedrock_request(body: &Value) -> Value {
     let mut result = serde_json::Map::new();
@@ -426,22 +464,22 @@ pub(crate) fn openai_to_bedrock_request(body: &Value) -> Value {
                     }
                 }
                 "user" | "assistant" => {
-                    let mut content_blocks = translate_openai_content_to_bedrock(msg.get("content"));
+                    let mut content_blocks =
+                        translate_openai_content_to_bedrock(msg.get("content"));
 
                     // FIX: Translate OpenAI tool_calls in assistant messages to Bedrock
                     // toolUse content blocks. Without this, multi-turn tool calling
                     // conversations lose the tool invocations from history.
                     if role == "assistant" {
-                        if let Some(tool_calls) = msg.get("tool_calls").and_then(|tc| tc.as_array()) {
+                        if let Some(tool_calls) = msg.get("tool_calls").and_then(|tc| tc.as_array())
+                        {
                             for tc in tool_calls {
                                 let func = tc.get("function");
                                 let name = func
                                     .and_then(|f| f.get("name"))
                                     .and_then(|n| n.as_str())
                                     .unwrap_or("");
-                                let tool_id = tc.get("id")
-                                    .and_then(|id| id.as_str())
-                                    .unwrap_or("");
+                                let tool_id = tc.get("id").and_then(|id| id.as_str()).unwrap_or("");
                                 let input: Value = func
                                     .and_then(|f| f.get("arguments"))
                                     .and_then(|a| a.as_str())
@@ -467,12 +505,11 @@ pub(crate) fn openai_to_bedrock_request(body: &Value) -> Value {
                 }
                 "tool" => {
                     // Tool result: OpenAI → Bedrock toolResult
-                    let tool_use_id = msg.get("tool_call_id")
+                    let tool_use_id = msg
+                        .get("tool_call_id")
                         .and_then(|t| t.as_str())
                         .unwrap_or("");
-                    let content_str = msg.get("content")
-                        .and_then(|c| c.as_str())
-                        .unwrap_or("");
+                    let content_str = msg.get("content").and_then(|c| c.as_str()).unwrap_or("");
                     bedrock_messages.push(json!({
                         "role": "user",
                         "content": [{
@@ -573,4 +610,3 @@ pub(crate) fn translate_openai_content_to_bedrock(content: Option<&Value>) -> Ve
         _ => vec![],
     }
 }
-

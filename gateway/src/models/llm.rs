@@ -277,7 +277,10 @@ fn classify_error_inner(status: u16, body_str: &str, json: Option<&Value>) -> Op
             }
         }
         400 => {
-            let combined = format!("{} {} {} {}", error_message, error_type_field, error_code, body_str);
+            let combined = format!(
+                "{} {} {} {}",
+                error_message, error_type_field, error_code, body_str
+            );
             let lower = combined.to_lowercase();
 
             if lower.contains("context_length")
@@ -308,7 +311,9 @@ fn classify_error_inner(status: u16, body_str: &str, json: Option<&Value>) -> Op
 /// Check if the request body has `stream: true`.
 pub fn is_streaming_request(body: &[u8]) -> bool {
     if let Ok(json) = serde_json::from_slice::<Value>(body) {
-        json.get("stream").and_then(|s| s.as_bool()).unwrap_or(false)
+        json.get("stream")
+            .and_then(|s| s.as_bool())
+            .unwrap_or(false)
     } else {
         false
     }
@@ -344,7 +349,10 @@ mod tests {
         assert_eq!(calls.len(), 1);
         assert_eq!(calls[0].name, "get_weather");
         assert_eq!(calls[0].call_id.as_deref(), Some("call_abc123"));
-        assert_eq!(calls[0].arguments.as_deref(), Some("{\"city\": \"London\"}"));
+        assert_eq!(
+            calls[0].arguments.as_deref(),
+            Some("{\"city\": \"London\"}")
+        );
     }
 
     #[test]
@@ -401,7 +409,11 @@ mod tests {
         assert_eq!(calls.len(), 1);
         assert_eq!(calls[0].name, "search_database");
         assert_eq!(calls[0].call_id.as_deref(), Some("toolu_01A"));
-        assert!(calls[0].arguments.as_ref().unwrap().contains("customer orders"));
+        assert!(calls[0]
+            .arguments
+            .as_ref()
+            .unwrap()
+            .contains("customer orders"));
     }
 
     #[test]
@@ -546,37 +558,53 @@ mod tests {
     #[test]
     fn test_finish_reason_openai_tool_calls() {
         let body = r#"{"choices":[{"finish_reason":"tool_calls"}]}"#;
-        assert_eq!(extract_finish_reason(body.as_bytes()), Some("tool_calls".into()));
+        assert_eq!(
+            extract_finish_reason(body.as_bytes()),
+            Some("tool_calls".into())
+        );
     }
 
     #[test]
     fn test_finish_reason_openai_length() {
         let body = r#"{"choices":[{"finish_reason":"length"}]}"#;
-        assert_eq!(extract_finish_reason(body.as_bytes()), Some("length".into()));
+        assert_eq!(
+            extract_finish_reason(body.as_bytes()),
+            Some("length".into())
+        );
     }
 
     #[test]
     fn test_finish_reason_anthropic() {
         let body = r#"{"stop_reason":"end_turn"}"#;
-        assert_eq!(extract_finish_reason(body.as_bytes()), Some("end_turn".into()));
+        assert_eq!(
+            extract_finish_reason(body.as_bytes()),
+            Some("end_turn".into())
+        );
     }
 
     #[test]
     fn test_finish_reason_anthropic_tool_use() {
         let body = r#"{"stop_reason":"tool_use"}"#;
-        assert_eq!(extract_finish_reason(body.as_bytes()), Some("tool_use".into()));
+        assert_eq!(
+            extract_finish_reason(body.as_bytes()),
+            Some("tool_use".into())
+        );
     }
 
     #[test]
     fn test_finish_reason_gemini() {
         let body = r#"{"candidates":[{"finishReason":"STOP"}]}"#;
-        assert_eq!(extract_finish_reason(body.as_bytes()), Some("stop".into())); // lowercased
+        assert_eq!(extract_finish_reason(body.as_bytes()), Some("stop".into()));
+        // lowercased
     }
 
     #[test]
     fn test_finish_reason_gemini_safety() {
         let body = r#"{"candidates":[{"finishReason":"SAFETY"}]}"#;
-        assert_eq!(extract_finish_reason(body.as_bytes()), Some("safety".into()));
+        assert_eq!(
+            extract_finish_reason(body.as_bytes()),
+            Some("safety".into())
+        );
     }
 
     #[test]
@@ -585,7 +613,10 @@ mod tests {
         assert_eq!(extract_finish_reason_from_value(&json), Some("stop".into()));
 
         let json2 = serde_json::json!({"stop_reason":"max_tokens"});
-        assert_eq!(extract_finish_reason_from_value(&json2), Some("max_tokens".into()));
+        assert_eq!(
+            extract_finish_reason_from_value(&json2),
+            Some("max_tokens".into())
+        );
     }
 
     #[test]
@@ -611,37 +642,56 @@ mod tests {
     #[test]
     fn test_error_invalid_auth_401() {
         let body = r#"{"error":{"message":"Invalid API key","type":"authentication_error"}}"#;
-        assert_eq!(classify_error(401, body.as_bytes()), Some("invalid_auth".into()));
+        assert_eq!(
+            classify_error(401, body.as_bytes()),
+            Some("invalid_auth".into())
+        );
     }
 
     #[test]
     fn test_error_invalid_auth_403() {
         let body = r#"{"error":{"message":"Permission denied"}}"#;
-        assert_eq!(classify_error(403, body.as_bytes()), Some("invalid_auth".into()));
+        assert_eq!(
+            classify_error(403, body.as_bytes()),
+            Some("invalid_auth".into())
+        );
     }
 
     #[test]
     fn test_error_rate_limit() {
         let body = r#"{"error":{"message":"Rate limit exceeded","type":"rate_limit_error"}}"#;
-        assert_eq!(classify_error(429, body.as_bytes()), Some("rate_limit".into()));
+        assert_eq!(
+            classify_error(429, body.as_bytes()),
+            Some("rate_limit".into())
+        );
     }
 
     #[test]
     fn test_error_quota_exceeded() {
         let body = r#"{"error":{"message":"You exceeded your current quota","type":"insufficient_quota"}}"#;
-        assert_eq!(classify_error(429, body.as_bytes()), Some("quota_exceeded".into()));
+        assert_eq!(
+            classify_error(429, body.as_bytes()),
+            Some("quota_exceeded".into())
+        );
     }
 
     #[test]
     fn test_error_quota_by_code() {
         let body = r#"{"error":{"message":"Billing limit reached","code":"insufficient_quota"}}"#;
-        assert_eq!(classify_error(429, body.as_bytes()), Some("quota_exceeded".into()));
+        assert_eq!(
+            classify_error(429, body.as_bytes()),
+            Some("quota_exceeded".into())
+        );
     }
 
     #[test]
     fn test_error_model_not_found() {
-        let body = r#"{"error":{"message":"The model gpt-5 does not exist","code":"model_not_found"}}"#;
-        assert_eq!(classify_error(404, body.as_bytes()), Some("model_not_found".into()));
+        let body =
+            r#"{"error":{"message":"The model gpt-5 does not exist","code":"model_not_found"}}"#;
+        assert_eq!(
+            classify_error(404, body.as_bytes()),
+            Some("model_not_found".into())
+        );
     }
 
     #[test]
@@ -653,43 +703,65 @@ mod tests {
     #[test]
     fn test_error_context_too_long() {
         let body = r#"{"error":{"message":"This model's maximum context length is 128000 tokens","type":"invalid_request_error","code":"context_length_exceeded"}}"#;
-        assert_eq!(classify_error(400, body.as_bytes()), Some("context_too_long".into()));
+        assert_eq!(
+            classify_error(400, body.as_bytes()),
+            Some("context_too_long".into())
+        );
     }
 
     #[test]
     fn test_error_context_too_long_max_tokens() {
         let body = r#"{"error":{"message":"max_tokens exceeded for this model","type":"invalid_request_error"}}"#;
-        assert_eq!(classify_error(400, body.as_bytes()), Some("context_too_long".into()));
+        assert_eq!(
+            classify_error(400, body.as_bytes()),
+            Some("context_too_long".into())
+        );
     }
 
     #[test]
     fn test_error_content_filter() {
-        let body = r#"{"error":{"message":"Content blocked by safety filter","code":"content_filter"}}"#;
-        assert_eq!(classify_error(400, body.as_bytes()), Some("content_filter".into()));
+        let body =
+            r#"{"error":{"message":"Content blocked by safety filter","code":"content_filter"}}"#;
+        assert_eq!(
+            classify_error(400, body.as_bytes()),
+            Some("content_filter".into())
+        );
     }
 
     #[test]
     fn test_error_content_policy() {
         let body = r#"{"error":{"message":"Your request was rejected as a result of our content_policy","type":"invalid_request_error"}}"#;
-        assert_eq!(classify_error(400, body.as_bytes()), Some("content_filter".into()));
+        assert_eq!(
+            classify_error(400, body.as_bytes()),
+            Some("content_filter".into())
+        );
     }
 
     #[test]
     fn test_error_invalid_request_generic() {
         let body = r#"{"error":{"message":"Invalid parameter: temperature must be between 0 and 2","type":"invalid_request_error"}}"#;
-        assert_eq!(classify_error(400, body.as_bytes()), Some("invalid_request".into()));
+        assert_eq!(
+            classify_error(400, body.as_bytes()),
+            Some("invalid_request".into())
+        );
     }
 
     #[test]
     fn test_error_server_error_500() {
         let body = r#"{"error":{"message":"Internal server error"}}"#;
-        assert_eq!(classify_error(500, body.as_bytes()), Some("server_error".into()));
+        assert_eq!(
+            classify_error(500, body.as_bytes()),
+            Some("server_error".into())
+        );
     }
 
     #[test]
     fn test_error_server_error_503() {
         let body = r#"{"error":{"message":"Service temporarily unavailable"}}"#;
-        assert_eq!(classify_error(503, body.as_bytes()), Some("server_error".into()));
+        assert_eq!(
+            classify_error(503, body.as_bytes()),
+            Some("server_error".into())
+        );
     }
 
     #[test]
@@ -702,7 +774,10 @@ mod tests {
     #[test]
     fn test_classify_error_from_str() {
         let body_str = r#"{"error":{"message":"Rate limit exceeded","type":"rate_limit_error"}}"#;
-        assert_eq!(classify_error_from_str(429, body_str), Some("rate_limit".into()));
+        assert_eq!(
+            classify_error_from_str(429, body_str),
+            Some("rate_limit".into())
+        );
     }
 
     #[test]
@@ -713,14 +788,19 @@ mod tests {
     #[test]
     fn test_classify_error_from_str_invalid_json() {
         // Should still classify by status code even with invalid JSON body
-        assert_eq!(classify_error_from_str(500, "not json"), Some("server_error".into()));
+        assert_eq!(
+            classify_error_from_str(500, "not json"),
+            Some("server_error".into())
+        );
     }
 
     // ── Streaming Request Detection ─────────────────────────────
 
     #[test]
     fn test_streaming_request_true() {
-        assert!(is_streaming_request(b"{\"stream\": true, \"model\": \"gpt-4o\"}"));
+        assert!(is_streaming_request(
+            b"{\"stream\": true, \"model\": \"gpt-4o\"}"
+        ));
     }
 
     #[test]

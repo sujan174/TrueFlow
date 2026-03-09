@@ -274,15 +274,21 @@ mod tests {
     fn test_mcp_result_to_text() {
         let result = CallToolResult {
             content: vec![
-                McpContent::Text { text: "Hello world".into() },
-                McpContent::Text { text: "Second line".into() },
+                McpContent::Text {
+                    text: "Hello world".into(),
+                },
+                McpContent::Text {
+                    text: "Second line".into(),
+                },
             ],
             is_error: false,
         };
         assert_eq!(mcp_result_to_text(&result), "Hello world\nSecond line");
 
         let err_result = CallToolResult {
-            content: vec![McpContent::Text { text: "not found".into() }],
+            content: vec![McpContent::Text {
+                text: "not found".into(),
+            }],
             is_error: true,
         };
         assert_eq!(mcp_result_to_text(&err_result), "Error: not found");

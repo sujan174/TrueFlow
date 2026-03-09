@@ -176,7 +176,7 @@ export default function TokenAnalyticsPage({ params }: { params: { id: string } 
                                     <YAxis {...CHART_AXIS_PROPS} />
                                     <Tooltip
                                         content={<CustomTooltip
-                                            labelFormatter={(label: any) => new Date(label).toLocaleString()}
+                                            labelFormatter={(label: string | number) => new Date(label).toLocaleString()}
                                         />}
                                         cursor={{ stroke: 'var(--border)', strokeWidth: 1, strokeDasharray: '4 4' }}
                                     />

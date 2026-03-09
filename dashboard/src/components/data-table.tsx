@@ -25,6 +25,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { ChevronLeft, ChevronRight } from "lucide-react"
 
+import { cn } from "@/lib/utils"
+
 interface DataTableProps<TData, TValue> {
     columns: ColumnDef<TData, TValue>[]
     data: TData[]
@@ -102,7 +104,7 @@ export function DataTable<TData, TValue>({
                                     key={row.id}
                                     data-state={row.getIsSelected() && "selected"}
                                     onClick={() => onRowClick?.(row.original)}
-                                    className={onRowClick ? "cursor-pointer hover:bg-muted/50" : ""}
+                                    className={cn(onRowClick ? "cursor-pointer group hover:bg-white/[0.02]" : "", "border-white/10")}
                                 >
                                     {row.getVisibleCells().map((cell) => (
                                         <TableCell key={cell.id}>
@@ -113,7 +115,7 @@ export function DataTable<TData, TValue>({
                             ))
                         ) : (
                             <TableRow>
-                                <TableCell colSpan={columns.length} className="h-24 text-center">
+                                <TableCell colSpan={columns.length} className="h-24 text-center text-zinc-500">
                                     No results.
                                 </TableCell>
                             </TableRow>

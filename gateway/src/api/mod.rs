@@ -13,11 +13,11 @@ use uuid::Uuid;
 
 pub mod analytics;
 pub mod config;
+pub mod experiment_handlers;
 pub mod guardrail_presets;
 pub mod handlers;
 pub mod mcp_handlers;
 pub mod prompt_handlers;
-pub mod experiment_handlers;
 
 // ── Auth Context ─────────────────────────────────────────────
 
@@ -92,8 +92,10 @@ pub fn api_router(state: Arc<AppState>) -> Router<Arc<AppState>> {
         )
         .route("/tokens/:id", delete(handlers::revoke_token))
         .route("/tokens/:id/usage", get(handlers::get_token_usage))
-        .route("/tokens/:id/circuit-breaker",
-            get(handlers::get_circuit_breaker).patch(handlers::update_circuit_breaker))
+        .route(
+            "/tokens/:id/circuit-breaker",
+            get(handlers::get_circuit_breaker).patch(handlers::update_circuit_breaker),
+        )
         .route(
             "/policies",
             get(handlers::list_policies).post(handlers::create_policy),
@@ -110,10 +112,7 @@ pub fn api_router(state: Arc<AppState>) -> Router<Arc<AppState>> {
             "/credentials",
             get(handlers::list_credentials).post(handlers::create_credential),
         )
-        .route(
-            "/credentials/:id",
-            delete(handlers::delete_credential),
-        )
+        .route("/credentials/:id", delete(handlers::delete_credential))
         .route(
             "/projects",
             get(handlers::list_projects).post(handlers::create_project),
@@ -131,46 +130,49 @@ pub fn api_router(state: Arc<AppState>) -> Router<Arc<AppState>> {
             "/approvals", // HITL requests
             get(handlers::list_approvals),
         )
-        .route(
-            "/approvals/:id/decision",
-            post(handlers::decide_approval),
-        )
-        .route(
-            "/audit",
-            get(handlers::list_audit_logs),
-        )
-        .route(
-            "/audit/:id",
-            get(handlers::get_audit_log),
-        )
-        .route(
-            "/audit/stream",
-            get(handlers::stream_audit_logs),
-        )
-        .route(
-            "/sessions",
-            get(handlers::list_sessions),
-        )
-        .route(
-            "/sessions/:id",
-            get(handlers::get_session),
-        )
+        .route("/approvals/:id/decision", post(handlers::decide_approval))
+        .route("/audit", get(handlers::list_audit_logs))
+        .route("/audit/:id", get(handlers::get_audit_log))
+        .route("/audit/stream", get(handlers::stream_audit_logs))
+        .route("/sessions", get(handlers::list_sessions))
+        .route("/sessions/:id", get(handlers::get_session))
         // Session Lifecycle
-        .route("/sessions/:id/status", patch(handlers::update_session_status))
-        .route("/sessions/:id/spend-cap", put(handlers::set_session_spend_cap))
+        .route(
+            "/sessions/:id/status",
+            patch(handlers::update_session_status),
+        )
+        .route(
+            "/sessions/:id/spend-cap",
+            put(handlers::set_session_spend_cap),
+        )
         .route("/sessions/:id/entity", get(handlers::get_session_entity))
         // Services
-        .route("/services", get(handlers::list_services).post(handlers::create_service))
+        .route(
+            "/services",
+            get(handlers::list_services).post(handlers::create_service),
+        )
         .route("/services/:id", delete(handlers::delete_service))
         // Notifications
         .route("/notifications", get(handlers::list_notifications))
-        .route("/notifications/unread", get(handlers::count_unread_notifications))
+        .route(
+            "/notifications/unread",
+            get(handlers::count_unread_notifications),
+        )
         //.route("/notifications/:id/read", post(handlers::mark_notification_read)) // Using post for side-effect?
         // Wait, mark_read handler is POST
-        .route("/notifications/:id/read", post(handlers::mark_notification_read))
-        .route("/notifications/read-all", post(handlers::mark_all_notifications_read))
+        .route(
+            "/notifications/:id/read",
+            post(handlers::mark_notification_read),
+        )
+        .route(
+            "/notifications/read-all",
+            post(handlers::mark_all_notifications_read),
+        )
         // Key management (New)
-        .route("/auth/keys", get(handlers::list_api_keys).post(handlers::create_api_key))
+        .route(
+            "/auth/keys",
+            get(handlers::list_api_keys).post(handlers::create_api_key),
+        )
         .route("/auth/keys/:id", delete(handlers::revoke_api_key))
         .route("/auth/whoami", get(handlers::whoami))
         // Billing (New)
@@ -190,21 +192,30 @@ pub fn api_router(state: Arc<AppState>) -> Router<Arc<AppState>> {
             get(handlers::get_token_latency),
         )
         .route("/analytics/volume", get(analytics::get_request_volume))
-        .route(
-            "/analytics/status",
-            get(analytics::get_status_distribution),
-        )
+        .route("/analytics/status", get(analytics::get_status_distribution))
         .route(
             "/analytics/latency",
             get(analytics::get_latency_percentiles),
         )
         // New Server-Side Analytics (Phase 8)
         .route("/analytics/summary", get(handlers::get_analytics_summary))
-        .route("/analytics/timeseries", get(handlers::get_analytics_timeseries))
-        .route("/analytics/experiments", get(handlers::get_analytics_experiments))
-        .route("/analytics/spend/breakdown", get(handlers::get_spend_breakdown))
+        .route(
+            "/analytics/timeseries",
+            get(handlers::get_analytics_timeseries),
+        )
+        .route(
+            "/analytics/experiments",
+            get(handlers::get_analytics_experiments),
+        )
+        .route(
+            "/analytics/spend/breakdown",
+            get(handlers::get_spend_breakdown),
+        )
         // Settings & System
-        .route("/settings", get(handlers::get_settings).put(handlers::update_settings))
+        .route(
+            "/settings",
+            get(handlers::get_settings).put(handlers::update_settings),
+        )
         .route("/system/cache-stats", get(handlers::get_cache_stats))
         .route("/system/flush-cache", post(handlers::flush_cache))
         // PII Tokenization Vault
@@ -214,55 +225,138 @@ pub fn api_router(state: Arc<AppState>) -> Router<Arc<AppState>> {
         // Anomaly Detection
         .route("/anomalies", get(handlers::get_anomaly_events))
         // Model Access Groups (RBAC Depth)
-        .route("/model-access-groups", get(handlers::list_model_access_groups).post(handlers::create_model_access_group))
-        .route("/model-access-groups/:id", put(handlers::update_model_access_group).delete(handlers::delete_model_access_group))
+        .route(
+            "/model-access-groups",
+            get(handlers::list_model_access_groups).post(handlers::create_model_access_group),
+        )
+        .route(
+            "/model-access-groups/:id",
+            put(handlers::update_model_access_group).delete(handlers::delete_model_access_group),
+        )
         // Teams (Org Hierarchy)
-        .route("/teams", get(handlers::list_teams).post(handlers::create_team))
-        .route("/teams/:id", put(handlers::update_team).delete(handlers::delete_team))
-        .route("/teams/:id/members", get(handlers::list_team_members).post(handlers::add_team_member))
-        .route("/teams/:id/members/:user_id", delete(handlers::remove_team_member))
+        .route(
+            "/teams",
+            get(handlers::list_teams).post(handlers::create_team),
+        )
+        .route(
+            "/teams/:id",
+            put(handlers::update_team).delete(handlers::delete_team),
+        )
+        .route(
+            "/teams/:id/members",
+            get(handlers::list_team_members).post(handlers::add_team_member),
+        )
+        .route(
+            "/teams/:id/members/:user_id",
+            delete(handlers::remove_team_member),
+        )
         .route("/teams/:id/spend", get(handlers::get_team_spend))
         // Spend Caps
-        .route("/tokens/:id/spend", get(handlers::get_spend_caps).put(handlers::upsert_spend_cap))
-        .route("/tokens/:id/spend/:period", delete(handlers::delete_spend_cap))
+        .route(
+            "/tokens/:id/spend",
+            get(handlers::get_spend_caps).put(handlers::upsert_spend_cap),
+        )
+        .route(
+            "/tokens/:id/spend/:period",
+            delete(handlers::delete_spend_cap),
+        )
         // Webhooks
-        .route("/webhooks", get(handlers::list_webhooks).post(handlers::create_webhook))
+        .route(
+            "/webhooks",
+            get(handlers::list_webhooks).post(handlers::create_webhook),
+        )
         .route("/webhooks/:id", delete(handlers::delete_webhook))
         .route("/webhooks/test", post(handlers::test_webhook))
         // Model Pricing
-        .route("/pricing", get(handlers::list_pricing).put(handlers::upsert_pricing))
+        .route(
+            "/pricing",
+            get(handlers::list_pricing).put(handlers::upsert_pricing),
+        )
         .route("/pricing/:id", delete(handlers::delete_pricing))
         // Guardrail Presets — one-call guardrail enablement
         .route("/guardrails/presets", get(guardrail_presets::list_presets))
-        .route("/guardrails/enable", post(guardrail_presets::enable_guardrails))
-        .route("/guardrails/disable", delete(guardrail_presets::disable_guardrails))
-        .route("/guardrails/status", get(guardrail_presets::guardrails_status))
+        .route(
+            "/guardrails/enable",
+            post(guardrail_presets::enable_guardrails),
+        )
+        .route(
+            "/guardrails/disable",
+            delete(guardrail_presets::disable_guardrails),
+        )
+        .route(
+            "/guardrails/status",
+            get(guardrail_presets::guardrails_status),
+        )
         // Config-as-Code — export/import policies+tokens as YAML or JSON
         .route("/config/export", get(config::export_config))
         .route("/config/export/policies", get(config::export_policies))
         .route("/config/export/tokens", get(config::export_tokens))
         .route("/config/import", post(config::import_config))
         // MCP Server Management
-        .route("/mcp/servers", get(mcp_handlers::list_mcp_servers).post(mcp_handlers::register_mcp_server))
+        .route(
+            "/mcp/servers",
+            get(mcp_handlers::list_mcp_servers).post(mcp_handlers::register_mcp_server),
+        )
         .route("/mcp/servers/test", post(mcp_handlers::test_mcp_server))
-        .route("/mcp/servers/discover", post(mcp_handlers::discover_mcp_server))
+        .route(
+            "/mcp/servers/discover",
+            post(mcp_handlers::discover_mcp_server),
+        )
         .route("/mcp/servers/:id", delete(mcp_handlers::delete_mcp_server))
-        .route("/mcp/servers/:id/refresh", post(mcp_handlers::refresh_mcp_server))
-        .route("/mcp/servers/:id/tools", get(mcp_handlers::list_mcp_server_tools))
-        .route("/mcp/servers/:id/reauth", post(mcp_handlers::reauth_mcp_server))
+        .route(
+            "/mcp/servers/:id/refresh",
+            post(mcp_handlers::refresh_mcp_server),
+        )
+        .route(
+            "/mcp/servers/:id/tools",
+            get(mcp_handlers::list_mcp_server_tools),
+        )
+        .route(
+            "/mcp/servers/:id/reauth",
+            post(mcp_handlers::reauth_mcp_server),
+        )
         // Prompt Management
-        .route("/prompts", get(prompt_handlers::list_prompts).post(prompt_handlers::create_prompt))
+        .route(
+            "/prompts",
+            get(prompt_handlers::list_prompts).post(prompt_handlers::create_prompt),
+        )
         .route("/prompts/folders", get(prompt_handlers::list_folders))
-        .route("/prompts/:id", get(prompt_handlers::get_prompt).put(prompt_handlers::update_prompt).delete(prompt_handlers::delete_prompt))
-        .route("/prompts/:id/versions", get(prompt_handlers::list_versions).post(prompt_handlers::create_version))
-        .route("/prompts/:id/versions/:version", get(prompt_handlers::get_version))
+        .route(
+            "/prompts/:id",
+            get(prompt_handlers::get_prompt)
+                .put(prompt_handlers::update_prompt)
+                .delete(prompt_handlers::delete_prompt),
+        )
+        .route(
+            "/prompts/:id/versions",
+            get(prompt_handlers::list_versions).post(prompt_handlers::create_version),
+        )
+        .route(
+            "/prompts/:id/versions/:version",
+            get(prompt_handlers::get_version),
+        )
         .route("/prompts/:id/deploy", post(prompt_handlers::deploy_version))
-        .route("/prompts/by-slug/:slug/render", get(prompt_handlers::render_prompt_get).post(prompt_handlers::render_prompt_post))
+        .route(
+            "/prompts/by-slug/:slug/render",
+            get(prompt_handlers::render_prompt_get).post(prompt_handlers::render_prompt_post),
+        )
         // Experiment Management (A/B Testing)
-        .route("/experiments", get(experiment_handlers::list_experiments).post(experiment_handlers::create_experiment))
-        .route("/experiments/:id", get(experiment_handlers::get_experiment).put(experiment_handlers::update_experiment))
-        .route("/experiments/:id/results", get(experiment_handlers::get_experiment_results))
-        .route("/experiments/:id/stop", post(experiment_handlers::stop_experiment))
+        .route(
+            "/experiments",
+            get(experiment_handlers::list_experiments).post(experiment_handlers::create_experiment),
+        )
+        .route(
+            "/experiments/:id",
+            get(experiment_handlers::get_experiment).put(experiment_handlers::update_experiment),
+        )
+        .route(
+            "/experiments/:id/results",
+            get(experiment_handlers::get_experiment_results),
+        )
+        .route(
+            "/experiments/:id/stop",
+            post(experiment_handlers::stop_experiment),
+        )
         .layer(middleware::from_fn_with_state(state, admin_auth))
         .layer(TraceLayer::new_for_http())
         .fallback(fallback_404)
@@ -353,7 +447,9 @@ async fn admin_auth(
                 let parts: Vec<&str> = k.split('.').collect();
                 use base64::Engine;
                 let engine = base64::engine::general_purpose::URL_SAFE_NO_PAD;
-                engine.decode(parts[1]).ok()
+                engine
+                    .decode(parts[1])
+                    .ok()
                     .and_then(|bytes| serde_json::from_slice::<serde_json::Value>(&bytes).ok())
                     .and_then(|v| v.get("iss").and_then(|i| i.as_str()).map(String::from))
             };
@@ -501,7 +597,7 @@ async fn admin_auth(
         } else {
             // Invalid API key
             let masked = if k.len() > 8 {
-                format!("{}…{}", &k[..4], &k[k.len()-4..])
+                format!("{}…{}", &k[..4], &k[k.len() - 4..])
             } else {
                 "****".to_string()
             };

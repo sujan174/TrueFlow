@@ -3,24 +3,26 @@ use std::sync::Arc;
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
-    Extension,
-    Json,
+    Extension, Json,
 };
 use uuid::Uuid;
 
+use super::dtos::{DecisionRequest, DecisionResponse, PaginationParams};
+use super::helpers::verify_project_ownership;
 use crate::api::AuthContext;
 use crate::models::approval::ApprovalStatus;
 use crate::AppState;
-use super::dtos::{DecisionRequest, DecisionResponse, PaginationParams};
-use super::helpers::verify_project_ownership;
 
 pub async fn list_approvals(
     State(state): State<Arc<AppState>>,
     Extension(auth): Extension<AuthContext>,
     Query(params): Query<PaginationParams>,
 ) -> Result<Json<Vec<crate::models::approval::ApprovalRequest>>, StatusCode> {
-    auth.require_scope("approvals:read").map_err(|_| StatusCode::FORBIDDEN)?;
-    let project_id = params.project_id.unwrap_or_else(|| auth.default_project_id());
+    auth.require_scope("approvals:read")
+        .map_err(|_| StatusCode::FORBIDDEN)?;
+    let project_id = params
+        .project_id
+        .unwrap_or_else(|| auth.default_project_id());
     verify_project_ownership(&state, auth.org_id, project_id).await?;
 
     let approvals = state
@@ -43,7 +45,8 @@ pub async fn decide_approval(
     Query(params): Query<PaginationParams>,
     Json(payload): Json<DecisionRequest>,
 ) -> Result<Json<DecisionResponse>, StatusCode> {
-    auth.require_scope("approvals:write").map_err(|_| StatusCode::FORBIDDEN)?;
+    auth.require_scope("approvals:write")
+        .map_err(|_| StatusCode::FORBIDDEN)?;
 
     let id = Uuid::parse_str(&id_str).map_err(|_| {
         tracing::warn!("decide_approval: invalid UUID: {}", id_str);
@@ -60,7 +63,9 @@ pub async fn decide_approval(
     };
 
     // Extract project_id from query or default
-    let project_id = params.project_id.unwrap_or_else(|| auth.default_project_id());
+    let project_id = params
+        .project_id
+        .unwrap_or_else(|| auth.default_project_id());
     tracing::info!(
         "decide_approval: properties id={}, project_id={}, status={:?}",
         id,
@@ -90,17 +95,11 @@ pub async fn decide_approval(
     if updated {
         let mut redis_conn = state.cache.redis();
         let hitl_key = format!("hitl:decision:{}", id);
-        let _: redis::RedisResult<i64> = redis::AsyncCommands::lpush(
-            &mut redis_conn,
-            &hitl_key,
-            status_str,
-        ).await;
+        let _: redis::RedisResult<i64> =
+            redis::AsyncCommands::lpush(&mut redis_conn, &hitl_key, status_str).await;
         // Set a short TTL so the key doesn't linger if the gateway crashed
-        let _: redis::RedisResult<bool> = redis::AsyncCommands::expire(
-            &mut redis_conn,
-            &hitl_key,
-            60_i64,
-        ).await;
+        let _: redis::RedisResult<bool> =
+            redis::AsyncCommands::expire(&mut redis_conn, &hitl_key, 60_i64).await;
     }
 
     Ok(Json(DecisionResponse {

@@ -1,19 +1,17 @@
+mod actions;
 mod evaluate;
 mod operators;
-mod actions;
 
 #[cfg(test)]
 mod tests;
 
-use crate::models::policy::{
-    EvalOutcome, Phase, Policy, PolicyMode, TriggeredAction,
-};
+use crate::models::policy::{EvalOutcome, Phase, Policy, PolicyMode, TriggeredAction};
 
 use super::fields::RequestContext;
 
-pub use self::evaluate::evaluate_condition;
-pub use self::actions::{extract_tool_names, evaluate_tool_scope};
 use self::actions::action_name;
+pub use self::actions::{evaluate_tool_scope, extract_tool_names};
+pub use self::evaluate::evaluate_condition;
 pub(crate) use self::operators::glob_match;
 
 /// Evaluate all policies against a request context.
@@ -81,4 +79,3 @@ pub fn evaluate_policies(
 }
 
 // ── Condition Evaluation ─────────────────────────────────────
-

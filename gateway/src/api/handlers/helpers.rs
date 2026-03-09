@@ -55,7 +55,10 @@ pub(super) async fn verify_token_ownership(
     match token {
         Some(t) if t.project_id == auth.default_project_id() => Ok(()),
         Some(_) => {
-            tracing::warn!(token_id, "spend cap access denied: token belongs to different project");
+            tracing::warn!(
+                token_id,
+                "spend cap access denied: token belongs to different project"
+            );
             Err(StatusCode::NOT_FOUND) // Don't reveal existence to other projects
         }
         None => Err(StatusCode::NOT_FOUND),
@@ -72,7 +75,7 @@ pub(super) fn validate_webhook_url(url_str: &str) -> Result<(), StatusCode> {
 
     // Scheme check
     match parsed.scheme() {
-        "https" => {},
+        "https" => {}
         "http" => {
             // Allow HTTP only for localhost in development
             let host = parsed.host_str().unwrap_or("");
@@ -90,7 +93,7 @@ pub(super) fn validate_webhook_url(url_str: &str) -> Result<(), StatusCode> {
     // Block private/reserved hosts
     let host = parsed.host_str().unwrap_or("");
     let blocked_hosts = [
-        "169.254.169.254",   // Cloud metadata
+        "169.254.169.254", // Cloud metadata
         "metadata.google.internal",
         "metadata.internal",
         "0.0.0.0",
@@ -104,7 +107,9 @@ pub(super) fn validate_webhook_url(url_str: &str) -> Result<(), StatusCode> {
     if let Ok(ip) = host.parse::<std::net::IpAddr>() {
         let is_private = match ip {
             std::net::IpAddr::V4(v4) => {
-                v4.is_loopback() || v4.is_private() || v4.is_link_local()
+                v4.is_loopback()
+                    || v4.is_private()
+                    || v4.is_link_local()
                     || v4.octets()[0] == 169 && v4.octets()[1] == 254 // link-local
             }
             std::net::IpAddr::V6(v6) => v6.is_loopback(),

@@ -1,5 +1,5 @@
-use super::PgStore;
 use super::types::OidcProviderRow;
+use super::PgStore;
 
 impl PgStore {
     /// Find an enabled OIDC provider matching the given issuer URL.

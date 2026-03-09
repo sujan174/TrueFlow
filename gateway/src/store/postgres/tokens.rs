@@ -1,6 +1,6 @@
-use uuid::Uuid;
-use super::PgStore;
 use super::types::{NewToken, TokenRow};
+use super::PgStore;
+use uuid::Uuid;
 
 impl PgStore {
     pub async fn insert_token(&self, token: &NewToken) -> anyhow::Result<()> {
@@ -39,8 +39,13 @@ impl PgStore {
         Ok(row)
     }
 
-    pub async fn list_tokens(&self, project_id: Uuid, limit: i64, offset: i64) -> anyhow::Result<Vec<TokenRow>> {
-        let limit = limit.min(1000).max(1); // Cap at 1000, minimum 1
+    pub async fn list_tokens(
+        &self,
+        project_id: Uuid,
+        limit: i64,
+        offset: i64,
+    ) -> anyhow::Result<Vec<TokenRow>> {
+        let limit = limit.clamp(1, 1000); // Cap at 1000, minimum 1
         let rows = sqlx::query_as::<_, TokenRow>(
             "SELECT id, project_id, name, credential_id, upstream_url, scopes, policy_ids, is_active, expires_at, created_at, COALESCE(log_level, 1::SMALLINT) as log_level, upstreams, circuit_breaker, allowed_models, allowed_model_group_ids, team_id, tags, mcp_allowed_tools, mcp_blocked_tools FROM tokens WHERE project_id = $1 AND is_active = true ORDER BY created_at DESC LIMIT $2 OFFSET $3"
         )
@@ -141,7 +146,7 @@ impl PgStore {
             id: id.clone(),
             project_id,
             name: name.to_string(),
-            credential_id: None,        // no credential — passthrough mode
+            credential_id: None, // no credential — passthrough mode
             upstream_url: upstream_url.to_string(),
             scopes: serde_json::json!([]),
             policy_ids,

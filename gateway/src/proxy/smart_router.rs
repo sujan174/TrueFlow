@@ -3,8 +3,8 @@
 //! Called by the policy engine when an `Action::DynamicRoute` is matched.
 //! Returns a `RouteDecision` describing which model/upstream won and why.
 
-use crate::models::policy::{RouteTarget, RoutingStrategy};
 use crate::models::latency_cache::LatencyCache;
+use crate::models::policy::{RouteTarget, RoutingStrategy};
 use crate::models::pricing_cache::PricingCache;
 use crate::proxy::loadbalancer::LoadBalancer;
 use rust_decimal::prelude::ToPrimitive;
@@ -101,16 +101,18 @@ async fn select_lowest_cost(
     let mut scored: Vec<(&RouteTarget, f64)> = Vec::with_capacity(candidates.len());
 
     for target in candidates {
-        let provider = crate::proxy::model_router::detect_provider(&target.model, &target.upstream_url);
+        let provider =
+            crate::proxy::model_router::detect_provider(&target.model, &target.upstream_url);
         let provider_str = format!("{:?}", provider).to_lowercase();
 
-        let cost = if let Some((input_m, output_m)) = pricing.lookup(&provider_str, &target.model).await {
-            // Simple blended average
-            let blended = (input_m + output_m) / rust_decimal::Decimal::from(2);
-            blended.to_f64().unwrap_or(f64::MAX)
-        } else {
-            f64::MAX // Unknown price — deprioritize
-        };
+        let cost =
+            if let Some((input_m, output_m)) = pricing.lookup(&provider_str, &target.model).await {
+                // Simple blended average
+                let blended = (input_m + output_m) / rust_decimal::Decimal::from(2);
+                blended.to_f64().unwrap_or(f64::MAX)
+            } else {
+                f64::MAX // Unknown price — deprioritize
+            };
 
         scored.push((target, cost));
     }
@@ -118,17 +120,20 @@ async fn select_lowest_cost(
     // Sort ascending by cost (cheapest first)
     scored.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
 
-    scored.into_iter().next().map(|(target, cost)| RouteDecision {
-        model: target.model.clone(),
-        upstream_url: target.upstream_url.clone(),
-        credential_id: target.credential_id,
-        strategy_used: "lowest_cost".to_string(),
-        reason: if cost < f64::MAX {
-            format!("cheapest at ${:.4}/M blended", cost)
-        } else {
-            "no pricing data; selected first healthy target".to_string()
-        },
-    })
+    scored
+        .into_iter()
+        .next()
+        .map(|(target, cost)| RouteDecision {
+            model: target.model.clone(),
+            upstream_url: target.upstream_url.clone(),
+            credential_id: target.credential_id,
+            strategy_used: "lowest_cost".to_string(),
+            reason: if cost < f64::MAX {
+                format!("cheapest at ${:.4}/M blended", cost)
+            } else {
+                "no pricing data; selected first healthy target".to_string()
+            },
+        })
 }
 
 async fn select_lowest_latency(
@@ -145,17 +150,20 @@ async fn select_lowest_latency(
     // Sort ascending by p50 (fastest first)
     scored.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
 
-    scored.into_iter().next().map(|(target, p50)| RouteDecision {
-        model: target.model.clone(),
-        upstream_url: target.upstream_url.clone(),
-        credential_id: target.credential_id,
-        strategy_used: "lowest_latency".to_string(),
-        reason: if p50 < f64::MAX {
-            format!("fastest at {:.0}ms p50", p50)
-        } else {
-            "no latency data; selected first healthy target".to_string()
-        },
-    })
+    scored
+        .into_iter()
+        .next()
+        .map(|(target, p50)| RouteDecision {
+            model: target.model.clone(),
+            upstream_url: target.upstream_url.clone(),
+            credential_id: target.credential_id,
+            strategy_used: "lowest_latency".to_string(),
+            reason: if p50 < f64::MAX {
+                format!("fastest at {:.0}ms p50", p50)
+            } else {
+                "no latency data; selected first healthy target".to_string()
+            },
+        })
 }
 
 fn select_round_robin(candidates: Vec<&RouteTarget>, token_id: &str) -> Option<RouteDecision> {
@@ -195,13 +203,16 @@ fn select_least_busy(candidates: Vec<&RouteTarget>, lb: &LoadBalancer) -> Option
     // Sort ascending by in-flight count (least busy first)
     scored.sort_by_key(|(_, count)| *count);
 
-    scored.into_iter().next().map(|(target, count)| RouteDecision {
-        model: target.model.clone(),
-        upstream_url: target.upstream_url.clone(),
-        credential_id: target.credential_id,
-        strategy_used: "least_busy".to_string(),
-        reason: format!("{} in-flight requests", count),
-    })
+    scored
+        .into_iter()
+        .next()
+        .map(|(target, count)| RouteDecision {
+            model: target.model.clone(),
+            upstream_url: target.upstream_url.clone(),
+            credential_id: target.credential_id,
+            strategy_used: "least_busy".to_string(),
+            reason: format!("{} in-flight requests", count),
+        })
 }
 
 /// Randomly select from the pool, weighted by each target's weight field.
@@ -303,7 +314,10 @@ fn evaluate_route_condition(
             let pattern = cond.value.as_str().unwrap_or("");
             // B12-2 FIX: compile with size limit to prevent ReDoS
             // (matches the 1MB limit used in engine.rs check_regex)
-            match regex::RegexBuilder::new(pattern).size_limit(1 << 20).build() {
+            match regex::RegexBuilder::new(pattern)
+                .size_limit(1 << 20)
+                .build()
+            {
                 Ok(re) => re.is_match(val.as_str().unwrap_or("")),
                 Err(_) => false,
             }
@@ -362,7 +376,6 @@ fn values_equal(a: &serde_json::Value, b: &serde_json::Value) -> bool {
     a == b
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -378,7 +391,7 @@ mod tests {
 
     #[test]
     fn test_round_robin_rotates() {
-        let pool = vec![
+        let pool = [
             target("gpt-4o", "https://api.openai.com"),
             target("claude-3-haiku-20240307", "https://api.anthropic.com"),
         ];
@@ -392,7 +405,7 @@ mod tests {
 
     #[test]
     fn test_round_robin_single_target() {
-        let pool = vec![target("gpt-4o", "https://api.openai.com")];
+        let pool = [target("gpt-4o", "https://api.openai.com")];
         let refs: Vec<&RouteTarget> = pool.iter().collect();
         let d = select_round_robin(refs, "tok_single").unwrap();
         assert_eq!(d.model, "gpt-4o");

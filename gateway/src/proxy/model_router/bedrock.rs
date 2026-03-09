@@ -10,7 +10,9 @@ pub(crate) fn parse_event_stream_header(data: &[u8]) -> Option<(String, String, 
     if data.len() < 1 + name_len + 1 {
         return None;
     }
-    let name = std::str::from_utf8(&data[1..1 + name_len]).ok()?.to_string();
+    let name = std::str::from_utf8(&data[1..1 + name_len])
+        .ok()?
+        .to_string();
     let value_type = data[1 + name_len];
     let rest = &data[1 + name_len + 1..];
 
@@ -28,22 +30,23 @@ pub(crate) fn parse_event_stream_header(data: &[u8]) -> Option<(String, String, 
             Some((name, value, 1 + name_len + 1 + 2 + val_len))
         }
         // Other types: skip based on known sizes
-        0 => Some((name, "true".to_string(), 1 + name_len + 1 + 1)),  // bool true
+        0 => Some((name, "true".to_string(), 1 + name_len + 1 + 1)), // bool true
         1 => Some((name, "false".to_string(), 1 + name_len + 1 + 1)), // bool false
-        2 => Some((name, "".to_string(), 1 + name_len + 1 + 1)),      // byte
-        3 => Some((name, "".to_string(), 1 + name_len + 1 + 2)),      // short
-        4 => Some((name, "".to_string(), 1 + name_len + 1 + 4)),      // int
-        5 => Some((name, "".to_string(), 1 + name_len + 1 + 8)),      // long
-        6 => {  // bytes
+        2 => Some((name, "".to_string(), 1 + name_len + 1 + 1)),     // byte
+        3 => Some((name, "".to_string(), 1 + name_len + 1 + 2)),     // short
+        4 => Some((name, "".to_string(), 1 + name_len + 1 + 4)),     // int
+        5 => Some((name, "".to_string(), 1 + name_len + 1 + 8)),     // long
+        6 => {
+            // bytes
             if rest.len() < 2 {
                 return None;
             }
             let val_len = u16::from_be_bytes([rest[0], rest[1]]) as usize;
             Some((name, "".to_string(), 1 + name_len + 1 + 2 + val_len))
         }
-        8 => Some((name, "".to_string(), 1 + name_len + 1 + 8)),      // timestamp
-        9 => Some((name, "".to_string(), 1 + name_len + 1 + 16)),     // uuid
-        _ => None, // Unknown type
+        8 => Some((name, "".to_string(), 1 + name_len + 1 + 8)), // timestamp
+        9 => Some((name, "".to_string(), 1 + name_len + 1 + 16)), // uuid
+        _ => None,                                               // Unknown type
     }
 }
 
@@ -56,14 +59,23 @@ pub(crate) fn decode_bedrock_event_stream(data: &[u8]) -> Vec<(String, Value)> {
     while offset + 12 <= data.len() {
         // Prelude: 4B total_length + 4B headers_length + 4B prelude_CRC
         let total_length = u32::from_be_bytes([
-            data[offset], data[offset + 1], data[offset + 2], data[offset + 3]
+            data[offset],
+            data[offset + 1],
+            data[offset + 2],
+            data[offset + 3],
         ]) as usize;
         let headers_length = u32::from_be_bytes([
-            data[offset + 4], data[offset + 5], data[offset + 6], data[offset + 7]
+            data[offset + 4],
+            data[offset + 5],
+            data[offset + 6],
+            data[offset + 7],
         ]) as usize;
         // FIX(C2): Validate prelude CRC32 — reject corrupt frames
         let prelude_crc_expected = u32::from_be_bytes([
-            data[offset + 8], data[offset + 9], data[offset + 10], data[offset + 11]
+            data[offset + 8],
+            data[offset + 9],
+            data[offset + 10],
+            data[offset + 11],
         ]);
         let prelude_crc_actual = crc32_checksum(&data[offset..offset + 8]);
         if prelude_crc_expected != prelude_crc_actual {
@@ -82,8 +94,10 @@ pub(crate) fn decode_bedrock_event_stream(data: &[u8]) -> Vec<(String, Value)> {
         // FIX(C2): Validate full message CRC32
         let msg_crc_offset = offset + total_length - 4;
         let msg_crc_expected = u32::from_be_bytes([
-            data[msg_crc_offset], data[msg_crc_offset + 1],
-            data[msg_crc_offset + 2], data[msg_crc_offset + 3]
+            data[msg_crc_offset],
+            data[msg_crc_offset + 1],
+            data[msg_crc_offset + 2],
+            data[msg_crc_offset + 3],
         ]);
         let msg_crc_actual = crc32_checksum(&data[offset..msg_crc_offset]);
         if msg_crc_expected != msg_crc_actual {
@@ -157,11 +171,13 @@ pub(crate) fn translate_bedrock_event_stream_to_openai(body: &[u8], model: &str)
         match event_type.as_str() {
             "messageStart" => {
                 // Emit role chunk
-                let role = payload.get("role")
+                let role = payload
+                    .get("role")
                     .and_then(|r| r.as_str())
                     .unwrap_or("assistant");
                 output.push_str(&openai_sse_chunk(
-                    &chunk_id, model,
+                    &chunk_id,
+                    model,
                     json!({"role": role, "content": ""}),
                     None,
                 ));
@@ -170,13 +186,18 @@ pub(crate) fn translate_bedrock_event_stream_to_openai(body: &[u8], model: &str)
                 // Tool use start
                 if let Some(start) = payload.get("start") {
                     if let Some(tool_use) = start.get("toolUse") {
-                        let index = payload.get("contentBlockIndex")
+                        let index = payload
+                            .get("contentBlockIndex")
                             .and_then(|i| i.as_u64())
                             .unwrap_or(0);
                         let name = tool_use.get("name").and_then(|n| n.as_str()).unwrap_or("");
-                        let tool_id = tool_use.get("toolUseId").and_then(|id| id.as_str()).unwrap_or("");
+                        let tool_id = tool_use
+                            .get("toolUseId")
+                            .and_then(|id| id.as_str())
+                            .unwrap_or("");
                         output.push_str(&openai_sse_chunk(
-                            &chunk_id, model,
+                            &chunk_id,
+                            model,
                             json!({"tool_calls": [{
                                 "index": index,
                                 "id": tool_id,
@@ -193,7 +214,8 @@ pub(crate) fn translate_bedrock_event_stream_to_openai(body: &[u8], model: &str)
                     // Text delta
                     if let Some(text) = delta.get("text").and_then(|t| t.as_str()) {
                         output.push_str(&openai_sse_chunk(
-                            &chunk_id, model,
+                            &chunk_id,
+                            model,
                             json!({"content": text}),
                             None,
                         ));
@@ -205,11 +227,13 @@ pub(crate) fn translate_bedrock_event_stream_to_openai(body: &[u8], model: &str)
                         } else {
                             serde_json::to_string(input).unwrap_or_default()
                         };
-                        let index = payload.get("contentBlockIndex")
+                        let index = payload
+                            .get("contentBlockIndex")
                             .and_then(|i| i.as_u64())
                             .unwrap_or(0);
                         output.push_str(&openai_sse_chunk(
-                            &chunk_id, model,
+                            &chunk_id,
+                            model,
                             json!({"tool_calls": [{
                                 "index": index,
                                 "function": {"arguments": input_str}
@@ -228,11 +252,7 @@ pub(crate) fn translate_bedrock_event_stream_to_openai(body: &[u8], model: &str)
                     Some("content_filtered") => "content_filter",
                     _ => "stop",
                 };
-                output.push_str(&openai_sse_chunk(
-                    &chunk_id, model,
-                    json!({}),
-                    Some(finish),
-                ));
+                output.push_str(&openai_sse_chunk(&chunk_id, model, json!({}), Some(finish)));
             }
             "metadata" => {
                 // Usage info — emit as a usage chunk (OpenAI style)
@@ -242,10 +262,14 @@ pub(crate) fn translate_bedrock_event_stream_to_openai(body: &[u8], model: &str)
             // FIX: Surface Bedrock stream exceptions as SSE error events.
             // These arrive when the provider encounters errors mid-stream
             // (after the 200 OK was already sent).
-            "internalServerException" | "modelStreamErrorException"
-            | "throttlingException" | "validationException"
-            | "modelTimeoutException" | "serviceUnavailableException" => {
-                let message = payload.get("message")
+            "internalServerException"
+            | "modelStreamErrorException"
+            | "throttlingException"
+            | "validationException"
+            | "modelTimeoutException"
+            | "serviceUnavailableException" => {
+                let message = payload
+                    .get("message")
                     .and_then(|m| m.as_str())
                     .unwrap_or("unknown stream error");
                 let error_event = format!(
@@ -349,5 +373,3 @@ pub(crate) fn crc32_checksum(data: &[u8]) -> u32 {
 }
 
 // ── Tests ───────────────────────────────────────────────────────
-
-

@@ -56,8 +56,9 @@ export default function ConfigPage() {
             setPreviewContent(text);
             setPreviewTitle(filename);
             toast.success(`Exported ${filename}`);
-        } catch (e: any) {
-            toast.error(`Export failed: ${e.message}`);
+        } catch (e: unknown) {
+            const err = e as Error;
+            toast.error(`Export failed: ${err.message}`);
         } finally {
             setLoadingExport(null);
         }
@@ -75,9 +76,10 @@ export default function ConfigPage() {
             const result = await importConfig(importContent);
             setImportResult({ ok: true, message: result.message });
             toast.success(result.message);
-        } catch (e: any) {
-            setImportResult({ ok: false, message: e.message });
-            toast.error(`Import failed: ${e.message}`);
+        } catch (e: unknown) {
+            const err = e as Error;
+            setImportResult({ ok: false, message: err.message });
+            toast.error(`Import failed: ${err.message}`);
         } finally {
             setImporting(false);
         }

@@ -114,9 +114,7 @@ pub async fn check(
         ExternalVendor::AwsComprehend => {
             check_aws_comprehend(endpoint, &api_key, threshold, text).await
         }
-        ExternalVendor::LlamaGuard => {
-            check_llama_guard(endpoint, threshold, text).await
-        }
+        ExternalVendor::LlamaGuard => check_llama_guard(endpoint, threshold, text).await,
         ExternalVendor::PaloAltoAirs => {
             check_palo_alto_airs(endpoint, &api_key, threshold, text).await
         }
@@ -181,13 +179,16 @@ async fn check_azure(
         .unwrap_or(EMPTY_AZURE)
         .iter()
         .fold(("none", 0.0f32), |acc, cat| {
-            let score = cat.get("severity")
-                .and_then(|v| v.as_f64())
-                .unwrap_or(0.0) as f32;
-            let name = cat.get("category")
+            let score = cat.get("severity").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
+            let name = cat
+                .get("category")
                 .and_then(|v| v.as_str())
                 .unwrap_or("unknown");
-            if score > acc.1 { (name, score) } else { acc }
+            if score > acc.1 {
+                (name, score)
+            } else {
+                acc
+            }
         });
 
     Ok(ExternalGuardrailResult {
@@ -252,13 +253,16 @@ async fn check_aws_comprehend(
         .unwrap_or(EMPTY_AWS)
         .iter()
         .fold(("clean", 0.0f32), |acc, label| {
-            let score = label.get("Score")
-                .and_then(|v| v.as_f64())
-                .unwrap_or(0.0) as f32;
-            let name = label.get("Name")
+            let score = label.get("Score").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
+            let name = label
+                .get("Name")
                 .and_then(|v| v.as_str())
                 .unwrap_or("unknown");
-            if score > acc.1 { (name, score) } else { acc }
+            if score > acc.1 {
+                (name, score)
+            } else {
+                acc
+            }
         });
 
     Ok(ExternalGuardrailResult {
@@ -334,7 +338,12 @@ async fn check_llama_guard(
 
     let blocked = content.starts_with("unsafe");
     let label = if blocked {
-        content.lines().nth(1).unwrap_or("unsafe").trim().to_string()
+        content
+            .lines()
+            .nth(1)
+            .unwrap_or("unsafe")
+            .trim()
+            .to_string()
     } else {
         "safe".to_string()
     };
@@ -402,10 +411,7 @@ async fn check_palo_alto_airs(
         .map_err(|e| format!("Palo Alto AIRS body read failed: {e}"))?;
 
     if !status.is_success() {
-        return Err(format!(
-            "Palo Alto AIRS returned HTTP {}: {}",
-            status, raw
-        ));
+        return Err(format!("Palo Alto AIRS returned HTTP {}: {}", status, raw));
     }
 
     let parsed: serde_json::Value =
@@ -500,19 +506,13 @@ async fn check_prompt_security(
         .map_err(|e| format!("Prompt Security body read failed: {e}"))?;
 
     if !status.is_success() {
-        return Err(format!(
-            "Prompt Security returned HTTP {}: {}",
-            status, raw
-        ));
+        return Err(format!("Prompt Security returned HTTP {}: {}", status, raw));
     }
 
     let parsed: serde_json::Value =
         serde_json::from_str(&raw).map_err(|e| format!("Prompt Security parse failed: {e}"))?;
 
-    let safe = parsed
-        .get("safe")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(true);
+    let safe = parsed.get("safe").and_then(|v| v.as_bool()).unwrap_or(true);
     let confidence = parsed
         .get("confidence")
         .and_then(|v| v.as_f64())

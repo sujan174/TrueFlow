@@ -7,8 +7,8 @@ use crate::models::audit::AuditEntry;
 use dashmap::DashSet;
 use once_cell::sync::Lazy;
 use prometheus::{
-    opts, register_counter_vec, register_histogram_vec,
-    CounterVec, Encoder, HistogramVec, TextEncoder,
+    opts, register_counter_vec, register_histogram_vec, CounterVec, Encoder, HistogramVec,
+    TextEncoder,
 };
 use rust_decimal::prelude::ToPrimitive;
 
@@ -45,7 +45,10 @@ impl PrometheusRecorder {
     /// Create and register all metrics in the global Prometheus registry.
     pub fn new() -> Self {
         let requests_total = register_counter_vec!(
-            opts!("trueflow_requests_total", "Total number of proxied requests"),
+            opts!(
+                "trueflow_requests_total",
+                "Total number of proxied requests"
+            ),
             &["model", "status_code", "cache_hit", "is_streaming"]
         )
         .expect("failed to register trueflow_requests_total");
@@ -178,9 +181,7 @@ impl PrometheusRecorder {
 
         // Cache hit counter
         if entry.cache_hit {
-            self.cache_hit_total
-                .with_label_values(&[model])
-                .inc();
+            self.cache_hit_total.with_label_values(&[model]).inc();
         }
     }
 }
@@ -191,7 +192,9 @@ pub fn encode_metrics() -> String {
     let encoder = TextEncoder::new();
     let metric_families = prometheus::gather();
     let mut buffer = Vec::new();
-    encoder.encode(&metric_families, &mut buffer).unwrap_or_default();
+    encoder
+        .encode(&metric_families, &mut buffer)
+        .unwrap_or_default();
     String::from_utf8(buffer).unwrap_or_default()
 }
 

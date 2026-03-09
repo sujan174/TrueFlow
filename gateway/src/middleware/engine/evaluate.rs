@@ -1,8 +1,11 @@
 use serde_json::Value;
 
-use crate::models::policy::{Condition, Operator};
 use super::super::fields::{self, RequestContext};
-use super::operators::{values_equal, compare_numeric, check_in, check_glob, check_regex, check_contains, check_starts_with, check_ends_with};
+use super::operators::{
+    check_contains, check_ends_with, check_glob, check_in, check_regex, check_starts_with,
+    compare_numeric, values_equal,
+};
+use crate::models::policy::{Condition, Operator};
 
 pub fn evaluate_condition(condition: &Condition, ctx: &RequestContext<'_>) -> bool {
     match condition {

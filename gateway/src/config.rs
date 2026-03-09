@@ -33,8 +33,8 @@ impl Config {
 pub fn load() -> anyhow::Result<Config> {
     dotenvy::dotenv().ok();
 
-    let master_key = std::env::var("TRUEFLOW_MASTER_KEY")
-        .unwrap_or_else(|_| "CHANGE_ME_32_BYTE_HEX_KEY".into());
+    let master_key =
+        std::env::var("TRUEFLOW_MASTER_KEY").unwrap_or_else(|_| "CHANGE_ME_32_BYTE_HEX_KEY".into());
 
     if master_key == "CHANGE_ME_32_BYTE_HEX_KEY" {
         let env_mode = std::env::var("TRUEFLOW_ENV")

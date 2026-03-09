@@ -23,16 +23,16 @@ export const columns: ColumnDef<Token>[] = [
                 <Button
                     variant="ghost"
                     size="sm"
-                    className="-ml-3 h-8 data-[state=open]:bg-accent"
+                    className="-ml-3 h-8 hover:bg-white/5 hover:text-white data-[state=open]:bg-white/5"
                     onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
                 >
                     Created
-                    <ArrowUpDown className="ml-2 h-4 w-4" />
+                    <ArrowUpDown className="ml-2 h-3 w-3" />
                 </Button>
             )
         },
         cell: ({ row }) => (
-            <div className="text-muted-foreground text-xs whitespace-nowrap font-mono">
+            <div className="text-zinc-500 text-[11px] whitespace-nowrap font-mono tracking-tight">
                 {formatDistanceToNow(new Date(row.getValue("created_at")), { addSuffix: true })}
             </div>
         ),
@@ -40,21 +40,22 @@ export const columns: ColumnDef<Token>[] = [
     {
         accessorKey: "name",
         header: "Name",
-        cell: ({ row }) => <div className="font-medium text-sm">{row.getValue("name")}</div>,
+        cell: ({ row }) => <div className="font-medium text-[13px] text-zinc-200">{row.getValue("name")}</div>,
     },
     {
         accessorKey: "id",
         header: "Token ID",
         cell: ({ row }) => (
             <div className="flex items-center gap-2">
-                <code className="relative rounded bg-muted/50 px-[0.3rem] py-[0.2rem] font-mono text-[10px] text-muted-foreground">
+                <code className="relative rounded bg-white/[0.03] border border-white/10 px-1.5 py-0.5 font-mono text-[10px] text-zinc-400">
                     {row.getValue("id")}
                 </code>
                 <Button
                     variant="ghost"
                     size="icon"
-                    className="h-5 w-5 opacity-50 hover:opacity-100"
-                    onClick={() => {
+                    className="h-5 w-5 opacity-0 group-hover:opacity-100 hover:bg-white/10 text-zinc-500 hover:text-white transition-all"
+                    onClick={(e) => {
+                        e.stopPropagation();
                         navigator.clipboard.writeText(row.getValue("id"));
                         toast.success("Copied Token ID");
                     }}
@@ -68,8 +69,8 @@ export const columns: ColumnDef<Token>[] = [
         accessorKey: "credential_id",
         header: "Credential",
         cell: ({ row }) => (
-            <code className="relative rounded bg-muted/30 px-[0.3rem] py-[0.2rem] font-mono text-[10px] text-muted-foreground truncate max-w-[120px]" title={row.getValue("credential_id")}>
-                {row.getValue("credential_id")}
+            <code className="relative rounded bg-white/[0.02] border border-white/[0.05] px-1.5 py-0.5 font-mono text-[10px] text-zinc-500 truncate max-w-[120px]" title={row.getValue("credential_id")}>
+                {row.getValue("credential_id") || "passthrough"}
             </code>
         ),
     },
@@ -79,10 +80,12 @@ export const columns: ColumnDef<Token>[] = [
         cell: ({ row }) => {
             const isActive = row.getValue("is_active") as boolean;
             return (
-                <Badge variant={isActive ? "success" : "secondary"} className="h-5 px-1.5 text-[10px]">
-                    <span className={`mr-1.5 h-1.5 w-1.5 rounded-full ${isActive ? "bg-emerald-500" : "bg-zinc-500"}`} />
-                    {isActive ? "Active" : "Revoked"}
-                </Badge>
+                <div className="flex items-center gap-2">
+                    <div className={`h-1.5 w-1.5 rounded-full ${isActive ? "bg-white shadow-[0_0_8px_rgba(255,255,255,0.5)]" : "bg-zinc-700"}`} />
+                    <span className="text-[11px] font-medium uppercase tracking-wider text-zinc-400">
+                        {isActive ? "Active" : "Revoked"}
+                    </span>
+                </div>
             )
         },
     },
@@ -95,30 +98,35 @@ export const columns: ColumnDef<Token>[] = [
             return (
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-8 w-8">
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-500 hover:text-white hover:bg-white/5">
                             <MoreHorizontal className="h-4 w-4" />
                         </Button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
+                    <DropdownMenuContent align="end" className="bg-zinc-950 border-white/10 text-white">
                         <DropdownMenuItem
-                            onClick={() => {
+                            onClick={(e) => {
+                                e.stopPropagation();
                                 navigator.clipboard.writeText(token.id);
                                 toast.success("Copied");
                             }}
+                            className="focus:bg-white/5 focus:text-white cursor-pointer"
                         >
                             <Copy className="mr-2 h-3.5 w-3.5" />
                             Copy ID
                         </DropdownMenuItem>
-                        <DropdownMenuItem asChild>
-                            <Link href={`/analytics/token/${token.id}`} className="cursor-pointer">
+                        <DropdownMenuItem asChild className="focus:bg-white/5 focus:text-white cursor-pointer">
+                            <Link href={`/analytics/token/${token.id}`} onClick={(e) => e.stopPropagation()}>
                                 <BarChart className="mr-2 h-3.5 w-3.5" />
                                 View Analytics
                             </Link>
                         </DropdownMenuItem>
                         {token.is_active && (
                             <DropdownMenuItem
-                                className="text-destructive focus:text-destructive"
-                                onClick={() => meta?.onRevoke?.(token)}
+                                className="text-rose-400 focus:text-rose-300 focus:bg-rose-500/10 cursor-pointer"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    meta?.onRevoke?.(token);
+                                }}
                             >
                                 <Trash2 className="mr-2 h-3.5 w-3.5" />
                                 Revoke Token

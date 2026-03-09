@@ -47,7 +47,9 @@ impl TieredCache {
     pub async fn get<T: DeserializeOwned>(&self, key: &str) -> Option<T> {
         // tier 1: in-memory (with TTL check)
         // Use remove_if for atomic check-and-remove to avoid TOCTOU race
-        let expired = self.local.remove_if(key, |_, entry| Instant::now() >= entry.expires_at);
+        let expired = self
+            .local
+            .remove_if(key, |_, entry| Instant::now() >= entry.expires_at);
         if expired.is_some() {
             // Entry was expired and removed, fall through to Redis
         } else if let Some(entry) = self.local.get(key) {
@@ -150,7 +152,11 @@ impl TieredCache {
     /// 2. ZREMRANGEBYSCORE: Remove entries older than window
     /// 3. EXPIRE: Set TTL on the key
     /// 4. ZCARD: Return count of entries in window
-    pub async fn increment_sliding_window(&self, key: &str, window_secs: u64) -> anyhow::Result<u64> {
+    pub async fn increment_sliding_window(
+        &self,
+        key: &str,
+        window_secs: u64,
+    ) -> anyhow::Result<u64> {
         let mut conn = self.redis.clone();
 
         // Get current time in milliseconds for the score

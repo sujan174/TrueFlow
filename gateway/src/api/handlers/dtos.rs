@@ -46,8 +46,8 @@ impl CreateTokenRequest {
         if let Some(ref name) = self.log_level_str {
             return match name.as_str() {
                 "metadata" => Some(0),
-                "redacted"  => Some(1),
-                "full"      => Some(2),
+                "redacted" => Some(1),
+                "full" => Some(2),
                 _ => self.log_level_num,
             };
         }
@@ -128,12 +128,11 @@ pub struct SetSpendCapRequest {
     pub spend_cap_usd: rust_decimal::Decimal,
 }
 
-
 // ── Policy / Credential DTOs ────────────────────────────────
 #[derive(Deserialize)]
 pub struct CreatePolicyRequest {
     pub name: String,
-    pub mode: Option<String>, // "enforce" | "shadow", defaults to "enforce"
+    pub mode: Option<String>,  // "enforce" | "shadow", defaults to "enforce"
     pub phase: Option<String>, // "pre" | "post", defaults to "pre"
     pub rules: serde_json::Value,
     pub retry: Option<serde_json::Value>,
@@ -201,7 +200,6 @@ pub struct CreateServiceRequest {
     pub project_id: Option<Uuid>,
 }
 
-
 // ── API Key DTOs ────────────────────────────────────────────
 #[derive(Deserialize)]
 pub struct CreateApiKeyRequest {
@@ -230,7 +228,7 @@ pub struct WhoAmIResponse {
 // ── Spend Cap DTOs ──────────────────────────────────────────
 #[derive(Deserialize)]
 pub struct UpsertSpendCapRequest {
-    pub period: String,      // "daily" | "monthly"
+    pub period: String, // "daily" | "monthly"
     pub limit_usd: f64,
 }
 
@@ -285,7 +283,6 @@ pub struct PricingEntryResponse {
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
 }
-
 
 // ── Settings DTOs ───────────────────────────────────────────
 #[derive(serde::Deserialize)]

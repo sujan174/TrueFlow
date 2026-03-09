@@ -85,8 +85,9 @@ export default function ProjectSettingsPage() {
             const result = await purgeProjectData(project.id);
             toast.success(result.message || "Project data purged");
             setPurgeConfirmation("");
-        } catch (e: any) {
-            toast.error(e.message || "Purge failed");
+        } catch (e: unknown) {
+            const err = e as Error;
+            toast.error(err.message || "Purge failed");
         } finally {
             setIsPurging(false);
         }
@@ -101,7 +102,7 @@ export default function ProjectSettingsPage() {
                 <CardHeader>
                     <CardTitle>General</CardTitle>
                     <CardDescription>
-                        Update your project's display name and view unique identifiers.
+                        Update your project&apos;s display name and view unique identifiers.
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">

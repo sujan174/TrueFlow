@@ -1,29 +1,24 @@
+mod bedrock;
+mod error;
+mod headers;
 mod request;
 mod response;
 mod streaming;
-mod bedrock;
 mod url_rewrite;
-mod headers;
-mod error;
 
 #[cfg(test)]
 mod tests;
 
 // ── Public API re-exports ──────────────────────────────────────────────
+pub(crate) use self::bedrock::decode_bedrock_event_stream;
+pub(crate) use self::error::normalize_error_response;
+pub(crate) use self::headers::inject_provider_headers;
 pub(crate) use self::request::translate_request;
 pub(crate) use self::response::translate_response;
 pub(crate) use self::streaming::{
-    openai_sse_chunk,
-    translate_anthropic_sse_to_openai, translate_gemini_sse_to_openai,
+    openai_sse_chunk, translate_anthropic_sse_to_openai, translate_gemini_sse_to_openai,
 };
-pub(crate) use self::bedrock::decode_bedrock_event_stream;
 pub(crate) use self::url_rewrite::rewrite_upstream_url;
-pub(crate) use self::headers::inject_provider_headers;
-pub(crate) use self::error::normalize_error_response;
-
-#[cfg(test)]
-pub(crate) use self::bedrock::build_test_bedrock_event;
-
 
 /// Supported LLM providers for request/response translation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -121,7 +116,8 @@ pub fn detect_provider(model: &str, upstream_url: &str) -> Provider {
             }
             // 'q' → Qwen/* (Together)
             b'q' if starts_with_ignore_ascii_case(model, "Qwen/")
-                || starts_with_ignore_ascii_case(model, "qwen/") => {
+                || starts_with_ignore_ascii_case(model, "qwen/") =>
+            {
                 return Provider::TogetherAI;
             }
             // 't' → text-* / tts-*
@@ -204,8 +200,5 @@ pub fn detect_provider(model: &str, upstream_url: &str) -> Provider {
 /// Case-insensitive ASCII prefix check without allocating.
 #[inline(always)]
 fn starts_with_ignore_ascii_case(s: &str, prefix: &str) -> bool {
-    s.len() >= prefix.len()
-        && s.as_bytes()[..prefix.len()]
-            .eq_ignore_ascii_case(prefix.as_bytes())
+    s.len() >= prefix.len() && s.as_bytes()[..prefix.len()].eq_ignore_ascii_case(prefix.as_bytes())
 }
-

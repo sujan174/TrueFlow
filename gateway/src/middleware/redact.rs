@@ -33,7 +33,8 @@ static SSN_RE: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"\b\d{3}-\d{2}-\d{4}\b|\b\d{9}\b").unwrap()
 });
 
-static CREDIT_CARD_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\b(?:\d{4}[ -]){3}\d{1,7}\b|\b\d{15,16}\b").unwrap());
+static CREDIT_CARD_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"\b(?:\d{4}[ -]){3}\d{1,7}\b|\b\d{15,16}\b").unwrap());
 
 static API_KEY_RE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"(?i)\b(sk-[a-zA-Z0-9_\-\.]{20,})\b").unwrap());
@@ -42,9 +43,8 @@ static PHONE_RE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"\b\+?1?[-. ]?\(?\d{3}\)?[-. ]?\d{3}[-. ]?\d{4}\b").unwrap());
 
 // Phase 6: Extended PII patterns for healthcare/finance
-static IBAN_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"\b[A-Z]{2}\d{2}[A-Z0-9]{4}\d{7}(?:[A-Z0-9]{0,16})\b").unwrap()
-});
+static IBAN_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"\b[A-Z]{2}\d{2}[A-Z0-9]{4}\d{7}(?:[A-Z0-9]{0,16})\b").unwrap());
 
 static DOB_RE: Lazy<Regex> = Lazy::new(|| {
     // MM/DD/YYYY or DD-MM-YYYY — common date-of-birth formats
@@ -62,14 +62,10 @@ static PASSPORT_RE: Lazy<Regex> = Lazy::new(|| {
     //   Chinese/Indian: 1 letter + 7-8 digits (E12345678, B1234567)
     //   German/Czech: letter + 2 digits + letter + 2 digits + letter + 2 digits (C01X00T47)
     // Requires all-uppercase to avoid matching model version strings like "v12345678".
-    Regex::new(
-        r"\b[A-Z]{2}\d{7,9}\b|\b[A-Z]\d{7,8}\b|\b[A-Z]\d{2}[A-Z]\d{2}[A-Z]\d{2}\b"
-    ).unwrap()
+    Regex::new(r"\b[A-Z]{2}\d{7,9}\b|\b[A-Z]\d{7,8}\b|\b[A-Z]\d{2}[A-Z]\d{2}[A-Z]\d{2}\b").unwrap()
 });
 
-static AWS_KEY_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"\b(AKIA[A-Z0-9]{16})\b").unwrap()
-});
+static AWS_KEY_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\b(AKIA[A-Z0-9]{16})\b").unwrap());
 
 static DL_RE: Lazy<Regex> = Lazy::new(|| {
     // BUG-05 FIX: Tighter — 1 letter + 7-12 digits (minimum 7 to avoid A100, B2345, etc.).
@@ -175,9 +171,9 @@ pub fn apply_redact(body: &mut Value, action: &Action, is_request: bool) -> Reda
 
     // Direction check: should we redact in this phase?
     let should_run = match direction {
-        RedactDirection::Request  => is_request,
+        RedactDirection::Request => is_request,
         RedactDirection::Response => !is_request,
-        RedactDirection::Both     => true,
+        RedactDirection::Both => true,
     };
 
     if !should_run {
@@ -199,7 +195,10 @@ pub fn apply_redact(body: &mut Value, action: &Action, is_request: bool) -> Reda
 
     let should_block = !matched.is_empty() && *on_match == RedactOnMatch::Block;
 
-    RedactResult { matched_types: matched, should_block }
+    RedactResult {
+        matched_types: matched,
+        should_block,
+    }
 }
 
 /// Compile pattern names into (regex, replacement, name) tuples.
@@ -278,7 +277,9 @@ fn redact_fields(v: &mut Value, fields: &[String], matched: &mut Vec<String>) {
 
 /// Compile pattern names into `PiiPattern` structs for the tokenization vault.
 /// Reuses the same builtin pattern registry as `compile_patterns`.
-pub fn compile_pii_patterns(pattern_names: &[String]) -> Vec<crate::middleware::pii_vault::PiiPattern> {
+pub fn compile_pii_patterns(
+    pattern_names: &[String],
+) -> Vec<crate::middleware::pii_vault::PiiPattern> {
     pattern_names
         .iter()
         .filter_map(|p| {
@@ -328,9 +329,9 @@ pub async fn apply_redact_tokenize(
 
     // Direction check
     let should_run = match direction {
-        RedactDirection::Request  => is_request,
+        RedactDirection::Request => is_request,
         RedactDirection::Response => !is_request,
-        RedactDirection::Both     => true,
+        RedactDirection::Both => true,
     };
 
     if !should_run {
@@ -343,8 +344,14 @@ pub async fn apply_redact_tokenize(
     if !patterns.is_empty() {
         let pii_patterns = compile_pii_patterns(patterns);
         let tok_result = crate::middleware::pii_vault::tokenize_in_value(
-            body, &pii_patterns, project_id, audit_log_id, pool, vault,
-        ).await;
+            body,
+            &pii_patterns,
+            project_id,
+            audit_log_id,
+            pool,
+            vault,
+        )
+        .await;
         matched.extend(tok_result.matched_types);
     }
 
@@ -353,7 +360,10 @@ pub async fn apply_redact_tokenize(
         redact_fields(body, fields, &mut matched);
     }
 
-    RedactResult { matched_types: matched, should_block: false }
+    RedactResult {
+        matched_types: matched,
+        should_block: false,
+    }
 }
 
 /// Collected header mutations from Transform actions.
@@ -395,7 +405,13 @@ pub fn apply_transform(body: &mut Value, header_mutations: &mut HeaderMutations,
     match op {
         TransformOp::SetHeader { name, value } => {
             // SEC: Block reserved headers to prevent credential injection override
-            let reserved = ["authorization", "host", "cookie", "set-cookie", "x-admin-key"];
+            let reserved = [
+                "authorization",
+                "host",
+                "cookie",
+                "set-cookie",
+                "x-admin-key",
+            ];
             if reserved.contains(&name.to_lowercase().as_str()) {
                 tracing::warn!(header = %name, "transform: blocked reserved header");
                 return;
@@ -415,7 +431,11 @@ pub fn apply_transform(body: &mut Value, header_mutations: &mut HeaderMutations,
             tracing::info!("transform: prepend system prompt");
             prepend_system_prompt(body, text);
         }
-        TransformOp::RegexReplace { pattern, replacement, global } => {
+        TransformOp::RegexReplace {
+            pattern,
+            replacement,
+            global,
+        } => {
             tracing::info!(pattern = %pattern, "transform: regex replace");
             // B-REDACT-1 FIX: Use size_limit to prevent ReDoS attacks
             if let Ok(re) = regex::RegexBuilder::new(pattern)
@@ -435,7 +455,11 @@ pub fn apply_transform(body: &mut Value, header_mutations: &mut HeaderMutations,
             tracing::info!(path = %path, "transform: remove body field");
             remove_body_field_by_path(body, path);
         }
-        TransformOp::AddToMessageList { role, content, position } => {
+        TransformOp::AddToMessageList {
+            role,
+            content,
+            position,
+        } => {
             tracing::info!(role = %role, position = %position, "transform: add to message list");
             add_to_message_list(body, role, content, position);
         }
@@ -527,10 +551,13 @@ fn prepend_system_prompt(body: &mut Value, text: &str) {
             }
         }
         // No system message — insert at position 0
-        messages.insert(0, serde_json::json!({
-            "role": "system",
-            "content": text
-        }));
+        messages.insert(
+            0,
+            serde_json::json!({
+                "role": "system",
+                "content": text
+            }),
+        );
         return;
     }
 
@@ -587,7 +614,9 @@ fn set_body_field_by_path(body: &mut Value, path: &str, value: Value) {
     } else {
         // Recurse into nested object, creating it if absent
         if let Some(obj) = body.as_object_mut() {
-            let child = obj.entry(parts[0]).or_insert(Value::Object(Default::default()));
+            let child = obj
+                .entry(parts[0])
+                .or_insert(Value::Object(Default::default()));
             set_body_field_by_path(child, parts[1], value);
         }
     }
@@ -821,8 +850,18 @@ mod tests {
         let mut body_req = json!({"email": "a@b.com"});
         let mut body_resp = json!({"email": "c@d.com"});
 
-        assert_eq!(apply_redact(&mut body_req, &action, true).matched_types.len(), 1);
-        assert_eq!(apply_redact(&mut body_resp, &action, false).matched_types.len(), 1);
+        assert_eq!(
+            apply_redact(&mut body_req, &action, true)
+                .matched_types
+                .len(),
+            1
+        );
+        assert_eq!(
+            apply_redact(&mut body_resp, &action, false)
+                .matched_types
+                .len(),
+            1
+        );
     }
 
     // ── Transform: AppendSystemPrompt ────────────────────────
@@ -980,7 +1019,10 @@ mod tests {
                 value: "Bearer stolen-token".to_string(),
             },
         );
-        assert!(mutations.inserts.is_empty(), "Authorization header must be blocked");
+        assert!(
+            mutations.inserts.is_empty(),
+            "Authorization header must be blocked"
+        );
     }
 
     #[test]
@@ -1010,7 +1052,10 @@ mod tests {
                 value: "session=hijacked".to_string(),
             },
         );
-        assert!(mutations.inserts.is_empty(), "Cookie header must be blocked");
+        assert!(
+            mutations.inserts.is_empty(),
+            "Cookie header must be blocked"
+        );
     }
 
     #[test]
@@ -1025,7 +1070,10 @@ mod tests {
                 value: "admin-override".to_string(),
             },
         );
-        assert!(mutations.inserts.is_empty(), "X-Admin-Key header must be blocked");
+        assert!(
+            mutations.inserts.is_empty(),
+            "X-Admin-Key header must be blocked"
+        );
     }
 
     #[test]
@@ -1040,7 +1088,11 @@ mod tests {
                 value: "abc-123".to_string(),
             },
         );
-        assert_eq!(mutations.inserts.len(), 1, "Non-reserved header should be allowed");
+        assert_eq!(
+            mutations.inserts.len(),
+            1,
+            "Non-reserved header should be allowed"
+        );
     }
 
     // ── redact_for_logging ────────────────────────────────────
@@ -1051,10 +1103,22 @@ mod tests {
             "message": "My SSN is 123-45-6789 and email is test@example.com"
         }));
         let result = redact_for_logging(&body).unwrap();
-        assert!(result.contains("[REDACTED_SSN]"), "SSN should be redacted for logging");
-        assert!(result.contains("[REDACTED_EMAIL]"), "Email should be redacted for logging");
-        assert!(!result.contains("123-45-6789"), "Raw SSN must not appear in logged output");
-        assert!(!result.contains("test@example.com"), "Raw email must not appear in logged output");
+        assert!(
+            result.contains("[REDACTED_SSN]"),
+            "SSN should be redacted for logging"
+        );
+        assert!(
+            result.contains("[REDACTED_EMAIL]"),
+            "Email should be redacted for logging"
+        );
+        assert!(
+            !result.contains("123-45-6789"),
+            "Raw SSN must not appear in logged output"
+        );
+        assert!(
+            !result.contains("test@example.com"),
+            "Raw email must not appear in logged output"
+        );
     }
 
     #[test]
@@ -1082,8 +1146,15 @@ mod tests {
             },
         );
         let sys = body["messages"][0]["content"].as_str().unwrap();
-        assert!(sys.starts_with("IMPORTANT CONTEXT:"), "Prepend should come first: {}", sys);
-        assert!(sys.contains("You are helpful."), "Original content must be preserved");
+        assert!(
+            sys.starts_with("IMPORTANT CONTEXT:"),
+            "Prepend should come first: {}",
+            sys
+        );
+        assert!(
+            sys.contains("You are helpful."),
+            "Original content must be preserved"
+        );
     }
 
     #[test]
@@ -1144,7 +1215,10 @@ mod tests {
             },
         );
         let content = body["messages"][0]["content"].as_str().unwrap();
-        assert_eq!(content, "XXX bar foo baz foo", "Non-global should replace only first match");
+        assert_eq!(
+            content, "XXX bar foo baz foo",
+            "Non-global should replace only first match"
+        );
     }
 
     // ── Transform: SetBodyField / RemoveBodyField ─────────────
@@ -1190,7 +1264,10 @@ mod tests {
                 path: "stream".to_string(),
             },
         );
-        assert!(body.get("stream").is_none(), "stream field should be removed");
+        assert!(
+            body.get("stream").is_none(),
+            "stream field should be removed"
+        );
         assert_eq!(body["model"], "gpt-4", "Other fields must be preserved");
     }
 

@@ -34,7 +34,10 @@ pub async fn robust_request(
                     let elapsed = start.elapsed();
                     warn!(
                         "Retry time budget exhausted after {:?} ({} attempts) for {} {}",
-                        elapsed, attempt - 1, method, url
+                        elapsed,
+                        attempt - 1,
+                        method,
+                        url
                     );
                     anyhow::bail!(
                         "Retry time budget of {}ms exceeded after {} attempts (elapsed: {:?})",
@@ -55,7 +58,7 @@ pub async fn robust_request(
         match execute_attempt(req_builder).await {
             Ok(response) => {
                 let status = response.status();
-                
+
                 // If success (not a retryable error code), return immediately
                 if !config.status_codes.contains(&status.as_u16()) {
                     return Ok(response);
@@ -84,7 +87,7 @@ pub async fn robust_request(
                         return Ok(response);
                     }
                 }
-                
+
                 warn!(
                     "Attempt {}/{} failed with status {}. Retrying in {:?}...",
                     attempt,
@@ -162,7 +165,7 @@ fn calculate_wait_time(response: &Response, config: &RetryConfig, attempt: u32) 
 fn calculate_backoff(config: &RetryConfig, attempt: u32) -> Duration {
     let base = config.base_backoff_ms as f64;
     let max = config.max_backoff_ms as f64;
-    
+
     // Exponential: base * 2^(attempt - 1)
     let raw_backoff = base * 2_f64.powi((attempt as i32) - 1);
     let capped_backoff = raw_backoff.min(max);
@@ -176,7 +179,7 @@ fn calculate_backoff(config: &RetryConfig, attempt: u32) -> Duration {
         return Duration::from_millis(0);
     }
     let jittered = rand::thread_rng().gen_range(0..=capped_ms);
-    
+
     Duration::from_millis(jittered)
 }
 
@@ -189,7 +192,7 @@ mod tests {
     #[tokio::test]
     async fn test_retry_on_500_succeeds() {
         let mock_server = MockServer::start().await;
-        
+
         // Fail twice with 500, then succeed
         Mock::given(method("GET"))
             .and(path("/test"))
@@ -206,15 +209,17 @@ mod tests {
 
         let client = Client::new();
         let config = RetryConfig::default(); // 3 retries
-        
+
         let res = robust_request(
             &client,
             Method::GET,
             &format!("{}/test", mock_server.uri()),
             reqwest::header::HeaderMap::new(),
             Bytes::new(),
-            &config
-        ).await.unwrap();
+            &config,
+        )
+        .await
+        .unwrap();
 
         assert_eq!(res.status(), 200);
     }
@@ -242,8 +247,7 @@ mod tests {
         Mock::given(method("POST"))
             .and(path("/v1/chat/completions"))
             .respond_with(
-                ResponseTemplate::new(200)
-                    .set_body_string(r#"{"id":"chatcmpl-ok","choices":[]}"#),
+                ResponseTemplate::new(200).set_body_string(r#"{"id":"chatcmpl-ok","choices":[]}"#),
             )
             .expect(1)
             .mount(&mock_server)
@@ -302,15 +306,22 @@ mod tests {
         let config = RetryConfig {
             max_retries: 3,
             status_codes: vec![429, 500, 502, 503],
-            base_backoff_ms: 10, max_backoff_ms: 100, jitter_ms: 0,
+            base_backoff_ms: 10,
+            max_backoff_ms: 100,
+            jitter_ms: 0,
             max_total_timeout_ms: None,
         };
 
         let resp = robust_request(
-            &client, Method::POST,
+            &client,
+            Method::POST,
             &format!("{}/v1/chat/completions", mock_server.uri()),
-            reqwest::header::HeaderMap::new(), Bytes::from("{}"), &config,
-        ).await.expect("should succeed after 502 retries");
+            reqwest::header::HeaderMap::new(),
+            Bytes::from("{}"),
+            &config,
+        )
+        .await
+        .expect("should succeed after 502 retries");
 
         assert_eq!(resp.status(), 200);
     }
@@ -331,16 +342,27 @@ mod tests {
         let config = RetryConfig {
             max_retries: 2,
             status_codes: vec![429],
-            base_backoff_ms: 10, max_backoff_ms: 50, jitter_ms: 0,
+            base_backoff_ms: 10,
+            max_backoff_ms: 50,
+            jitter_ms: 0,
             max_total_timeout_ms: None,
         };
 
         let resp = robust_request(
-            &client, Method::POST,
+            &client,
+            Method::POST,
             &format!("{}/v1/chat/completions", mock_server.uri()),
-            reqwest::header::HeaderMap::new(), Bytes::from("{}"), &config,
-        ).await.expect("should return last response even on exhaustion");
+            reqwest::header::HeaderMap::new(),
+            Bytes::from("{}"),
+            &config,
+        )
+        .await
+        .expect("should return last response even on exhaustion");
 
-        assert_eq!(resp.status(), 429, "Should return last 429 after retries exhausted");
+        assert_eq!(
+            resp.status(),
+            429,
+            "Should return last 429 after retries exhausted"
+        );
     }
 }

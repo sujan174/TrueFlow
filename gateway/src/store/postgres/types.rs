@@ -11,7 +11,6 @@ pub struct SpendByDimension {
     pub total_completion_tokens: i64,
 }
 
-
 // -- Input structs --
 
 pub struct NewCredential {

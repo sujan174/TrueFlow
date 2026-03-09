@@ -30,9 +30,18 @@ pub fn extract_usage(_upstream_url: &str, body: &[u8]) -> anyhow::Result<Option<
 
     // Gemini: usageMetadata
     if let Some(meta) = json.get("usageMetadata") {
-        let input = meta.get("promptTokenCount").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
-        let cached = meta.get("cachedContentTokenCount").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
-        let output = meta.get("candidatesTokenCount").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+        let input = meta
+            .get("promptTokenCount")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0) as u32;
+        let cached = meta
+            .get("cachedContentTokenCount")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0) as u32;
+        let output = meta
+            .get("candidatesTokenCount")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0) as u32;
         // Combine uncached prompt tokens with cached tokens for billing
         let total_input = input.saturating_add(cached);
         if total_input > 0 || output > 0 {
@@ -263,10 +272,12 @@ pub fn get_model_pricing_fallback(provider: &str, model: &str) -> ModelPricing {
 
         // ── Bedrock (facade — map to underlying model pricing) ───
         // Bedrock models use provider-prefixed names like anthropic.claude-*
-        ("bedrock", m) if m.contains("claude-3-5-sonnet") || m.contains("claude-3-7-sonnet") => ModelPricing {
-            input_cost_per_m: d("3.00"),
-            output_cost_per_m: d("15.00"),
-        },
+        ("bedrock", m) if m.contains("claude-3-5-sonnet") || m.contains("claude-3-7-sonnet") => {
+            ModelPricing {
+                input_cost_per_m: d("3.00"),
+                output_cost_per_m: d("15.00"),
+            }
+        }
         ("bedrock", m) if m.contains("claude-3-5-haiku") => ModelPricing {
             input_cost_per_m: d("0.80"),
             output_cost_per_m: d("4.00"),
@@ -303,7 +314,7 @@ pub fn get_model_pricing_fallback(provider: &str, model: &str) -> ModelPricing {
                 input_cost_per_m: d("1.00"),
                 output_cost_per_m: d("3.00"),
             }
-        },
+        }
     }
 }
 
@@ -362,7 +373,10 @@ mod tests {
         // BUG-3: gpt-4o-mini must match its own rule, not gpt-4o's
         let pricing = get_model_pricing_fallback("openai", "gpt-4o-mini-2024-07-18");
         assert_eq!(pricing.input_cost_per_m, Decimal::from_str("0.15").unwrap());
-        assert_eq!(pricing.output_cost_per_m, Decimal::from_str("0.60").unwrap());
+        assert_eq!(
+            pricing.output_cost_per_m,
+            Decimal::from_str("0.60").unwrap()
+        );
     }
 
     #[test]
@@ -390,7 +404,12 @@ mod tests {
     #[test]
     fn test_sonnet_cost() {
         // claude-3-5-sonnet: $3/$15 per 1M → 1M each = $18
-        let cost = calculate_cost("anthropic", "claude-3-5-sonnet-20240620", 1_000_000, 1_000_000);
+        let cost = calculate_cost(
+            "anthropic",
+            "claude-3-5-sonnet-20240620",
+            1_000_000,
+            1_000_000,
+        );
         assert_eq!(cost, Decimal::from_str("18.00").unwrap());
     }
 
@@ -468,7 +487,8 @@ mod tests {
     #[test]
     fn test_extract_usage_gemini() {
         let body = r#"{"usageMetadata":{"promptTokenCount":300,"candidatesTokenCount":120}}"#;
-        let result = extract_usage("https://generativelanguage.googleapis.com", body.as_bytes()).unwrap();
+        let result =
+            extract_usage("https://generativelanguage.googleapis.com", body.as_bytes()).unwrap();
         assert_eq!(result, Some((300, 120)));
     }
 

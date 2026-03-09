@@ -126,14 +126,9 @@ impl LangfuseExporter {
                     }
                     buf.drain(..).collect()
                 };
-                if let Err(e) = Self::flush_batch(
-                    &flush_client,
-                    &flush_host,
-                    &flush_pk,
-                    &flush_sk,
-                    events,
-                )
-                .await
+                if let Err(e) =
+                    Self::flush_batch(&flush_client, &flush_host, &flush_pk, &flush_sk, events)
+                        .await
                 {
                     tracing::warn!("Langfuse flush failed: {}", e);
                 }
@@ -162,10 +157,7 @@ impl LangfuseExporter {
         let generation = LangfuseGeneration {
             id: format!("gen-{}", entry.request_id),
             trace_id: trace_id.clone(),
-            name: entry
-                .model
-                .clone()
-                .unwrap_or_else(|| "unknown".to_string()),
+            name: entry.model.clone().unwrap_or_else(|| "unknown".to_string()),
             model: entry.model.clone(),
             start_time: start_time.to_rfc3339(),
             end_time: end_time.to_rfc3339(),

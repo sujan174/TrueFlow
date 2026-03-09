@@ -92,10 +92,22 @@ export function MobileNav() {
     const { theme, setTheme } = useTheme();
 
     // Wait for client mount before rendering portal
-    useEffect(() => { setMounted(true); }, []);
+    useEffect(() => {
+        let active = true;
+        setTimeout(() => {
+            if (active) setMounted(true);
+        }, 0);
+        return () => { active = false; };
+    }, []);
 
     // Close on navigation
-    useEffect(() => { setOpen(false); }, [pathname]);
+    useEffect(() => {
+        let active = true;
+        setTimeout(() => {
+            if (active) setOpen(false);
+        }, 0);
+        return () => { active = false; };
+    }, [pathname]);
 
     // Lock body scroll when open
     useEffect(() => {

@@ -106,9 +106,7 @@ pub struct AsyncGuardrailViolation {
 }
 
 /// Emit an async guardrail violation to structured logs + optional webhook.
-pub async fn emit_async_violation(
-    violation: AsyncGuardrailViolation,
-) {
+pub async fn emit_async_violation(violation: AsyncGuardrailViolation) {
     tracing::warn!(
         event_type = "async_guardrail_violation",
         token_id = %violation.token_id,

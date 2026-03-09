@@ -64,7 +64,11 @@ pub async fn run_budget_check(pool: &PgPool) -> Result<()> {
     .fetch_all(pool)
     .await?;
 
-    debug!(count = rows.len(), "budget_check: checking {} active budget(s)", rows.len());
+    debug!(
+        count = rows.len(),
+        "budget_check: checking {} active budget(s)",
+        rows.len()
+    );
 
     if rows.is_empty() {
         return Ok(());
@@ -87,7 +91,11 @@ pub async fn run_budget_check(pool: &PgPool) -> Result<()> {
         // Parse webhook URLs from JSON array
         let webhook_urls: Vec<String> = webhooks
             .as_array()
-            .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str().map(String::from))
+                    .collect()
+            })
             .unwrap_or_default();
 
         // --- Warn threshold check ---

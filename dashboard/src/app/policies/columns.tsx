@@ -82,7 +82,7 @@ export const columns: ColumnDef<Policy>[] = [
             <Button
                 variant="ghost"
                 size="sm"
-                className="h-8 px-2 -ml-2"
+                className="-ml-3 h-8 hover:bg-white/5 hover:text-white data-[state=open]:bg-white/5"
                 onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
             >
                 Policy
@@ -94,12 +94,12 @@ export const columns: ColumnDef<Policy>[] = [
             const actionTypes = getActionIcons(policy.rules);
             return (
                 <div className="flex items-center gap-3 min-w-[200px]">
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary/10 border border-primary/20">
-                        {actionTypes.length > 0 ? <ActionIcon type={actionTypes[0]} /> : <ShieldAlert className="h-3.5 w-3.5 text-primary" />}
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-white/[0.02] border border-white/[0.05]">
+                        {actionTypes.length > 0 ? <ActionIcon type={actionTypes[0]} /> : <ShieldAlert className="h-3.5 w-3.5 text-zinc-500" />}
                     </div>
                     <div className="min-w-0">
-                        <p className="font-medium text-sm truncate">{policy.name}</p>
-                        <p className="text-[11px] text-muted-foreground truncate">
+                        <p className="font-medium text-[13px] text-zinc-200 truncate">{policy.name}</p>
+                        <p className="text-[11px] text-zinc-500 truncate mt-0.5">
                             {getRulesSummary(policy.rules)}
                         </p>
                     </div>
@@ -128,13 +128,13 @@ export const columns: ColumnDef<Policy>[] = [
         header: "Actions",
         cell: ({ row }) => {
             const actionTypes = getActionIcons(row.original.rules);
-            if (actionTypes.length === 0) return <span className="text-muted-foreground text-xs">—</span>;
+            if (actionTypes.length === 0) return <span className="text-zinc-600 text-xs">—</span>;
             return (
                 <div className="flex items-center gap-1">
                     {actionTypes.map((type) => (
-                        <div key={type} className="flex items-center gap-1 rounded-md bg-muted/50 px-1.5 py-0.5" title={type}>
+                        <div key={type} className="flex items-center gap-1 rounded bg-white/[0.03] border border-white/5 px-1.5 py-0.5" title={type}>
                             <ActionIcon type={type} />
-                            <span className="text-[10px] text-muted-foreground capitalize">{type}</span>
+                            <span className="text-[10px] text-zinc-400 capitalize">{type}</span>
                         </div>
                     ))}
                 </div>
@@ -147,9 +147,12 @@ export const columns: ColumnDef<Policy>[] = [
         cell: ({ row }) => {
             const active = row.getValue("is_active") as boolean;
             return (
-                <Badge variant={active ? "success" : "secondary"} dot className="text-[11px]">
-                    {active ? "Active" : "Disabled"}
-                </Badge>
+                <div className="flex items-center gap-2">
+                    <div className={`h-1.5 w-1.5 rounded-full ${active ? "bg-white shadow-[0_0_8px_rgba(255,255,255,0.5)]" : "bg-zinc-700"}`} />
+                    <span className="text-[11px] font-medium uppercase tracking-wider text-zinc-400">
+                        {active ? "Active" : "Disabled"}
+                    </span>
+                </div>
             );
         },
     },
@@ -159,7 +162,7 @@ export const columns: ColumnDef<Policy>[] = [
             <Button
                 variant="ghost"
                 size="sm"
-                className="h-8 px-2 -ml-2"
+                className="-ml-3 h-8 hover:bg-white/5 hover:text-white data-[state=open]:bg-white/5"
                 onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
             >
                 Created
@@ -167,7 +170,7 @@ export const columns: ColumnDef<Policy>[] = [
             </Button>
         ),
         cell: ({ row }) => (
-            <div className="text-muted-foreground text-xs whitespace-nowrap font-mono">
+            <div className="text-zinc-500 text-[11px] whitespace-nowrap font-mono tracking-tight">
                 {formatDistanceToNow(new Date(row.getValue("created_at")), { addSuffix: true })}
             </div>
         ),
@@ -181,44 +184,44 @@ export const columns: ColumnDef<Policy>[] = [
             return (
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-7 w-7">
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-500 hover:text-white hover:bg-white/5">
                             <MoreHorizontal className="h-4 w-4" />
                         </Button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-40">
-                        <DropdownMenuItem onClick={() => meta?.onView?.(policy)}>
+                    <DropdownMenuContent align="end" className="bg-zinc-950 border-white/10 text-white w-40">
+                        <DropdownMenuItem onClick={() => meta?.onView?.(policy)} className="focus:bg-white/5 focus:text-white cursor-pointer">
                             <Eye className="mr-2 h-3.5 w-3.5" />
                             View Details
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => meta?.onEdit?.(policy)}>
+                        <DropdownMenuItem onClick={() => meta?.onEdit?.(policy)} className="focus:bg-white/5 focus:text-white cursor-pointer">
                             <Pencil className="mr-2 h-3.5 w-3.5" />
                             Edit
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => {
                             navigator.clipboard.writeText(policy.id);
                             toast.success("Policy ID copied");
-                        }}>
+                        }} className="focus:bg-white/5 focus:text-white cursor-pointer">
                             <Copy className="mr-2 h-3.5 w-3.5" />
                             Copy ID
                         </DropdownMenuItem>
-                        <DropdownMenuSeparator />
+                        <DropdownMenuSeparator className="bg-white/10" />
                         <Dialog>
                             <DialogTrigger asChild>
-                                <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-destructive focus:text-destructive">
+                                <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-rose-400 focus:text-rose-300 focus:bg-rose-500/10 cursor-pointer">
                                     <Trash2 className="mr-2 h-3.5 w-3.5" />
                                     Delete
                                 </DropdownMenuItem>
                             </DialogTrigger>
-                            <DialogContent>
+                            <DialogContent className="bg-zinc-950 border-white/10">
                                 <DialogHeader>
-                                    <DialogTitle>Delete Policy?</DialogTitle>
-                                    <DialogDescription>
-                                        This will permanently delete <span className="font-bold text-foreground">{policy.name}</span> and stop enforcing its rules.
+                                    <DialogTitle className="text-white">Delete Policy?</DialogTitle>
+                                    <DialogDescription className="text-zinc-500">
+                                        This will permanently delete <span className="font-bold text-white">{policy.name}</span> and stop enforcing its rules.
                                     </DialogDescription>
                                 </DialogHeader>
                                 <DialogFooter>
                                     <DialogClose asChild>
-                                        <Button variant="outline" size="sm">Cancel</Button>
+                                        <Button variant="ghost" size="sm" className="text-zinc-400 hover:text-white hover:bg-white/5">Cancel</Button>
                                     </DialogClose>
                                     <Button
                                         variant="destructive"

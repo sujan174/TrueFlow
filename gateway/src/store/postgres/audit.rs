@@ -1,7 +1,7 @@
+use super::types::{AuditLogDetailRow, AuditLogRow, SessionRequestRow, SessionSummaryRow};
+use super::PgStore;
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
-use super::PgStore;
-use super::types::{AuditLogRow, AuditLogDetailRow, SessionRequestRow, SessionSummaryRow};
 
 /// Internal aggregate row — result of the GROUP BY query.
 #[derive(Debug, sqlx::FromRow)]

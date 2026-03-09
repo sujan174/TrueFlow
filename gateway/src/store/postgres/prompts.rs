@@ -1,6 +1,6 @@
-use uuid::Uuid;
-use super::PgStore;
 use super::types::{NewPrompt, NewPromptVersion, PromptRow, PromptVersionRow};
+use super::PgStore;
+use uuid::Uuid;
 
 impl PgStore {
     // ── Prompt Management ─────────────────────────────────────────
@@ -23,7 +23,11 @@ impl PgStore {
         Ok(row)
     }
 
-    pub async fn get_prompt(&self, id: Uuid, project_id: Uuid) -> anyhow::Result<Option<PromptRow>> {
+    pub async fn get_prompt(
+        &self,
+        id: Uuid,
+        project_id: Uuid,
+    ) -> anyhow::Result<Option<PromptRow>> {
         let row = sqlx::query_as::<_, PromptRow>(
             "SELECT * FROM prompts WHERE id = $1 AND project_id = $2 AND is_active = TRUE",
         )
@@ -34,7 +38,11 @@ impl PgStore {
         Ok(row)
     }
 
-    pub async fn list_prompts(&self, project_id: Uuid, folder: Option<&str>) -> anyhow::Result<Vec<PromptRow>> {
+    pub async fn list_prompts(
+        &self,
+        project_id: Uuid,
+        folder: Option<&str>,
+    ) -> anyhow::Result<Vec<PromptRow>> {
         let rows = if let Some(f) = folder {
             sqlx::query_as::<_, PromptRow>(
                 "SELECT * FROM prompts WHERE project_id = $1 AND folder = $2 AND is_active = TRUE ORDER BY updated_at DESC",
@@ -54,7 +62,15 @@ impl PgStore {
         Ok(rows)
     }
 
-    pub async fn update_prompt(&self, id: Uuid, project_id: Uuid, name: &str, description: &str, folder: &str, tags: &serde_json::Value) -> anyhow::Result<bool> {
+    pub async fn update_prompt(
+        &self,
+        id: Uuid,
+        project_id: Uuid,
+        name: &str,
+        description: &str,
+        folder: &str,
+        tags: &serde_json::Value,
+    ) -> anyhow::Result<bool> {
         let result = sqlx::query(
             r#"UPDATE prompts SET name = $1, description = $2, folder = $3, tags = $4, updated_at = NOW()
                WHERE id = $5 AND project_id = $6 AND is_active = TRUE"#,
@@ -82,7 +98,10 @@ impl PgStore {
     }
 
     /// Create a new immutable version. Auto-increments version number atomically.
-    pub async fn insert_prompt_version(&self, v: &NewPromptVersion) -> anyhow::Result<PromptVersionRow> {
+    pub async fn insert_prompt_version(
+        &self,
+        v: &NewPromptVersion,
+    ) -> anyhow::Result<PromptVersionRow> {
         // Use ON CONFLICT DO UPDATE with subquery to atomically get next version
         // This prevents race conditions when multiple versions are created concurrently
         let row = sqlx::query_as::<_, PromptVersionRow>(
@@ -116,7 +135,10 @@ impl PgStore {
         Ok(row)
     }
 
-    pub async fn list_prompt_versions(&self, prompt_id: Uuid) -> anyhow::Result<Vec<PromptVersionRow>> {
+    pub async fn list_prompt_versions(
+        &self,
+        prompt_id: Uuid,
+    ) -> anyhow::Result<Vec<PromptVersionRow>> {
         let rows = sqlx::query_as::<_, PromptVersionRow>(
             "SELECT * FROM prompt_versions WHERE prompt_id = $1 ORDER BY version DESC",
         )
@@ -126,7 +148,11 @@ impl PgStore {
         Ok(rows)
     }
 
-    pub async fn get_prompt_version(&self, prompt_id: Uuid, version: i32) -> anyhow::Result<Option<PromptVersionRow>> {
+    pub async fn get_prompt_version(
+        &self,
+        prompt_id: Uuid,
+        version: i32,
+    ) -> anyhow::Result<Option<PromptVersionRow>> {
         let row = sqlx::query_as::<_, PromptVersionRow>(
             "SELECT * FROM prompt_versions WHERE prompt_id = $1 AND version = $2",
         )
@@ -139,7 +165,12 @@ impl PgStore {
 
     /// Deploy: atomically move a label to a specific version.
     /// Removes the label from all other versions of the same prompt, then adds to the target.
-    pub async fn deploy_prompt_version(&self, prompt_id: Uuid, version: i32, label: &str) -> anyhow::Result<bool> {
+    pub async fn deploy_prompt_version(
+        &self,
+        prompt_id: Uuid,
+        version: i32,
+        label: &str,
+    ) -> anyhow::Result<bool> {
         let mut tx = self.pool.begin().await?;
 
         // Remove label from all versions of this prompt

@@ -3,33 +3,39 @@ use std::sync::Arc;
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
-    Extension,
-    Json,
+    Extension, Json,
 };
 use serde_json::json;
 
+use super::dtos::{CreateTokenRequest, CreateTokenResponse, PaginationParams};
+use super::helpers::{verify_project_ownership, verify_token_ownership};
 use crate::api::AuthContext;
 use crate::store::postgres::TokenRow;
 use crate::AppState;
-use super::dtos::{CreateTokenRequest, CreateTokenResponse, PaginationParams};
-use super::helpers::{verify_project_ownership, verify_token_ownership};
 
 pub async fn list_tokens(
     State(state): State<Arc<AppState>>,
     Extension(auth): Extension<AuthContext>,
     Query(params): Query<PaginationParams>,
 ) -> Result<Json<Vec<TokenRow>>, StatusCode> {
-    auth.require_scope("tokens:read").map_err(|_| StatusCode::FORBIDDEN)?;
-    let project_id = params.project_id.unwrap_or_else(|| auth.default_project_id());
+    auth.require_scope("tokens:read")
+        .map_err(|_| StatusCode::FORBIDDEN)?;
+    let project_id = params
+        .project_id
+        .unwrap_or_else(|| auth.default_project_id());
     verify_project_ownership(&state, auth.org_id, project_id).await?;
 
-    let limit = params.limit.unwrap_or(100).min(1000).max(1);
+    let limit = params.limit.unwrap_or(100).clamp(1, 1000);
     let offset = params.offset.unwrap_or(0).max(0);
 
-    let tokens = state.db.list_tokens(project_id, limit, offset).await.map_err(|e| {
-        tracing::error!("list_tokens failed: {}", e);
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+    let tokens = state
+        .db
+        .list_tokens(project_id, limit, offset)
+        .await
+        .map_err(|e| {
+            tracing::error!("list_tokens failed: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
 
     Ok(Json(tokens))
 }
@@ -41,8 +47,11 @@ pub async fn create_token(
     Json(payload): Json<CreateTokenRequest>,
 ) -> Result<(StatusCode, Json<CreateTokenResponse>), StatusCode> {
     auth.require_role("admin")?;
-    auth.require_scope("tokens:write").map_err(|_| StatusCode::FORBIDDEN)?;
-    let project_id = payload.project_id.unwrap_or_else(|| auth.default_project_id());
+    auth.require_scope("tokens:write")
+        .map_err(|_| StatusCode::FORBIDDEN)?;
+    let project_id = payload
+        .project_id
+        .unwrap_or_else(|| auth.default_project_id());
     verify_project_ownership(&state, auth.org_id, project_id).await?;
 
     // Validate upstream URL (SSRF protection — same as CLI)
@@ -121,7 +130,8 @@ pub async fn revoke_token(
     Path(id): Path<String>,
 ) -> Result<StatusCode, StatusCode> {
     auth.require_role("admin")?;
-    auth.require_scope("tokens:write").map_err(|_| StatusCode::FORBIDDEN)?;
+    auth.require_scope("tokens:write")
+        .map_err(|_| StatusCode::FORBIDDEN)?;
     // Verify the token belongs to the org by looking it up first
     let token = state.db.get_token(&id).await.map_err(|e| {
         tracing::error!("revoke_token lookup failed: {}", e);
@@ -131,10 +141,17 @@ pub async fn revoke_token(
         verify_project_ownership(&state, auth.org_id, t.project_id).await?;
     }
 
-    let revoked = state.db.revoke_token(&id, token.as_ref().map(|t| t.project_id).unwrap_or_default()).await.map_err(|e| {
-        tracing::error!("revoke_token failed: {}", e);
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+    let revoked = state
+        .db
+        .revoke_token(
+            &id,
+            token.as_ref().map(|t| t.project_id).unwrap_or_default(),
+        )
+        .await
+        .map_err(|e| {
+            tracing::error!("revoke_token failed: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
 
     if revoked {
         Ok(StatusCode::NO_CONTENT)
@@ -149,8 +166,11 @@ pub async fn get_token_usage(
     Path(token_id): Path<String>,
     Query(params): Query<PaginationParams>,
 ) -> Result<Json<crate::models::analytics::TokenUsageStats>, StatusCode> {
-    auth.require_scope("tokens:read").map_err(|_| StatusCode::FORBIDDEN)?;
-    let project_id = params.project_id.unwrap_or_else(|| auth.default_project_id());
+    auth.require_scope("tokens:read")
+        .map_err(|_| StatusCode::FORBIDDEN)?;
+    let project_id = params
+        .project_id
+        .unwrap_or_else(|| auth.default_project_id());
     verify_project_ownership(&state, auth.org_id, project_id).await?;
 
     let stats = state
@@ -170,9 +190,13 @@ pub async fn get_circuit_breaker(
     Extension(auth): Extension<AuthContext>,
     Path(token_id): Path<String>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
-    auth.require_scope("tokens:read").map_err(|_| StatusCode::FORBIDDEN)?;
+    auth.require_scope("tokens:read")
+        .map_err(|_| StatusCode::FORBIDDEN)?;
     verify_token_ownership(&state, &token_id, &auth).await?;
-    let token = state.db.get_token(&token_id).await
+    let token = state
+        .db
+        .get_token(&token_id)
+        .await
         .map_err(|e| {
             tracing::error!("get_circuit_breaker: db error: {}", e);
             StatusCode::INTERNAL_SERVER_ERROR
@@ -180,13 +204,14 @@ pub async fn get_circuit_breaker(
         .ok_or(StatusCode::NOT_FOUND)?;
 
     // Return the stored config, or the default if not set
-    let config = token.circuit_breaker
-        .unwrap_or_else(|| serde_json::json!({
+    let config = token.circuit_breaker.unwrap_or_else(|| {
+        serde_json::json!({
             "enabled": true,
             "failure_threshold": 3,
             "recovery_cooldown_secs": 30,
             "half_open_max_requests": 1
-        }));
+        })
+    });
 
     Ok(Json(config))
 }
@@ -200,9 +225,14 @@ pub async fn update_circuit_breaker(
     auth.require_scope("tokens:write").map_err(|_| {
         (StatusCode::FORBIDDEN, Json(json!({ "error": { "code": "forbidden", "message": "tokens:write scope required" } })))
     })?;
-    verify_token_ownership(&state, &token_id, &auth).await.map_err(|status| {
-        (status, Json(json!({ "error": { "code": "not_found", "message": "Token not found" } })))
-    })?;
+    verify_token_ownership(&state, &token_id, &auth)
+        .await
+        .map_err(|status| {
+            (
+                status,
+                Json(json!({ "error": { "code": "not_found", "message": "Token not found" } })),
+            )
+        })?;
     // P1.6: Validate the payload before deserializing to catch missing fields
     let cb_config: crate::proxy::loadbalancer::CircuitBreakerConfig =
         serde_json::from_value(payload.clone())
@@ -215,19 +245,25 @@ pub async fn update_circuit_breaker(
     if cb_config.failure_threshold < 1 {
         return Err((
             StatusCode::UNPROCESSABLE_ENTITY,
-            Json(json!({ "error": { "code": "invalid_config", "message": "failure_threshold must be >= 1. Set to 1 to open the circuit after a single failure." } })),
+            Json(
+                json!({ "error": { "code": "invalid_config", "message": "failure_threshold must be >= 1. Set to 1 to open the circuit after a single failure." } }),
+            ),
         ));
     }
     if cb_config.recovery_cooldown_secs < 1 {
         return Err((
             StatusCode::UNPROCESSABLE_ENTITY,
-            Json(json!({ "error": { "code": "invalid_config", "message": "recovery_cooldown_secs must be >= 1 (minimum 1 second before retrying an open circuit)." } })),
+            Json(
+                json!({ "error": { "code": "invalid_config", "message": "recovery_cooldown_secs must be >= 1 (minimum 1 second before retrying an open circuit)." } }),
+            ),
         ));
     }
     if cb_config.half_open_max_requests < 1 {
         return Err((
             StatusCode::UNPROCESSABLE_ENTITY,
-            Json(json!({ "error": { "code": "invalid_config", "message": "half_open_max_requests must be >= 1 (number of probe requests allowed in half-open state)." } })),
+            Json(
+                json!({ "error": { "code": "invalid_config", "message": "half_open_max_requests must be >= 1 (number of probe requests allowed in half-open state)." } }),
+            ),
         ));
     }
 
@@ -246,7 +282,10 @@ pub async fn update_circuit_breaker(
         })?;
 
     if !updated {
-        return Err((StatusCode::NOT_FOUND, Json(json!({ "error": { "code": "not_found", "message": "Token not found" } }))));
+        return Err((
+            StatusCode::NOT_FOUND,
+            Json(json!({ "error": { "code": "not_found", "message": "Token not found" } })),
+        ));
     }
 
     tracing::info!(token_id = %token_id, "circuit breaker config updated");

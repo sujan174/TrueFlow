@@ -47,13 +47,13 @@ impl RotationScheduler {
     ///
     /// `check_interval_secs`: how often (seconds) the scheduler checks for due credentials.
     /// Default: 3600 (1 hour). Set via `TRUEFLOW_ROTATION_CHECK_INTERVAL` env var.
-    pub fn new(
-        db: PgStore,
-        vault: VaultCrypto,
-        cache: TieredCache,
-        interval_secs: u64,
-    ) -> Self {
-        Self { db, vault, cache, interval_secs }
+    pub fn new(db: PgStore, vault: VaultCrypto, cache: TieredCache, interval_secs: u64) -> Self {
+        Self {
+            db,
+            vault,
+            cache,
+            interval_secs,
+        }
     }
 
     /// Spawn the background rotation task.
@@ -108,14 +108,16 @@ impl RotationScheduler {
                         e
                     );
                     // Log the failure
-                    let _ = self.log_rotation(
-                        cred.id,
-                        cred.version,
-                        cred.version,
-                        &cred.provider,
-                        "failed",
-                        Some(&e.to_string()),
-                    ).await;
+                    let _ = self
+                        .log_rotation(
+                            cred.id,
+                            cred.version,
+                            cred.version,
+                            &cred.provider,
+                            "failed",
+                            Some(&e.to_string()),
+                        )
+                        .await;
                 }
             }
         }
@@ -234,7 +236,8 @@ impl RotationScheduler {
             &cred.provider,
             "success",
             None,
-        ).await?;
+        )
+        .await?;
 
         Ok(())
     }

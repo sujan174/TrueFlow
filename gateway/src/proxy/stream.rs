@@ -236,7 +236,8 @@ impl StreamAccumulator {
                             .get("id")
                             .and_then(|id| id.as_str())
                             .map(|s| s.to_string());
-                        let index = json.get("index").and_then(|i| i.as_u64()).unwrap_or(0) as usize;
+                        let index =
+                            json.get("index").and_then(|i| i.as_u64()).unwrap_or(0) as usize;
                         while self.tool_call_deltas.len() <= index {
                             self.tool_call_deltas.push(ToolCallDelta {
                                 index: self.tool_call_deltas.len(),
@@ -265,7 +266,8 @@ impl StreamAccumulator {
                     }
                     // Tool input delta
                     if let Some(partial) = delta.get("partial_json").and_then(|p| p.as_str()) {
-                        let index = json.get("index").and_then(|i| i.as_u64()).unwrap_or(0) as usize;
+                        let index =
+                            json.get("index").and_then(|i| i.as_u64()).unwrap_or(0) as usize;
                         if index < self.tool_call_deltas.len() {
                             self.tool_call_deltas[index].arguments.push_str(partial);
                         }
@@ -329,7 +331,10 @@ impl StreamAccumulator {
             if let Some(pt) = usage_meta.get("promptTokenCount").and_then(|v| v.as_u64()) {
                 self.prompt_tokens = Some(pt as u32);
             }
-            if let Some(ct) = usage_meta.get("candidatesTokenCount").and_then(|v| v.as_u64()) {
+            if let Some(ct) = usage_meta
+                .get("candidatesTokenCount")
+                .and_then(|v| v.as_u64())
+            {
                 self.completion_tokens = Some(ct as u32);
             }
         }
@@ -380,10 +385,18 @@ mod tests {
         let mut acc = StreamAccumulator::new();
 
         // Simulate OpenAI streaming chunks
-        assert!(!acc.push_sse_line("data: {\"choices\":[{\"delta\":{\"role\":\"assistant\"},\"index\":0}]}"));
-        assert!(!acc.push_sse_line("data: {\"choices\":[{\"delta\":{\"content\":\"Hello\"},\"index\":0}]}"));
-        assert!(!acc.push_sse_line("data: {\"choices\":[{\"delta\":{\"content\":\" world\"},\"index\":0}]}"));
-        assert!(!acc.push_sse_line("data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\",\"index\":0}]}"));
+        assert!(!acc.push_sse_line(
+            "data: {\"choices\":[{\"delta\":{\"role\":\"assistant\"},\"index\":0}]}"
+        ));
+        assert!(!acc.push_sse_line(
+            "data: {\"choices\":[{\"delta\":{\"content\":\"Hello\"},\"index\":0}]}"
+        ));
+        assert!(!acc.push_sse_line(
+            "data: {\"choices\":[{\"delta\":{\"content\":\" world\"},\"index\":0}]}"
+        ));
+        assert!(!acc.push_sse_line(
+            "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\",\"index\":0}]}"
+        ));
         assert!(acc.push_sse_line("data: [DONE]"));
 
         let result = acc.finalize();
@@ -397,15 +410,24 @@ mod tests {
     fn test_openai_streaming_long_text() {
         let mut acc = StreamAccumulator::new();
         // Simulate many small chunks (realistic for long responses)
-        let words = ["The ", "quick ", "brown ", "fox ", "jumps ", "over ", "the ", "lazy ", "dog."];
+        let words = [
+            "The ", "quick ", "brown ", "fox ", "jumps ", "over ", "the ", "lazy ", "dog.",
+        ];
         for w in &words {
-            acc.push_sse_line(&format!("data: {{\"choices\":[{{\"delta\":{{\"content\":\"{w}\"}},\"index\":0}}]}}"));
+            acc.push_sse_line(&format!(
+                "data: {{\"choices\":[{{\"delta\":{{\"content\":\"{w}\"}},\"index\":0}}]}}"
+            ));
         }
-        acc.push_sse_line("data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\",\"index\":0}]}");
+        acc.push_sse_line(
+            "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\",\"index\":0}]}",
+        );
         acc.push_sse_line("data: [DONE]");
 
         let result = acc.finalize();
-        assert_eq!(result.content, "The quick brown fox jumps over the lazy dog.");
+        assert_eq!(
+            result.content,
+            "The quick brown fox jumps over the lazy dog."
+        );
         assert_eq!(result.chunk_count, 10); // 9 content + 1 finish
         assert_eq!(result.finish_reason.as_deref(), Some("stop"));
     }
@@ -421,7 +443,9 @@ mod tests {
         acc.push_sse_line("data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"{\\\"ci\"}}]},\"index\":0}]}");
         acc.push_sse_line("data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"ty\\\": \\\"\"}}]},\"index\":0}]}");
         acc.push_sse_line("data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"London\\\"}\"}}]},\"index\":0}]}");
-        acc.push_sse_line("data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"tool_calls\",\"index\":0}]}");
+        acc.push_sse_line(
+            "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"tool_calls\",\"index\":0}]}",
+        );
         acc.push_sse_line("data: [DONE]");
 
         let result = acc.finalize();
@@ -446,17 +470,25 @@ mod tests {
         // Second tool call starts
         acc.push_sse_line("data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":1,\"id\":\"call_2\",\"function\":{\"name\":\"read_file\",\"arguments\":\"\"}}]},\"index\":0}]}");
         acc.push_sse_line("data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":1,\"function\":{\"arguments\":\"{\\\"path\\\":\\\"/tmp\\\"}\"}}]},\"index\":0}]}");
-        acc.push_sse_line("data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"tool_calls\",\"index\":0}]}");
+        acc.push_sse_line(
+            "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"tool_calls\",\"index\":0}]}",
+        );
         acc.push_sse_line("data: [DONE]");
 
         let result = acc.finalize();
         assert_eq!(result.tool_calls.len(), 2);
         assert_eq!(result.tool_calls[0].name, "search");
         assert_eq!(result.tool_calls[0].call_id.as_deref(), Some("call_1"));
-        assert_eq!(result.tool_calls[0].arguments.as_deref(), Some("{\"q\":\"rust\"}"));
+        assert_eq!(
+            result.tool_calls[0].arguments.as_deref(),
+            Some("{\"q\":\"rust\"}")
+        );
         assert_eq!(result.tool_calls[1].name, "read_file");
         assert_eq!(result.tool_calls[1].call_id.as_deref(), Some("call_2"));
-        assert_eq!(result.tool_calls[1].arguments.as_deref(), Some("{\"path\":\"/tmp\"}"));
+        assert_eq!(
+            result.tool_calls[1].arguments.as_deref(),
+            Some("{\"path\":\"/tmp\"}")
+        );
     }
 
     // ── OpenAI Usage Extraction ─────────────────────────────────
@@ -609,7 +641,9 @@ mod tests {
     #[test]
     fn test_model_extraction_from_first_chunk() {
         let mut acc = StreamAccumulator::new();
-        acc.push_sse_line("data: {\"model\":\"gpt-4o-mini\",\"choices\":[{\"delta\":{\"content\":\"hi\"}}]}");
+        acc.push_sse_line(
+            "data: {\"model\":\"gpt-4o-mini\",\"choices\":[{\"delta\":{\"content\":\"hi\"}}]}",
+        );
         acc.push_sse_line("data: {\"choices\":[{\"delta\":{\"content\":\" there\"}}]}");
         acc.push_sse_line("data: [DONE]");
 
@@ -676,7 +710,10 @@ mod tests {
             r#"data: {"choices":[{"delta":{"content":" world"},"index":0}]}"#,
         ];
         for chunk in &chunks {
-            assert!(!acc.push_sse_line(chunk), "should not be done on partial stream");
+            assert!(
+                !acc.push_sse_line(chunk),
+                "should not be done on partial stream"
+            );
         }
         let result = acc.finalize();
         assert_eq!(result.content, "Hello cruel world");
@@ -719,4 +756,3 @@ mod tests {
         assert_eq!(result.completion_tokens, Some(5));
     }
 }
-

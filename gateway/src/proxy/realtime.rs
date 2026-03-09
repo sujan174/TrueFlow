@@ -25,15 +25,12 @@ use futures::{SinkExt, StreamExt};
 use serde::Deserialize;
 use tokio_tungstenite::{
     connect_async_tls_with_config,
-    tungstenite::{
-        handshake::client::Request,
-        Message,
-    },
+    tungstenite::{handshake::client::Request, Message},
 };
 
+use crate::middleware;
 use crate::vault::SecretStore;
 use crate::AppState;
-use crate::middleware;
 
 // ── Query params ──────────────────────────────────────────────
 
@@ -135,7 +132,9 @@ pub async fn realtime_handler(
     }
 
     // Spend cap check
-    if let Err(e) = middleware::spend::check_spend_cap(&state.cache, state.db.pool(), &token_id).await {
+    if let Err(e) =
+        middleware::spend::check_spend_cap(&state.cache, state.db.pool(), &token_id).await
+    {
         tracing::warn!(token_id = %token_id, error = %e, "realtime: spend cap exceeded");
         return Err(StatusCode::PAYMENT_REQUIRED);
     }
@@ -175,8 +174,7 @@ async fn relay(
         .body(())?;
 
     // Use the native-tls connector bundled with tokio-tungstenite
-    let (upstream_ws, _resp) =
-        connect_async_tls_with_config(request, None, false, None).await?;
+    let (upstream_ws, _resp) = connect_async_tls_with_config(request, None, false, None).await?;
 
     tracing::info!(
         token_id = %token_id,

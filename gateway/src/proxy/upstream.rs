@@ -1,6 +1,6 @@
-use std::time::Duration;
-use reqwest::Client;
 use crate::models::policy::RetryConfig;
+use reqwest::Client;
+use std::time::Duration;
 
 #[derive(Clone)]
 pub struct UpstreamClient {
@@ -31,20 +31,13 @@ impl UpstreamClient {
         body: bytes::Bytes,
         retry_config: &RetryConfig,
     ) -> Result<reqwest::Response, crate::errors::AppError> {
-        crate::proxy::retry::robust_request(
-            &self.client,
-            method,
-            url,
-            headers,
-            body,
-            retry_config,
-        )
-        .await
-        .map_err(|e| {
-             eprintln!("DEBUG upstream error: url={} err={:?}", url, e);
-             tracing::warn!("Upstream request failed: {}", e);
-             crate::errors::AppError::Upstream(e.to_string())
-        })
+        crate::proxy::retry::robust_request(&self.client, method, url, headers, body, retry_config)
+            .await
+            .map_err(|e| {
+                eprintln!("DEBUG upstream error: url={} err={:?}", url, e);
+                tracing::warn!("Upstream request failed: {}", e);
+                crate::errors::AppError::Upstream(e.to_string())
+            })
     }
 
     /// Forward a request and return the raw response without consuming the body.

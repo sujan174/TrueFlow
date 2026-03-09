@@ -6,12 +6,13 @@
 
 use std::time::Duration;
 
+use super::handler::is_safe_webhook_url;
 use crate::errors::AppError;
 use crate::middleware;
 use crate::models::policy::{Action, TriggeredAction};
-use super::handler::is_safe_webhook_url;
 
 /// Result of executing post-flight policy actions.
+#[allow(dead_code)]
 pub struct PostFlightResult {
     /// PII types redacted by policy (e.g. "email", "ssn")
     pub redacted_fields: Vec<String>,
@@ -33,6 +34,7 @@ pub struct PostFlightResult {
 /// - `Log`, `Tag`, `Webhook`: observability actions (non-blocking)
 ///
 /// Actions like `ConditionalRoute` are request-phase only and are skipped.
+#[allow(dead_code)]
 pub async fn execute_post_flight_actions(
     actions: &[TriggeredAction],
     parsed_resp_body: &Option<serde_json::Value>,
@@ -56,11 +58,8 @@ pub async fn execute_post_flight_actions(
             }
             Action::Redact { .. } => {
                 if let Some(mut resp_json) = parsed_resp_body.clone() {
-                    let result = middleware::redact::apply_redact(
-                        &mut resp_json,
-                        &triggered.action,
-                        false,
-                    );
+                    let result =
+                        middleware::redact::apply_redact(&mut resp_json, &triggered.action, false);
                     if !result.matched_types.is_empty() {
                         tracing::info!(
                             policy = %triggered.policy_name,
@@ -128,7 +127,10 @@ pub async fn execute_post_flight_actions(
                 if let Some(ref resp_json) = parsed_resp_body {
                     let result = middleware::guardrail::check_content(resp_json, &triggered.action);
                     if result.blocked {
-                        let reason = result.reason.clone().unwrap_or_else(|| "Output guardrail blocked response".to_string());
+                        let reason = result
+                            .reason
+                            .clone()
+                            .unwrap_or_else(|| "Output guardrail blocked response".to_string());
                         tracing::warn!(
                             policy = %triggered.policy_name,
                             risk_score = %result.risk_score,
@@ -161,7 +163,11 @@ pub async fn execute_post_flight_actions(
                 if let Some(mut resp_json) = parsed_resp_body.clone() {
                     let mut resp_header_mutations = middleware::redact::HeaderMutations::default();
                     for op in operations {
-                        middleware::redact::apply_transform(&mut resp_json, &mut resp_header_mutations, op);
+                        middleware::redact::apply_transform(
+                            &mut resp_json,
+                            &mut resp_header_mutations,
+                            op,
+                        );
                     }
                     tracing::info!(
                         policy = %triggered.policy_name,
@@ -184,7 +190,11 @@ pub async fn execute_post_flight_actions(
             }
 
             // ── ValidateSchema (post-flight, response-side) ──
-            Action::ValidateSchema { schema, not, message } => {
+            Action::ValidateSchema {
+                schema,
+                not,
+                message,
+            } => {
                 if let Some(ref resp_json) = parsed_resp_body {
                     let result = middleware::guardrail::validate_schema(resp_json, schema);
                     let should_deny = if *not { result.valid } else { !result.valid };
@@ -218,13 +228,26 @@ pub async fn execute_post_flight_actions(
                 }
             }
 
-            Action::ExternalGuardrail { vendor, endpoint, api_key_env, threshold, on_fail } => {
-                let text = parsed_resp_body.as_ref()
+            Action::ExternalGuardrail {
+                vendor,
+                endpoint,
+                api_key_env,
+                threshold,
+                on_fail,
+            } => {
+                let text = parsed_resp_body
+                    .as_ref()
                     .map(|v| v.to_string())
                     .unwrap_or_else(|| String::from_utf8_lossy(resp_body_vec).to_string());
                 match middleware::external_guardrail::check(
-                    vendor, endpoint, api_key_env.as_deref(), *threshold, &text
-                ).await {
+                    vendor,
+                    endpoint,
+                    api_key_env.as_deref(),
+                    *threshold,
+                    &text,
+                )
+                .await
+                {
                     Ok(result) if result.blocked => {
                         tracing::warn!(
                             policy = %triggered.policy_name,
@@ -236,7 +259,10 @@ pub async fn execute_post_flight_actions(
                         if on_fail != "log" {
                             return Err(AppError::PolicyDenied {
                                 policy: triggered.policy_name.clone(),
-                                reason: format!("external_guardrail({:?}): {}", vendor, result.label),
+                                reason: format!(
+                                    "external_guardrail({:?}): {}",
+                                    vendor, result.label
+                                ),
                             });
                         }
                     }
@@ -330,4 +356,3 @@ mod tests {
         assert!(!result.body_modified);
     }
 }
-

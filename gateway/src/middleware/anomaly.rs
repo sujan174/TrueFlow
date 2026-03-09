@@ -74,21 +74,20 @@ pub async fn record_and_check(
     let _: () = redis.zrembyscore(&key, f64::NEG_INFINITY, cutoff).await?;
 
     // 3. Set TTL on the key (auto-cleanup if token goes idle)
-    let _: () = redis.expire(&key, (config.baseline_secs + config.window_secs) as i64).await?;
+    let _: () = redis
+        .expire(&key, (config.baseline_secs + config.window_secs) as i64)
+        .await?;
 
     // 4. Count requests in current window
     let window_start = now - config.window_secs as f64;
-    let current_velocity: u64 = redis
-        .zcount(&key, window_start, now)
-        .await?;
+    let current_velocity: u64 = redis.zcount(&key, window_start, now).await?;
 
     // 5. Get all timestamps for baseline calculation
-    let timestamps: Vec<f64> = redis
-        .zrangebyscore(&key, cutoff, now)
-        .await?;
+    let timestamps: Vec<f64> = redis.zrangebyscore(&key, cutoff, now).await?;
 
     // 6. Bucket timestamps into windows and calculate stats
-    let bucket_counts = bucket_velocities(&timestamps, config.window_secs, now, config.baseline_secs);
+    let bucket_counts =
+        bucket_velocities(&timestamps, config.window_secs, now, config.baseline_secs);
 
     if bucket_counts.len() < config.min_datapoints {
         // Not enough data — don't alert
@@ -204,15 +203,15 @@ mod tests {
         // bucket_idx = floor(age / window_secs)
         // age 1,2,3 → idx 0; age 5,6 → idx 1; age 10,11 → idx 2
         let timestamps = vec![
-            999.0, 998.0, 997.0,  // age 1,2,3 → bucket 0
-            995.0, 994.0,          // age 5,6 → bucket 1
-            990.0, 989.0,          // age 10,11 → bucket 2
+            999.0, 998.0, 997.0, // age 1,2,3 → bucket 0
+            995.0, 994.0, // age 5,6 → bucket 1
+            990.0, 989.0, // age 10,11 → bucket 2
         ];
         let buckets = bucket_velocities(&timestamps, 5, now, 20);
         assert_eq!(buckets.len(), 3); // 3 non-zero buckets (empty bucket filtered out)
-        assert_eq!(buckets[0], 3.0);  // 999, 998, 997
-        assert_eq!(buckets[1], 2.0);  // 995, 994
-        assert_eq!(buckets[2], 2.0);  // 990, 989
+        assert_eq!(buckets[0], 3.0); // 999, 998, 997
+        assert_eq!(buckets[1], 2.0); // 995, 994
+        assert_eq!(buckets[2], 2.0); // 990, 989
     }
 
     #[test]

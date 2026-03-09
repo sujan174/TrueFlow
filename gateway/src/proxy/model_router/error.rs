@@ -2,7 +2,10 @@ use serde_json::json;
 
 use super::Provider;
 
-pub(crate) fn normalize_error_response(provider: Provider, body: &[u8]) -> Option<serde_json::Value> {
+pub(crate) fn normalize_error_response(
+    provider: Provider,
+    body: &[u8],
+) -> Option<serde_json::Value> {
     match provider {
         // Azure OpenAI, Groq, Mistral, Together, Cohere, Ollama all return OpenAI-compatible errors
         Provider::OpenAI
@@ -18,8 +21,14 @@ pub(crate) fn normalize_error_response(provider: Provider, body: &[u8]) -> Optio
             // {"type":"error","error":{"type":"invalid_request_error","message":"..."}}
             let json: serde_json::Value = serde_json::from_slice(body).ok()?;
             let err = json.get("error")?;
-            let message = err.get("message").and_then(|m| m.as_str()).unwrap_or("unknown error");
-            let err_type = err.get("type").and_then(|t| t.as_str()).unwrap_or("api_error");
+            let message = err
+                .get("message")
+                .and_then(|m| m.as_str())
+                .unwrap_or("unknown error");
+            let err_type = err
+                .get("type")
+                .and_then(|t| t.as_str())
+                .unwrap_or("api_error");
             tracing::debug!(
                 provider = "anthropic",
                 err_type,
@@ -45,8 +54,14 @@ pub(crate) fn normalize_error_response(provider: Provider, body: &[u8]) -> Optio
             } else {
                 json.get("error")?
             };
-            let message = err_obj.get("message").and_then(|m| m.as_str()).unwrap_or("unknown error");
-            let status = err_obj.get("status").and_then(|s| s.as_str()).unwrap_or("api_error");
+            let message = err_obj
+                .get("message")
+                .and_then(|m| m.as_str())
+                .unwrap_or("unknown error");
+            let status = err_obj
+                .get("status")
+                .and_then(|s| s.as_str())
+                .unwrap_or("api_error");
             let http_code = err_obj.get("code").and_then(|c| c.as_u64()).unwrap_or(500) as u16;
 
             // Map Gemini status codes to OpenAI-compatible error types
@@ -91,22 +106,29 @@ pub(crate) fn normalize_error_response(provider: Provider, body: &[u8]) -> Optio
             // {"message":"...","__type":"ValidationException"}
             // OR: {"Message":"...","__type":"..."}
             let json: serde_json::Value = serde_json::from_slice(body).ok()?;
-            let message = json.get("message")
+            let message = json
+                .get("message")
                 .or_else(|| json.get("Message"))
                 .and_then(|m| m.as_str())
                 .unwrap_or("unknown error");
-            let err_type = json.get("__type")
+            let err_type = json
+                .get("__type")
                 .and_then(|t| t.as_str())
                 .unwrap_or("api_error");
             // Convert AWS exception type to snake_case
             let normalized_type = err_type
-                .rsplit_once('#').map(|(_, s)| s).unwrap_or(err_type)
+                .rsplit_once('#')
+                .map(|(_, s)| s)
+                .unwrap_or(err_type)
                 .replace("Exception", "")
                 .chars()
                 .enumerate()
                 .map(|(i, c)| {
-                    if c.is_uppercase() && i > 0 { format!("_{}", c.to_lowercase()) }
-                    else { c.to_lowercase().to_string() }
+                    if c.is_uppercase() && i > 0 {
+                        format!("_{}", c.to_lowercase())
+                    } else {
+                        c.to_lowercase().to_string()
+                    }
                 })
                 .collect::<String>()
                 .trim_start_matches('_')
@@ -132,4 +154,3 @@ pub(crate) fn normalize_error_response(provider: Provider, body: &[u8]) -> Optio
 // ═══════════════════════════════════════════════════════════════
 // OpenAI → Bedrock (Converse API)
 // ═══════════════════════════════════════════════════════════════
-

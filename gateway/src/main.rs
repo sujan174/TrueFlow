@@ -113,9 +113,7 @@ async fn main() -> anyhow::Result<()> {
     let args = cli::Cli::parse();
 
     let result = match args.command {
-        Some(cli::Commands::Serve { port }) => {
-            run_server(cfg, port).await
-        }
+        Some(cli::Commands::Serve { port }) => run_server(cfg, port).await,
         Some(cli::Commands::Token { command }) => {
             let db = PgStore::connect(&cfg.database_url).await?;
             let vault = BuiltinStore::new(&cfg.master_key, db.pool().clone())?;
@@ -153,36 +151,34 @@ async fn main() -> anyhow::Result<()> {
             handle_approval_command(&db, command).await
         }
         Some(cli::Commands::Policy { command }) => {
-             let db = PgStore::connect(&cfg.database_url).await?;
-             let vault = BuiltinStore::new(&cfg.master_key, db.pool().clone())?;
-             let redis_client = redis::Client::open(cfg.redis_url.as_str())?;
-             let redis_conn = redis::aio::ConnectionManager::new(redis_client).await?;
-             let cache = TieredCache::new(redis_conn);
-             let upstream_client = proxy::upstream::UpstreamClient::new();
-             let notifier = notification::slack::SlackNotifier::new(cfg.slack_webhook_url.clone());
+            let db = PgStore::connect(&cfg.database_url).await?;
+            let vault = BuiltinStore::new(&cfg.master_key, db.pool().clone())?;
+            let redis_client = redis::Client::open(cfg.redis_url.as_str())?;
+            let redis_conn = redis::aio::ConnectionManager::new(redis_client).await?;
+            let cache = TieredCache::new(redis_conn);
+            let upstream_client = proxy::upstream::UpstreamClient::new();
+            let notifier = notification::slack::SlackNotifier::new(cfg.slack_webhook_url.clone());
 
-             let lb_redis = cache.redis();
-             let state = Arc::new(AppState {
-                 db,
-                 vault,
-                 cache,
-                 upstream_client,
-                 notifier,
-                 webhook: notification::webhook::WebhookNotifier::new(),
-                 config: cfg,
-                 lb: proxy::loadbalancer::LoadBalancer::new_with_redis(lb_redis),
-                 pricing: models::pricing_cache::PricingCache::new(),
-                 latency: models::latency_cache::LatencyCache::new(),
-                 payload_store: Arc::new(PayloadStore::from_env().unwrap_or(PayloadStore::Postgres)),
-                 observer: Arc::new(middleware::observer::ObserverHub::from_env()),
-                 mcp_registry: Arc::new(mcp::registry::McpRegistry::new()),
-             });
+            let lb_redis = cache.redis();
+            let state = Arc::new(AppState {
+                db,
+                vault,
+                cache,
+                upstream_client,
+                notifier,
+                webhook: notification::webhook::WebhookNotifier::new(),
+                config: cfg,
+                lb: proxy::loadbalancer::LoadBalancer::new_with_redis(lb_redis),
+                pricing: models::pricing_cache::PricingCache::new(),
+                latency: models::latency_cache::LatencyCache::new(),
+                payload_store: Arc::new(PayloadStore::from_env().unwrap_or(PayloadStore::Postgres)),
+                observer: Arc::new(middleware::observer::ObserverHub::from_env()),
+                mcp_registry: Arc::new(mcp::registry::McpRegistry::new()),
+            });
 
-             handle_policy_command(command, &state).await
+            handle_policy_command(command, &state).await
         }
-        None => {
-            run_server(cfg, 8443).await
-        }
+        None => run_server(cfg, 8443).await,
     };
 
     if let Err(ref e) = result {
@@ -219,10 +215,7 @@ async fn run_server(cfg: config::Config, port: u16) -> anyhow::Result<()> {
     let latency = models::latency_cache::LatencyCache::new();
 
     tracing::info!("Initializing payload store...");
-    let payload_store = Arc::new(
-        PayloadStore::from_env()
-            .context("invalid PAYLOAD_STORE_URL")?
-    );
+    let payload_store = Arc::new(PayloadStore::from_env().context("invalid PAYLOAD_STORE_URL")?);
 
     let lb_redis = cache.redis();
     let state = Arc::new(AppState {
@@ -244,17 +237,23 @@ async fn run_server(cfg: config::Config, port: u16) -> anyhow::Result<()> {
     // Load initial pricing from DB into the in-memory cache
     match state.db.list_model_pricing().await {
         Ok(rows) => {
-            let entries = rows.into_iter().map(|r| models::pricing_cache::PricingEntry {
-                provider: r.provider,
-                model_pattern: r.model_pattern,
-                input_per_m: r.input_per_m,
-                output_per_m: r.output_per_m,
-            }).collect();
+            let entries = rows
+                .into_iter()
+                .map(|r| models::pricing_cache::PricingEntry {
+                    provider: r.provider,
+                    model_pattern: r.model_pattern,
+                    input_per_m: r.input_per_m,
+                    output_per_m: r.output_per_m,
+                })
+                .collect();
             pricing.reload(entries).await;
             tracing::info!("Loaded model pricing from DB");
         }
         Err(e) => {
-            tracing::warn!("Failed to load model pricing from DB, using hardcoded fallback: {}", e);
+            tracing::warn!(
+                "Failed to load model pricing from DB, using hardcoded fallback: {}",
+                e
+            );
         }
     }
 
@@ -296,7 +295,10 @@ async fn run_server(cfg: config::Config, port: u16) -> anyhow::Result<()> {
         // Prometheus metrics (no auth — standard for /metrics)
         .route("/metrics", axum::routing::get(prometheus_metrics_handler))
         // Realtime WebSocket proxy — must come before the catch-all fallback
-        .route("/v1/realtime", axum::routing::get(proxy::realtime::realtime_handler))
+        .route(
+            "/v1/realtime",
+            axum::routing::get(proxy::realtime::realtime_handler),
+        )
         // Management API — nested under /api/v1 (preserves middleware + fallback)
         .nest("/api/v1", api::api_router(state.clone()))
         // Proxy: catch everything else
@@ -309,8 +311,8 @@ async fn run_server(cfg: config::Config, port: u16) -> anyhow::Result<()> {
         // - Dev: allows any localhost:* for convenience
         // - Production (TRUEFLOW_ENV=production): only the explicit DASHBOARD_ORIGIN is permitted
         .layer({
-            use tower_http::cors::AllowOrigin;
             use axum::http::{HeaderName, Method};
+            use tower_http::cors::AllowOrigin;
             let dashboard_origin = std::env::var("DASHBOARD_ORIGIN")
                 .unwrap_or_else(|_| "http://localhost:3000".to_string());
             let is_production = std::env::var("TRUEFLOW_ENV")
@@ -330,8 +332,12 @@ async fn run_server(cfg: config::Config, port: u16) -> anyhow::Result<()> {
                         || origin_str.starts_with("http://127.0.0.1:")
                 }))
                 .allow_methods([
-                    Method::GET, Method::POST, Method::PUT,
-                    Method::DELETE, Method::PATCH, Method::OPTIONS,
+                    Method::GET,
+                    Method::POST,
+                    Method::PUT,
+                    Method::DELETE,
+                    Method::PATCH,
+                    Method::OPTIONS,
                 ])
                 // NOTE: Cannot use AllowHeaders::any() with allow_credentials(true) per CORS spec
                 .allow_headers([
@@ -401,7 +407,11 @@ async fn run_server(cfg: config::Config, port: u16) -> anyhow::Result<()> {
                 eviction_cache.retain(|_, entry| entry.expires_at > now);
                 let removed = before - eviction_cache.len();
                 if removed > 0 {
-                    tracing::debug!(removed, remaining = eviction_cache.len(), "evicted expired local cache entries");
+                    tracing::debug!(
+                        removed,
+                        remaining = eviction_cache.len(),
+                        "evicted expired local cache entries"
+                    );
                 }
             }
         });
@@ -520,10 +530,7 @@ async fn security_headers_middleware(
     } else {
         "max-age=0"
     };
-    headers.insert(
-        "Strict-Transport-Security",
-        hsts_value.parse().unwrap(),
-    );
+    headers.insert("Strict-Transport-Security", hsts_value.parse().unwrap());
 
     resp
 }
@@ -673,7 +680,7 @@ async fn handle_token_command(
                 upstream_url: upstream,
                 scopes: serde_json::json!([]),
                 policy_ids: p_ids,
-                log_level: Some(1), // Default to redacted logging for CLI
+                log_level: Some(1),    // Default to redacted logging for CLI
                 circuit_breaker: None, // Use gateway defaults
                 allowed_models: None,
                 team_id: None,
@@ -702,9 +709,15 @@ async fn handle_token_command(
         }
         cli::TokenCommands::Revoke { token_id } => {
             // Look up token to get its project_id for the scoped revoke query
-            let token_row = state.db.get_token(&token_id).await?
+            let token_row = state
+                .db
+                .get_token(&token_id)
+                .await?
                 .ok_or_else(|| anyhow::anyhow!("Token not found: {}", token_id))?;
-            let revoked = state.db.revoke_token(&token_id, token_row.project_id).await?;
+            let revoked = state
+                .db
+                .revoke_token(&token_id, token_row.project_id)
+                .await?;
             if revoked {
                 println!("Token revoked.");
             } else {

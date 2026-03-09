@@ -3,24 +3,28 @@ use std::sync::Arc;
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
-    Extension,
-    Json,
+    Extension, Json,
 };
 use uuid::Uuid;
 
+use super::dtos::{
+    CreateCredentialRequest, CreateCredentialResponse, DeleteResponse, PaginationParams,
+};
+use super::helpers::verify_project_ownership;
 use crate::api::AuthContext;
 use crate::store::postgres::CredentialMeta;
 use crate::AppState;
-use super::dtos::{CreateCredentialRequest, CreateCredentialResponse, DeleteResponse, PaginationParams};
-use super::helpers::verify_project_ownership;
 
 pub async fn list_credentials(
     State(state): State<Arc<AppState>>,
     Extension(auth): Extension<AuthContext>,
     Query(params): Query<PaginationParams>,
 ) -> Result<Json<Vec<CredentialMeta>>, StatusCode> {
-    auth.require_scope("credentials:read").map_err(|_| StatusCode::FORBIDDEN)?;
-    let project_id = params.project_id.unwrap_or_else(|| auth.default_project_id());
+    auth.require_scope("credentials:read")
+        .map_err(|_| StatusCode::FORBIDDEN)?;
+    let project_id = params
+        .project_id
+        .unwrap_or_else(|| auth.default_project_id());
     verify_project_ownership(&state, auth.org_id, project_id).await?;
 
     let creds = state.db.list_credentials(project_id).await.map_err(|e| {
@@ -38,8 +42,11 @@ pub async fn create_credential(
     Json(payload): Json<CreateCredentialRequest>,
 ) -> Result<(StatusCode, Json<CreateCredentialResponse>), StatusCode> {
     auth.require_role("admin")?;
-    auth.require_scope("credentials:write").map_err(|_| StatusCode::FORBIDDEN)?;
-    let project_id = payload.project_id.unwrap_or_else(|| auth.default_project_id());
+    auth.require_scope("credentials:write")
+        .map_err(|_| StatusCode::FORBIDDEN)?;
+    let project_id = payload
+        .project_id
+        .unwrap_or_else(|| auth.default_project_id());
     verify_project_ownership(&state, auth.org_id, project_id).await?;
 
     // Encrypt the secret using the vault
@@ -111,14 +118,19 @@ pub async fn delete_credential(
     Path(id_str): Path<String>,
 ) -> Result<Json<DeleteResponse>, StatusCode> {
     auth.require_role("admin")?;
-    auth.require_scope("credentials:write").map_err(|_| StatusCode::FORBIDDEN)?;
+    auth.require_scope("credentials:write")
+        .map_err(|_| StatusCode::FORBIDDEN)?;
     let id = Uuid::parse_str(&id_str).map_err(|_| StatusCode::BAD_REQUEST)?;
     let project_id = auth.default_project_id();
 
-    let deleted = state.db.delete_credential(id, project_id).await.map_err(|e| {
-        tracing::error!("delete_credential failed: {}", e);
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+    let deleted = state
+        .db
+        .delete_credential(id, project_id)
+        .await
+        .map_err(|e| {
+            tracing::error!("delete_credential failed: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
 
     Ok(Json(DeleteResponse { id, deleted }))
 }

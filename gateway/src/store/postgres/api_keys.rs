@@ -1,6 +1,6 @@
-use uuid::Uuid;
-use super::PgStore;
 use super::types::ApiKeyRow;
+use super::PgStore;
+use uuid::Uuid;
 
 impl PgStore {
     // ── API Keys ─────────────────────────────────────────────────
@@ -69,12 +69,9 @@ impl PgStore {
     }
 
     pub async fn touch_api_key_usage(&self, id: Uuid) -> anyhow::Result<()> {
-        sqlx::query!(
-            "UPDATE api_keys SET last_used_at = NOW() WHERE id = $1",
-            id
-        )
-        .execute(&self.pool)
-        .await?;
+        sqlx::query!("UPDATE api_keys SET last_used_at = NOW() WHERE id = $1", id)
+            .execute(&self.pool)
+            .await?;
         Ok(())
     }
 }

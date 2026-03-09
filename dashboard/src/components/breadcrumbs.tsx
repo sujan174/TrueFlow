@@ -2,21 +2,21 @@
 
 import { usePathname } from "next/navigation";
 import Link from "next/link";
-import { ChevronRight, Home } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import { Fragment } from "react";
 
 const ROUTE_LABELS: Record<string, string> = {
-    "audit": "Traffic Inspector",
+    "audit": "Audit Logs",
     "tokens": "Tokens",
     "virtual-keys": "Virtual Keys",
     "credentials": "The Vault",
     "policies": "Policies",
     "approvals": "Approvals",
-    "analytics": "Global Analytics",
+    "analytics": "Analytics",
     "guardrails": "Guardrails",
-    "cache": "Cache Management",
+    "cache": "Cache",
     "playground": "Playground",
-    "sessions": "Agent Sessions",
+    "sessions": "Sessions",
     "settings": "Settings",
     "experiments": "Experiments",
 };
@@ -28,9 +28,9 @@ export function Breadcrumbs() {
     if (segments.length === 0) return null;
 
     return (
-        <nav className="flex items-center text-[13px] text-muted-foreground">
-            <Link href="/" className="hover:text-foreground transition-colors">
-                <Home className="h-4 w-4" />
+        <nav className="flex items-center text-[13px] font-medium text-zinc-500">
+            <Link href="/" className="hover:text-white transition-colors">
+                TrueFlow
             </Link>
             {segments.map((segment, index) => {
                 const isLast = index === segments.length - 1;
@@ -39,13 +39,13 @@ export function Breadcrumbs() {
 
                 return (
                     <Fragment key={path}>
-                        <ChevronRight className="h-3 w-3 mx-1 text-muted-foreground/30" />
+                        <span className="text-zinc-700 mx-2 select-none">/</span>
                         {isLast ? (
-                            <span className="font-semibold text-lg tracking-tight text-foreground truncate max-w-[400px]">
+                            <span className="text-white truncate max-w-[400px]">
                                 {label}
                             </span>
                         ) : (
-                            <Link href={path} className="hover:text-foreground transition-colors truncate max-w-[150px]">
+                            <Link href={path} className="hover:text-white transition-colors truncate max-w-[150px]">
                                 {label}
                             </Link>
                         )}

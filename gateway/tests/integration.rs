@@ -127,13 +127,8 @@ mod webhook_tests {
 
     #[test]
     fn test_webhook_event_json_structure() {
-        let event = WebhookEvent::policy_violation(
-            "tok_1",
-            "name-1",
-            "proj_1",
-            "policy-1",
-            "reason-1",
-        );
+        let event =
+            WebhookEvent::policy_violation("tok_1", "name-1", "proj_1", "policy-1", "reason-1");
 
         let json = serde_json::to_value(&event).unwrap();
 
@@ -207,10 +202,7 @@ mod webhook_tests {
 
         // Should not panic — failures are logged but not propagated
         notifier
-            .dispatch(
-                &["http://localhost:1/nonexistent".to_string()],
-                event,
-            )
+            .dispatch(&["http://localhost:1/nonexistent".to_string()], event)
             .await;
 
         // Give the spawned task time to complete
@@ -423,7 +415,9 @@ mod error_tests {
     #[test]
     fn test_spend_cap_reached_error_exists() {
         // Verify the error variant exists and can be constructed
-        let err = AppError::SpendCapReached { message: "daily spend cap exceeded".into() };
+        let err = AppError::SpendCapReached {
+            message: "daily spend cap exceeded".into(),
+        };
         let err_str = format!("{}", err);
         assert!(
             err_str.contains("spend") || err_str.contains("cap"),
@@ -432,5 +426,3 @@ mod error_tests {
         );
     }
 }
-
-

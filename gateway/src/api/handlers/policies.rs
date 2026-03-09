@@ -4,34 +4,42 @@ use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
     response::IntoResponse,
-    Extension,
-    Json,
+    Extension, Json,
 };
 use serde_json::json;
 use uuid::Uuid;
 
+use super::dtos::{
+    CreatePolicyRequest, DeleteResponse, PaginationParams, PolicyResponse, UpdatePolicyRequest,
+};
+use super::helpers::verify_project_ownership;
 use crate::api::AuthContext;
 use crate::store::postgres::PolicyRow;
 use crate::AppState;
-use super::dtos::{CreatePolicyRequest, UpdatePolicyRequest, PolicyResponse, DeleteResponse, PaginationParams};
-use super::helpers::verify_project_ownership;
 
 pub async fn list_policies(
     State(state): State<Arc<AppState>>,
     Extension(auth): Extension<AuthContext>,
     Query(params): Query<PaginationParams>,
 ) -> Result<Json<Vec<PolicyRow>>, StatusCode> {
-    auth.require_scope("policies:read").map_err(|_| StatusCode::FORBIDDEN)?;
-    let project_id = params.project_id.unwrap_or_else(|| auth.default_project_id());
+    auth.require_scope("policies:read")
+        .map_err(|_| StatusCode::FORBIDDEN)?;
+    let project_id = params
+        .project_id
+        .unwrap_or_else(|| auth.default_project_id());
     verify_project_ownership(&state, auth.org_id, project_id).await?;
 
-    let limit = params.limit.unwrap_or(100).min(1000).max(1);
+    let limit = params.limit.unwrap_or(100).clamp(1, 1000);
     let offset = params.offset.unwrap_or(0).max(0);
 
-    let policies = state.db.list_policies(project_id, limit, offset).await.map_err(|e| {
-        tracing::error!("list_policies failed: {}", e);
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+    let policies = state
+        .db
+        .list_policies(project_id, limit, offset)
+        .await
+        .map_err(|e| {
+            tracing::error!("list_policies failed: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
 
     Ok(Json(policies))
 }
@@ -48,7 +56,9 @@ pub async fn create_policy(
     if auth.require_scope("policies:write").is_err() {
         return StatusCode::FORBIDDEN.into_response();
     }
-    let project_id = payload.project_id.unwrap_or_else(|| auth.default_project_id());
+    let project_id = payload
+        .project_id
+        .unwrap_or_else(|| auth.default_project_id());
     // SEC: verify project isolation
     if let Err(status) = verify_project_ownership(&state, auth.org_id, project_id).await {
         return status.into_response();
@@ -62,7 +72,8 @@ pub async fn create_policy(
         return (
             StatusCode::BAD_REQUEST,
             Json(json!({ "error": format!("invalid mode: {}", mode) })),
-        ).into_response();
+        )
+            .into_response();
     }
 
     // Validate phase
@@ -71,14 +82,18 @@ pub async fn create_policy(
         return (
             StatusCode::BAD_REQUEST,
             Json(json!({ "error": format!("invalid phase: {}", phase) })),
-        ).into_response();
+        )
+            .into_response();
     }
 
     // SEC: enforce max size on rules JSON to prevent oversized payloads clogging DB+memory
     const MAX_RULES_BYTES: usize = 64 * 1024; // 64KB
     let rules_str = payload.rules.to_string();
     if rules_str.len() > MAX_RULES_BYTES {
-        tracing::warn!("create_policy: rules JSON too large: {} bytes", rules_str.len());
+        tracing::warn!(
+            "create_policy: rules JSON too large: {} bytes",
+            rules_str.len()
+        );
         return (
             StatusCode::UNPROCESSABLE_ENTITY,
             Json(json!({ "error": format!("rules JSON exceeds maximum size of {}KB", MAX_RULES_BYTES / 1024) })),
@@ -87,7 +102,14 @@ pub async fn create_policy(
 
     match state
         .db
-        .insert_policy(project_id, &payload.name, &mode, &phase, payload.rules, payload.retry)
+        .insert_policy(
+            project_id,
+            &payload.name,
+            &mode,
+            &phase,
+            payload.rules,
+            payload.retry,
+        )
         .await
     {
         Ok(id) => (
@@ -97,13 +119,15 @@ pub async fn create_policy(
                 name: payload.name,
                 message: "Policy created".to_string(),
             })),
-        ).into_response(),
+        )
+            .into_response(),
         Err(e) => {
             tracing::error!("create_policy failed: {}", e);
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(json!({ "error": "internal server error" })),
-            ).into_response()
+            )
+                .into_response()
         }
     }
 }
@@ -116,7 +140,8 @@ pub async fn update_policy(
     Json(payload): Json<UpdatePolicyRequest>,
 ) -> Result<Json<PolicyResponse>, StatusCode> {
     auth.require_role("admin")?;
-    auth.require_scope("policies:write").map_err(|_| StatusCode::FORBIDDEN)?;
+    auth.require_scope("policies:write")
+        .map_err(|_| StatusCode::FORBIDDEN)?;
     let id = Uuid::parse_str(&id_str).map_err(|_| StatusCode::BAD_REQUEST)?;
     let project_id = auth.default_project_id();
 
@@ -172,7 +197,8 @@ pub async fn delete_policy(
     Path(id_str): Path<String>,
 ) -> Result<Json<DeleteResponse>, StatusCode> {
     auth.require_role("admin")?;
-    auth.require_scope("policies:write").map_err(|_| StatusCode::FORBIDDEN)?;
+    auth.require_scope("policies:write")
+        .map_err(|_| StatusCode::FORBIDDEN)?;
     let id = Uuid::parse_str(&id_str).map_err(|_| StatusCode::BAD_REQUEST)?;
     let project_id = auth.default_project_id();
 
@@ -190,7 +216,8 @@ pub async fn list_policy_versions(
     Extension(auth): Extension<AuthContext>,
     Path(id_str): Path<String>,
 ) -> Result<Json<Vec<crate::store::postgres::PolicyVersionRow>>, StatusCode> {
-    auth.require_scope("policies:read").map_err(|_| StatusCode::FORBIDDEN)?;
+    auth.require_scope("policies:read")
+        .map_err(|_| StatusCode::FORBIDDEN)?;
     let id = Uuid::parse_str(&id_str).map_err(|_| StatusCode::BAD_REQUEST)?;
 
     let versions = state.db.list_policy_versions(id).await.map_err(|e| {

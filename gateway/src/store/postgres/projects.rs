@@ -1,6 +1,6 @@
-use uuid::Uuid;
-use super::PgStore;
 use super::types::ProjectRow;
+use super::PgStore;
+use uuid::Uuid;
 
 impl PgStore {
     pub async fn create_project(&self, org_id: Uuid, name: &str) -> anyhow::Result<Uuid> {
@@ -25,25 +25,21 @@ impl PgStore {
     }
 
     pub async fn update_project(&self, id: Uuid, org_id: Uuid, name: &str) -> anyhow::Result<bool> {
-        let result = sqlx::query(
-            "UPDATE projects SET name = $1 WHERE id = $2 AND org_id = $3"
-        )
-        .bind(name)
-        .bind(id)
-        .bind(org_id)
-        .execute(&self.pool)
-        .await?;
+        let result = sqlx::query("UPDATE projects SET name = $1 WHERE id = $2 AND org_id = $3")
+            .bind(name)
+            .bind(id)
+            .bind(org_id)
+            .execute(&self.pool)
+            .await?;
         Ok(result.rows_affected() > 0)
     }
 
     pub async fn delete_project(&self, id: Uuid, org_id: Uuid) -> anyhow::Result<bool> {
-        let result = sqlx::query(
-            "DELETE FROM projects WHERE id = $1 AND org_id = $2"
-        )
-        .bind(id)
-        .bind(org_id)
-        .execute(&self.pool)
-        .await?;
+        let result = sqlx::query("DELETE FROM projects WHERE id = $1 AND org_id = $2")
+            .bind(id)
+            .bind(org_id)
+            .execute(&self.pool)
+            .await?;
         Ok(result.rows_affected() > 0)
     }
 
@@ -55,7 +51,7 @@ impl PgStore {
     pub async fn purge_project_data(&self, project_id: Uuid, org_id: Uuid) -> anyhow::Result<u64> {
         // First verify the project belongs to this org (authorization check)
         let exists: bool = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM projects WHERE id = $1 AND org_id = $2)"
+            "SELECT EXISTS(SELECT 1 FROM projects WHERE id = $1 AND org_id = $2)",
         )
         .bind(project_id)
         .bind(org_id)
@@ -70,30 +66,24 @@ impl PgStore {
         let mut total_deleted: u64 = 0;
 
         // 1. Purge audit / request logs
-        let r = sqlx::query(
-            "DELETE FROM audit_logs WHERE project_id = $1"
-        )
-        .bind(project_id)
-        .execute(&mut *tx)
-        .await?;
+        let r = sqlx::query("DELETE FROM audit_logs WHERE project_id = $1")
+            .bind(project_id)
+            .execute(&mut *tx)
+            .await?;
         total_deleted += r.rows_affected();
 
         // 2. Purge agent sessions
-        let r = sqlx::query(
-            "DELETE FROM sessions WHERE project_id = $1"
-        )
-        .bind(project_id)
-        .execute(&mut *tx)
-        .await?;
+        let r = sqlx::query("DELETE FROM sessions WHERE project_id = $1")
+            .bind(project_id)
+            .execute(&mut *tx)
+            .await?;
         total_deleted += r.rows_affected();
 
         // 3. Purge virtual key usage / billing records (keep keys themselves; owners may need invoicing data export first)
-        let r = sqlx::query(
-            "DELETE FROM token_usage WHERE project_id = $1"
-        )
-        .bind(project_id)
-        .execute(&mut *tx)
-        .await?;
+        let r = sqlx::query("DELETE FROM token_usage WHERE project_id = $1")
+            .bind(project_id)
+            .execute(&mut *tx)
+            .await?;
         total_deleted += r.rows_affected();
 
         tx.commit().await?;
@@ -109,9 +99,13 @@ impl PgStore {
 
     /// Verify that a project belongs to the given org.
     /// Used by API handlers to enforce project isolation.
-    pub async fn project_belongs_to_org(&self, project_id: Uuid, org_id: Uuid) -> anyhow::Result<bool> {
+    pub async fn project_belongs_to_org(
+        &self,
+        project_id: Uuid,
+        org_id: Uuid,
+    ) -> anyhow::Result<bool> {
         let exists = sqlx::query_scalar::<_, bool>(
-            "SELECT EXISTS(SELECT 1 FROM projects WHERE id = $1 AND org_id = $2)"
+            "SELECT EXISTS(SELECT 1 FROM projects WHERE id = $1 AND org_id = $2)",
         )
         .bind(project_id)
         .bind(org_id)

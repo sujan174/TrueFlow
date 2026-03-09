@@ -19,10 +19,10 @@ mod tests;
 
 use serde_json::Value;
 
-use crate::models::policy::Action;
 use self::patterns::*;
+use crate::models::policy::Action;
 
-pub use self::schema::{validate_schema, SchemaValidationResult};
+pub use self::schema::validate_schema;
 
 // ── Public Types ──────────────────────────────────────────────
 
@@ -68,51 +68,61 @@ impl GuardrailResult {
 /// harmful → code → jailbreak → profanity → bias → sensitive_topics →
 /// gibberish → contact_info → ip_leakage → competitor → topic → custom → length.
 pub fn check_content(body: &Value, action: &Action) -> GuardrailResult {
-    let (block_jailbreak, block_harmful, block_code_injection,
-         block_profanity, block_bias, block_competitor_mention,
-         block_sensitive_topics, block_gibberish,
-         block_contact_info, block_ip_leakage,
-         competitor_names,
-         topic_allowlist, topic_denylist, custom_patterns,
-         risk_threshold, max_content_length) =
-        match action {
-            Action::ContentFilter {
-                block_jailbreak,
-                block_harmful,
-                block_code_injection,
-                block_profanity,
-                block_bias,
-                block_competitor_mention,
-                block_sensitive_topics,
-                block_gibberish,
-                block_contact_info,
-                block_ip_leakage,
-                competitor_names,
-                topic_allowlist,
-                topic_denylist,
-                custom_patterns,
-                risk_threshold,
-                max_content_length,
-            } => (
-                *block_jailbreak,
-                *block_harmful,
-                *block_code_injection,
-                *block_profanity,
-                *block_bias,
-                *block_competitor_mention,
-                *block_sensitive_topics,
-                *block_gibberish,
-                *block_contact_info,
-                *block_ip_leakage,
-                competitor_names,
-                topic_allowlist,
-                topic_denylist,
-                custom_patterns,
-                *risk_threshold,
-                *max_content_length,
-            ),
-            _ => return GuardrailResult::allow(),
-        };
+    let (
+        block_jailbreak,
+        block_harmful,
+        block_code_injection,
+        block_profanity,
+        block_bias,
+        block_competitor_mention,
+        block_sensitive_topics,
+        block_gibberish,
+        block_contact_info,
+        block_ip_leakage,
+        competitor_names,
+        topic_allowlist,
+        topic_denylist,
+        custom_patterns,
+        risk_threshold,
+        max_content_length,
+    ) = match action {
+        Action::ContentFilter {
+            block_jailbreak,
+            block_harmful,
+            block_code_injection,
+            block_profanity,
+            block_bias,
+            block_competitor_mention,
+            block_sensitive_topics,
+            block_gibberish,
+            block_contact_info,
+            block_ip_leakage,
+            competitor_names,
+            topic_allowlist,
+            topic_denylist,
+            custom_patterns,
+            risk_threshold,
+            max_content_length,
+        } => (
+            *block_jailbreak,
+            *block_harmful,
+            *block_code_injection,
+            *block_profanity,
+            *block_bias,
+            *block_competitor_mention,
+            *block_sensitive_topics,
+            *block_gibberish,
+            *block_contact_info,
+            *block_ip_leakage,
+            competitor_names,
+            topic_allowlist,
+            topic_denylist,
+            custom_patterns,
+            *risk_threshold,
+            *max_content_length,
+        ),
+        _ => return GuardrailResult::allow(),
+    };
 
     // Extract all text content from the request body
     let text = extract_text_content(body);
@@ -126,7 +136,10 @@ pub fn check_content(body: &Value, action: &Action) -> GuardrailResult {
         if !matches.is_empty() {
             return GuardrailResult::block(
                 "Request blocked: harmful content detected",
-                matches.iter().map(|i| format!("harmful_pattern_{}", i)).collect(),
+                matches
+                    .iter()
+                    .map(|i| format!("harmful_pattern_{}", i))
+                    .collect(),
                 1.0,
             );
         }
@@ -178,10 +191,8 @@ pub fn check_content(body: &Value, action: &Action) -> GuardrailResult {
     if block_bias {
         let bias_matches: Vec<usize> = BIAS_SET.matches(&text).into_iter().collect();
         if !bias_matches.is_empty() {
-            let pattern_names: Vec<String> = bias_matches
-                .iter()
-                .map(|i| format!("bias_{}", i))
-                .collect();
+            let pattern_names: Vec<String> =
+                bias_matches.iter().map(|i| format!("bias_{}", i)).collect();
             risk_score = (risk_score + 0.7).min(1.0);
             matched_patterns.extend(pattern_names);
         }
@@ -189,7 +200,8 @@ pub fn check_content(body: &Value, action: &Action) -> GuardrailResult {
 
     // 6. Sensitive topics detection
     if block_sensitive_topics {
-        let sensitive_matches: Vec<usize> = SENSITIVE_TOPIC_SET.matches(&text).into_iter().collect();
+        let sensitive_matches: Vec<usize> =
+            SENSITIVE_TOPIC_SET.matches(&text).into_iter().collect();
         if !sensitive_matches.is_empty() {
             let pattern_names: Vec<String> = sensitive_matches
                 .iter()
@@ -326,7 +338,11 @@ pub fn check_content(body: &Value, action: &Action) -> GuardrailResult {
 
     // 14. Content length check
     if max_content_length > 0 && text.len() > max_content_length as usize {
-        matched_patterns.push(format!("content_too_long:{}/{}", text.len(), max_content_length));
+        matched_patterns.push(format!(
+            "content_too_long:{}/{}",
+            text.len(),
+            max_content_length
+        ));
         risk_score = (risk_score + 0.3).min(1.0);
     }
 

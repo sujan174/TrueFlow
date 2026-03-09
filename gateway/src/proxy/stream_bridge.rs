@@ -50,7 +50,10 @@ pub type StreamResultSlot = Arc<Mutex<Option<StreamResult>>>;
 /// // Later (in a spawned task), read the result for audit/cost
 /// let result = wait_for_stream_result(&result_slot, Duration::from_secs(300)).await;
 /// ```
-pub fn tee_sse_stream(upstream_resp: reqwest::Response, start: Instant) -> (Body, StreamResultSlot, Arc<Notify>) {
+pub fn tee_sse_stream(
+    upstream_resp: reqwest::Response,
+    start: Instant,
+) -> (Body, StreamResultSlot, Arc<Notify>) {
     let result_slot: StreamResultSlot = Arc::new(Mutex::new(None));
     let slot_for_bg = result_slot.clone();
     let notify = Arc::new(Notify::new());
@@ -86,17 +89,18 @@ pub fn tee_sse_stream(upstream_resp: reqwest::Response, start: Instant) -> (Body
                     // FIX #1: Avoid unnecessary allocation when no residual.
                     // When utf8_residual is empty, borrow the bytes directly
                     // instead of copying with to_vec().
-                    let (combined_owned, combined_ref): (Vec<u8>, &[u8]) = if utf8_residual.is_empty() {
-                        (Vec::new(), &bytes[..])
-                    } else {
-                        let mut buf = std::mem::take(&mut utf8_residual);
-                        buf.extend_from_slice(&bytes);
-                        let ptr = buf.as_ptr();
-                        let len = buf.len();
-                        // SAFETY: combined_ref borrows from combined_owned which
-                        // we keep alive for the duration of this scope.
-                        (buf, unsafe { std::slice::from_raw_parts(ptr, len) })
-                    };
+                    let (combined_owned, combined_ref): (Vec<u8>, &[u8]) =
+                        if utf8_residual.is_empty() {
+                            (Vec::new(), &bytes[..])
+                        } else {
+                            let mut buf = std::mem::take(&mut utf8_residual);
+                            buf.extend_from_slice(&bytes);
+                            let ptr = buf.as_ptr();
+                            let len = buf.len();
+                            // SAFETY: combined_ref borrows from combined_owned which
+                            // we keep alive for the duration of this scope.
+                            (buf, unsafe { std::slice::from_raw_parts(ptr, len) })
+                        };
 
                     // Find the longest valid UTF-8 prefix; keep any trailing
                     // incomplete sequence for the next iteration.
@@ -105,7 +109,9 @@ pub fn tee_sse_stream(upstream_resp: reqwest::Response, start: Instant) -> (Body
                         Err(e) => {
                             let valid_up_to = e.valid_up_to();
                             // SAFETY: we just validated up to this index
-                            let s = unsafe { std::str::from_utf8_unchecked(&combined_ref[..valid_up_to]) };
+                            let s = unsafe {
+                                std::str::from_utf8_unchecked(&combined_ref[..valid_up_to])
+                            };
                             (s, &combined_ref[valid_up_to..])
                         }
                     };
@@ -124,7 +130,8 @@ pub fn tee_sse_stream(upstream_resp: reqwest::Response, start: Instant) -> (Body
                     if done {
                         let mut slot_guard = slot_for_bg.lock().await;
                         if slot_guard.is_none() {
-                            let finished_acc = std::mem::replace(&mut *acc_guard, StreamAccumulator::new());
+                            let finished_acc =
+                                std::mem::replace(&mut *acc_guard, StreamAccumulator::new());
                             *slot_guard = Some(finished_acc.finish());
                         }
                         notify_bg.notify_waiters();
@@ -135,7 +142,8 @@ pub fn tee_sse_stream(upstream_resp: reqwest::Response, start: Instant) -> (Body
                     // lines before sending to the client. Non-data lines and
                     // chunks with no PII pass through with zero extra alloc.
                     let send_bytes = if !valid_str.is_empty() {
-                        let (redacted, did_redact) = crate::middleware::sanitize::redact_sse_chunk(valid_str);
+                        let (redacted, did_redact) =
+                            crate::middleware::sanitize::redact_sse_chunk(valid_str);
                         if did_redact {
                             Bytes::from(redacted)
                         } else {
@@ -148,11 +156,11 @@ pub fn tee_sse_stream(upstream_resp: reqwest::Response, start: Instant) -> (Body
                     // 5A-1 FIX: Send to client unless they've disconnected.
                     // On disconnect, set client_gone and CONTINUE reading
                     // upstream so we capture the final usage/cost chunk.
-                    if !client_gone {
-                        if tx.send(Ok(send_bytes)).await.is_err() {
-                            client_gone = true;
-                            tracing::debug!("Client disconnected — continuing upstream read for billing");
-                        }
+                    if !client_gone && tx.send(Ok(send_bytes)).await.is_err() {
+                        client_gone = true;
+                        tracing::debug!(
+                            "Client disconnected — continuing upstream read for billing"
+                        );
                     }
                     // If [DONE] was already processed, we can stop early
                     if client_gone {
@@ -177,7 +185,8 @@ pub fn tee_sse_stream(upstream_resp: reqwest::Response, start: Instant) -> (Body
                         let mut slot_guard = slot_for_bg.lock().await;
                         if slot_guard.is_none() {
                             let mut acc_guard = accumulator.lock().await;
-                            let partial = std::mem::replace(&mut *acc_guard, StreamAccumulator::new());
+                            let partial =
+                                std::mem::replace(&mut *acc_guard, StreamAccumulator::new());
                             *slot_guard = Some(partial.finish());
                         }
                     }
@@ -252,15 +261,16 @@ where
                     }
 
                     // FIX #1: Avoid unnecessary allocation when no residual.
-                    let (combined_owned, combined_ref): (Vec<u8>, &[u8]) = if utf8_residual.is_empty() {
-                        (Vec::new(), &bytes[..])
-                    } else {
-                        let mut buf = std::mem::take(&mut utf8_residual);
-                        buf.extend_from_slice(&bytes);
-                        let ptr = buf.as_ptr();
-                        let len = buf.len();
-                        (buf, unsafe { std::slice::from_raw_parts(ptr, len) })
-                    };
+                    let (combined_owned, combined_ref): (Vec<u8>, &[u8]) =
+                        if utf8_residual.is_empty() {
+                            (Vec::new(), &bytes[..])
+                        } else {
+                            let mut buf = std::mem::take(&mut utf8_residual);
+                            buf.extend_from_slice(&bytes);
+                            let ptr = buf.as_ptr();
+                            let len = buf.len();
+                            (buf, unsafe { std::slice::from_raw_parts(ptr, len) })
+                        };
 
                     // Find longest valid UTF-8 prefix
                     let (valid_bytes, leftover) = match std::str::from_utf8(combined_ref) {
@@ -293,7 +303,8 @@ where
                         if done {
                             let mut slot_guard = slot_for_bg.lock().await;
                             if slot_guard.is_none() {
-                                let finished_acc = std::mem::replace(&mut *acc_guard, StreamAccumulator::new());
+                                let finished_acc =
+                                    std::mem::replace(&mut *acc_guard, StreamAccumulator::new());
                                 *slot_guard = Some(finished_acc.finish());
                             }
                             notify_bg.notify_waiters();
@@ -305,7 +316,8 @@ where
                     // STREAMING-PII FIX: Apply PII redaction to translated
                     // SSE bytes before sending to the client.
                     let send_bytes = if let Ok(text) = std::str::from_utf8(&translated) {
-                        let (redacted, did_redact) = crate::middleware::sanitize::redact_sse_chunk(text);
+                        let (redacted, did_redact) =
+                            crate::middleware::sanitize::redact_sse_chunk(text);
                         if did_redact {
                             Bytes::from(redacted)
                         } else {
@@ -316,11 +328,9 @@ where
                     };
 
                     // 5A-1 FIX: Send translated bytes to client unless disconnected.
-                    if !client_gone {
-                        if tx.send(Ok(send_bytes)).await.is_err() {
-                            client_gone = true;
-                            tracing::debug!("Client disconnected — continuing upstream read for billing (translated)");
-                        }
+                    if !client_gone && tx.send(Ok(send_bytes)).await.is_err() {
+                        client_gone = true;
+                        tracing::debug!("Client disconnected — continuing upstream read for billing (translated)");
                     }
                     if client_gone {
                         let slot_guard = slot_for_bg.lock().await;
@@ -340,7 +350,8 @@ where
                         let mut slot_guard = slot_for_bg.lock().await;
                         if slot_guard.is_none() {
                             let mut acc_guard = accumulator.lock().await;
-                            let partial = std::mem::replace(&mut *acc_guard, StreamAccumulator::new());
+                            let partial =
+                                std::mem::replace(&mut *acc_guard, StreamAccumulator::new());
                             *slot_guard = Some(partial.finish());
                         }
                     }
@@ -455,7 +466,10 @@ pub fn tee_bedrock_stream(
                             break;
                         }
                         let total_length = u32::from_be_bytes([
-                            remaining[0], remaining[1], remaining[2], remaining[3]
+                            remaining[0],
+                            remaining[1],
+                            remaining[2],
+                            remaining[3],
                         ]) as usize;
 
                         if total_length < 16 || remaining.len() < total_length {
@@ -464,90 +478,114 @@ pub fn tee_bedrock_stream(
 
                         // Decode this single complete frame
                         let frame_bytes = &remaining[..total_length];
-                        let events = crate::proxy::model_router::decode_bedrock_event_stream(frame_bytes);
+                        let events =
+                            crate::proxy::model_router::decode_bedrock_event_stream(frame_bytes);
 
                         for (event_type, payload) in &events {
                             match event_type.as_str() {
                                 "messageStart" => {
-                                    let role = payload.get("role")
+                                    let role = payload
+                                        .get("role")
                                         .and_then(|r| r.as_str())
                                         .unwrap_or("assistant");
-                                    sse_output.push_str(&crate::proxy::model_router::openai_sse_chunk(
-                                        &chunk_id, &model,
-                                        serde_json::json!({"role": role, "content": ""}),
-                                        None,
-                                    ));
+                                    sse_output.push_str(
+                                        &crate::proxy::model_router::openai_sse_chunk(
+                                            &chunk_id,
+                                            &model,
+                                            serde_json::json!({"role": role, "content": ""}),
+                                            None,
+                                        ),
+                                    );
                                 }
                                 "contentBlockStart" => {
                                     if let Some(start) = payload.get("start") {
                                         if let Some(tool_use) = start.get("toolUse") {
-                                            let index = payload.get("contentBlockIndex")
+                                            let index = payload
+                                                .get("contentBlockIndex")
                                                 .and_then(|i| i.as_u64())
                                                 .unwrap_or(0);
-                                            let name = tool_use.get("name")
-                                                .and_then(|n| n.as_str()).unwrap_or("");
-                                            let tool_id = tool_use.get("toolUseId")
-                                                .and_then(|id| id.as_str()).unwrap_or("");
-                                            sse_output.push_str(&crate::proxy::model_router::openai_sse_chunk(
-                                                &chunk_id, &model,
-                                                serde_json::json!({"tool_calls": [{
-                                                    "index": index,
-                                                    "id": tool_id,
-                                                    "type": "function",
-                                                    "function": {"name": name, "arguments": ""}
-                                                }]}),
-                                                None,
-                                            ));
+                                            let name = tool_use
+                                                .get("name")
+                                                .and_then(|n| n.as_str())
+                                                .unwrap_or("");
+                                            let tool_id = tool_use
+                                                .get("toolUseId")
+                                                .and_then(|id| id.as_str())
+                                                .unwrap_or("");
+                                            sse_output.push_str(
+                                                &crate::proxy::model_router::openai_sse_chunk(
+                                                    &chunk_id,
+                                                    &model,
+                                                    serde_json::json!({"tool_calls": [{
+                                                        "index": index,
+                                                        "id": tool_id,
+                                                        "type": "function",
+                                                        "function": {"name": name, "arguments": ""}
+                                                    }]}),
+                                                    None,
+                                                ),
+                                            );
                                         }
                                     }
                                 }
                                 "contentBlockDelta" => {
                                     if let Some(delta) = payload.get("delta") {
-                                        if let Some(text) = delta.get("text").and_then(|t| t.as_str()) {
-                                            sse_output.push_str(&crate::proxy::model_router::openai_sse_chunk(
-                                                &chunk_id, &model,
-                                                serde_json::json!({"content": text}),
-                                                None,
-                                            ));
+                                        if let Some(text) =
+                                            delta.get("text").and_then(|t| t.as_str())
+                                        {
+                                            sse_output.push_str(
+                                                &crate::proxy::model_router::openai_sse_chunk(
+                                                    &chunk_id,
+                                                    &model,
+                                                    serde_json::json!({"content": text}),
+                                                    None,
+                                                ),
+                                            );
                                         }
-                                        if let Some(input) = delta.get("toolUse")
-                                            .and_then(|tu| tu.get("input"))
+                                        if let Some(input) =
+                                            delta.get("toolUse").and_then(|tu| tu.get("input"))
                                         {
                                             let input_str = if input.is_string() {
                                                 input.as_str().unwrap_or("").to_string()
                                             } else {
                                                 serde_json::to_string(input).unwrap_or_default()
                                             };
-                                            let index = payload.get("contentBlockIndex")
+                                            let index = payload
+                                                .get("contentBlockIndex")
                                                 .and_then(|i| i.as_u64())
                                                 .unwrap_or(0);
-                                            sse_output.push_str(&crate::proxy::model_router::openai_sse_chunk(
-                                                &chunk_id, &model,
-                                                serde_json::json!({"tool_calls": [{
-                                                    "index": index,
-                                                    "function": {"arguments": input_str}
-                                                }]}),
-                                                None,
-                                            ));
+                                            sse_output.push_str(
+                                                &crate::proxy::model_router::openai_sse_chunk(
+                                                    &chunk_id,
+                                                    &model,
+                                                    serde_json::json!({"tool_calls": [{
+                                                        "index": index,
+                                                        "function": {"arguments": input_str}
+                                                    }]}),
+                                                    None,
+                                                ),
+                                            );
                                         }
                                     }
                                 }
                                 "messageStop" => {
-                                    let finish = match payload.get("stopReason")
-                                        .and_then(|s| s.as_str())
-                                    {
-                                        Some("end_turn") => "stop",
-                                        Some("tool_use") => "tool_calls",
-                                        Some("max_tokens") => "length",
-                                        Some("stop_sequence") => "stop",
-                                        Some("content_filtered") => "content_filter",
-                                        _ => "stop",
-                                    };
-                                    sse_output.push_str(&crate::proxy::model_router::openai_sse_chunk(
-                                        &chunk_id, &model,
-                                        serde_json::json!({}),
-                                        Some(finish),
-                                    ));
+                                    let finish =
+                                        match payload.get("stopReason").and_then(|s| s.as_str()) {
+                                            Some("end_turn") => "stop",
+                                            Some("tool_use") => "tool_calls",
+                                            Some("max_tokens") => "length",
+                                            Some("stop_sequence") => "stop",
+                                            Some("content_filtered") => "content_filter",
+                                            _ => "stop",
+                                        };
+                                    sse_output.push_str(
+                                        &crate::proxy::model_router::openai_sse_chunk(
+                                            &chunk_id,
+                                            &model,
+                                            serde_json::json!({}),
+                                            Some(finish),
+                                        ),
+                                    );
                                     sse_output.push_str("data: [DONE]\n\n");
                                 }
                                 "metadata" => {
@@ -556,10 +594,14 @@ pub fn tee_bedrock_stream(
                                     // Emit as an OpenAI-format usage chunk so the
                                     // StreamAccumulator captures it for cost tracking.
                                     if let Some(usage) = payload.get("usage") {
-                                        let input = usage.get("inputTokens")
-                                            .and_then(|v| v.as_u64()).unwrap_or(0);
-                                        let output_t = usage.get("outputTokens")
-                                            .and_then(|v| v.as_u64()).unwrap_or(0);
+                                        let input = usage
+                                            .get("inputTokens")
+                                            .and_then(|v| v.as_u64())
+                                            .unwrap_or(0);
+                                        let output_t = usage
+                                            .get("outputTokens")
+                                            .and_then(|v| v.as_u64())
+                                            .unwrap_or(0);
                                         if input > 0 || output_t > 0 {
                                             let usage_chunk = serde_json::json!({
                                                 "id": chunk_id,
@@ -575,7 +617,8 @@ pub fn tee_bedrock_stream(
                                             });
                                             sse_output.push_str(&format!(
                                                 "data: {}\n\n",
-                                                serde_json::to_string(&usage_chunk).unwrap_or_default()
+                                                serde_json::to_string(&usage_chunk)
+                                                    .unwrap_or_default()
                                             ));
                                         }
                                     }
@@ -603,9 +646,8 @@ pub fn tee_bedrock_stream(
                         if done {
                             let mut slot_guard = slot_for_bg.lock().await;
                             if slot_guard.is_none() {
-                                let finished = std::mem::replace(
-                                    &mut *acc_guard, StreamAccumulator::new(),
-                                );
+                                let finished =
+                                    std::mem::replace(&mut *acc_guard, StreamAccumulator::new());
                                 *slot_guard = Some(finished.finish());
                             }
                             notify_bg.notify_waiters();
@@ -614,7 +656,8 @@ pub fn tee_bedrock_stream(
 
                         // STREAMING-PII FIX: Apply PII redaction to Bedrock
                         // translated SSE before sending to the client.
-                        let (redacted, did_redact) = crate::middleware::sanitize::redact_sse_chunk(&sse_output);
+                        let (redacted, did_redact) =
+                            crate::middleware::sanitize::redact_sse_chunk(&sse_output);
                         let send_bytes = if did_redact {
                             Bytes::from(redacted)
                         } else {
@@ -622,11 +665,9 @@ pub fn tee_bedrock_stream(
                         };
 
                         // 5A-1 FIX: Send translated SSE to client unless disconnected.
-                        if !client_gone {
-                            if tx.send(Ok(send_bytes)).await.is_err() {
-                                client_gone = true;
-                                tracing::debug!("Client disconnected — continuing upstream read for billing (bedrock)");
-                            }
+                        if !client_gone && tx.send(Ok(send_bytes)).await.is_err() {
+                            client_gone = true;
+                            tracing::debug!("Client disconnected — continuing upstream read for billing (bedrock)");
                         }
                         if client_gone {
                             let slot_guard = slot_for_bg.lock().await;
@@ -649,17 +690,14 @@ pub fn tee_bedrock_stream(
                         let mut slot_guard = slot_for_bg.lock().await;
                         if slot_guard.is_none() {
                             let mut acc_guard = accumulator.lock().await;
-                            let partial = std::mem::replace(
-                                &mut *acc_guard, StreamAccumulator::new(),
-                            );
+                            let partial =
+                                std::mem::replace(&mut *acc_guard, StreamAccumulator::new());
                             *slot_guard = Some(partial.finish());
                         }
                     }
                     notify_bg.notify_waiters();
 
-                    let io_err = std::io::Error::new(
-                        std::io::ErrorKind::BrokenPipe, e.to_string(),
-                    );
+                    let io_err = std::io::Error::new(std::io::ErrorKind::BrokenPipe, e.to_string());
                     let _ = tx.send(Err(io_err)).await;
                     break;
                 }

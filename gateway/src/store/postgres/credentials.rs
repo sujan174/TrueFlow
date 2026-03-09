@@ -1,6 +1,6 @@
-use uuid::Uuid;
+use super::types::{CredentialMeta, NewCredential};
 use super::PgStore;
-use super::types::{NewCredential, CredentialMeta};
+use uuid::Uuid;
 
 impl PgStore {
     pub async fn insert_credential(&self, cred: &NewCredential) -> anyhow::Result<Uuid> {

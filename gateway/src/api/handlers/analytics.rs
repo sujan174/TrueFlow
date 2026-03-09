@@ -3,21 +3,21 @@ use std::sync::Arc;
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
-    Extension,
-    Json,
+    Extension, Json,
 };
 
-use crate::api::AuthContext;
-use crate::store::postgres::{TokenSummary, TokenVolumeStat, TokenStatusStat, TokenLatencyStat};
-use crate::AppState;
 use super::dtos::{PaginationParams, SpendBreakdownParams, SpendBreakdownResponse};
 use super::helpers::verify_project_ownership;
+use crate::api::AuthContext;
+use crate::store::postgres::{TokenLatencyStat, TokenStatusStat, TokenSummary, TokenVolumeStat};
+use crate::AppState;
 
 pub async fn get_org_usage(
     State(state): State<Arc<AppState>>,
     Extension(auth): Extension<AuthContext>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
-    auth.require_scope("billing:read").map_err(|_| StatusCode::FORBIDDEN)?;
+    auth.require_scope("billing:read")
+        .map_err(|_| StatusCode::FORBIDDEN)?;
     use chrono::{Datelike, Utc};
     let now = Utc::now();
     let period = chrono::NaiveDate::from_ymd_opt(now.year(), now.month(), 1).unwrap();
@@ -29,13 +29,21 @@ pub async fn get_org_usage(
     })?;
 
     let (total_requests, total_tokens, total_spend) = if let Some(row) = existing {
-        (row.total_requests, row.total_tokens_used, row.total_spend_usd)
+        (
+            row.total_requests,
+            row.total_tokens_used,
+            row.total_spend_usd,
+        )
     } else {
         // Fall back: aggregate live from audit_logs
-        state.db.get_usage_from_audit_logs(auth.org_id, period).await.map_err(|e| {
-            tracing::error!("get_org_usage (audit_logs fallback) failed: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?
+        state
+            .db
+            .get_usage_from_audit_logs(auth.org_id, period)
+            .await
+            .map_err(|e| {
+                tracing::error!("get_org_usage (audit_logs fallback) failed: {}", e);
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?
     };
 
     let period_str = format!("{}-{:02}", now.year(), now.month());
@@ -59,8 +67,11 @@ pub async fn get_token_analytics(
     Extension(auth): Extension<AuthContext>,
     Query(params): Query<PaginationParams>,
 ) -> Result<Json<Vec<TokenSummary>>, StatusCode> {
-    auth.require_scope("analytics:read").map_err(|_| StatusCode::FORBIDDEN)?;
-    let project_id = params.project_id.unwrap_or_else(|| auth.default_project_id());
+    auth.require_scope("analytics:read")
+        .map_err(|_| StatusCode::FORBIDDEN)?;
+    let project_id = params
+        .project_id
+        .unwrap_or_else(|| auth.default_project_id());
     verify_project_ownership(&state, auth.org_id, project_id).await?;
 
     let summary = state.db.get_token_summary(project_id).await.map_err(|e| {
@@ -78,8 +89,11 @@ pub async fn get_token_volume(
     Path(token_id): Path<String>,
     Query(params): Query<PaginationParams>,
 ) -> Result<Json<Vec<TokenVolumeStat>>, StatusCode> {
-    auth.require_scope("analytics:read").map_err(|_| StatusCode::FORBIDDEN)?;
-    let project_id = params.project_id.unwrap_or_else(|| auth.default_project_id());
+    auth.require_scope("analytics:read")
+        .map_err(|_| StatusCode::FORBIDDEN)?;
+    let project_id = params
+        .project_id
+        .unwrap_or_else(|| auth.default_project_id());
     verify_project_ownership(&state, auth.org_id, project_id).await?;
 
     let stats = state
@@ -101,8 +115,11 @@ pub async fn get_token_status(
     Path(token_id): Path<String>,
     Query(params): Query<PaginationParams>,
 ) -> Result<Json<Vec<TokenStatusStat>>, StatusCode> {
-    auth.require_scope("analytics:read").map_err(|_| StatusCode::FORBIDDEN)?;
-    let project_id = params.project_id.unwrap_or_else(|| auth.default_project_id());
+    auth.require_scope("analytics:read")
+        .map_err(|_| StatusCode::FORBIDDEN)?;
+    let project_id = params
+        .project_id
+        .unwrap_or_else(|| auth.default_project_id());
     verify_project_ownership(&state, auth.org_id, project_id).await?;
 
     let stats = state
@@ -124,8 +141,11 @@ pub async fn get_token_latency(
     Path(token_id): Path<String>,
     Query(params): Query<PaginationParams>,
 ) -> Result<Json<TokenLatencyStat>, StatusCode> {
-    auth.require_scope("analytics:read").map_err(|_| StatusCode::FORBIDDEN)?;
-    let project_id = params.project_id.unwrap_or_else(|| auth.default_project_id());
+    auth.require_scope("analytics:read")
+        .map_err(|_| StatusCode::FORBIDDEN)?;
+    let project_id = params
+        .project_id
+        .unwrap_or_else(|| auth.default_project_id());
     verify_project_ownership(&state, auth.org_id, project_id).await?;
 
     let stats = state
@@ -145,7 +165,8 @@ pub async fn get_upstream_health(
     State(state): State<Arc<AppState>>,
     Extension(auth): Extension<AuthContext>,
 ) -> Result<Json<Vec<crate::proxy::loadbalancer::UpstreamStatus>>, StatusCode> {
-    auth.require_scope("system:read").map_err(|_| StatusCode::FORBIDDEN)?;
+    auth.require_scope("system:read")
+        .map_err(|_| StatusCode::FORBIDDEN)?;
     Ok(Json(state.lb.get_all_status()))
 }
 
@@ -155,8 +176,11 @@ pub async fn get_analytics_summary(
     Query(params): Query<PaginationParams>,
     Query(range): Query<std::collections::HashMap<String, String>>,
 ) -> Result<Json<crate::models::analytics::AnalyticsSummary>, StatusCode> {
-    auth.require_scope("analytics:read").map_err(|_| StatusCode::FORBIDDEN)?;
-    let project_id = params.project_id.unwrap_or_else(|| auth.default_project_id());
+    auth.require_scope("analytics:read")
+        .map_err(|_| StatusCode::FORBIDDEN)?;
+    let project_id = params
+        .project_id
+        .unwrap_or_else(|| auth.default_project_id());
     verify_project_ownership(&state, auth.org_id, project_id).await?;
 
     let hours = range
@@ -165,10 +189,14 @@ pub async fn get_analytics_summary(
         .unwrap_or(24)
         .clamp(1, 8760); // 1 hour minimum, 1 year maximum
 
-    let summary = state.db.get_analytics_summary(project_id, hours).await.map_err(|e| {
-        tracing::error!("get_analytics_summary failed: {}", e);
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+    let summary = state
+        .db
+        .get_analytics_summary(project_id, hours)
+        .await
+        .map_err(|e| {
+            tracing::error!("get_analytics_summary failed: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
 
     Ok(Json(summary))
 }
@@ -180,8 +208,11 @@ pub async fn get_analytics_timeseries(
     Query(params): Query<PaginationParams>,
     Query(range): Query<std::collections::HashMap<String, String>>,
 ) -> Result<Json<Vec<crate::models::analytics::AnalyticsTimeseriesPoint>>, StatusCode> {
-    auth.require_scope("analytics:read").map_err(|_| StatusCode::FORBIDDEN)?;
-    let project_id = params.project_id.unwrap_or_else(|| auth.default_project_id());
+    auth.require_scope("analytics:read")
+        .map_err(|_| StatusCode::FORBIDDEN)?;
+    let project_id = params
+        .project_id
+        .unwrap_or_else(|| auth.default_project_id());
     verify_project_ownership(&state, auth.org_id, project_id).await?;
 
     let hours = range
@@ -190,10 +221,14 @@ pub async fn get_analytics_timeseries(
         .unwrap_or(24)
         .clamp(1, 8760); // 1 hour minimum, 1 year maximum
 
-    let points = state.db.get_analytics_timeseries(project_id, hours).await.map_err(|e| {
-        tracing::error!("get_analytics_timeseries failed: {}", e);
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+    let points = state
+        .db
+        .get_analytics_timeseries(project_id, hours)
+        .await
+        .map_err(|e| {
+            tracing::error!("get_analytics_timeseries failed: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
 
     Ok(Json(points))
 }
@@ -204,14 +239,21 @@ pub async fn get_analytics_experiments(
     Extension(auth): Extension<AuthContext>,
     Query(params): Query<PaginationParams>,
 ) -> Result<Json<Vec<crate::models::analytics::ExperimentSummary>>, StatusCode> {
-    auth.require_scope("analytics:read").map_err(|_| StatusCode::FORBIDDEN)?;
-    let project_id = params.project_id.unwrap_or_else(|| auth.default_project_id());
+    auth.require_scope("analytics:read")
+        .map_err(|_| StatusCode::FORBIDDEN)?;
+    let project_id = params
+        .project_id
+        .unwrap_or_else(|| auth.default_project_id());
     verify_project_ownership(&state, auth.org_id, project_id).await?;
 
-    let experiments = state.db.get_analytics_experiments(project_id).await.map_err(|e| {
-        tracing::error!("get_analytics_experiments failed: {}", e);
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+    let experiments = state
+        .db
+        .get_analytics_experiments(project_id)
+        .await
+        .map_err(|e| {
+            tracing::error!("get_analytics_experiments failed: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
 
     Ok(Json(experiments))
 }
@@ -229,8 +271,11 @@ pub async fn get_spend_breakdown(
     Extension(auth): Extension<AuthContext>,
     Query(params): Query<SpendBreakdownParams>,
 ) -> Result<Json<SpendBreakdownResponse>, StatusCode> {
-    auth.require_scope("analytics:read").map_err(|_| StatusCode::FORBIDDEN)?;
-    let project_id = params.project_id.unwrap_or_else(|| auth.default_project_id());
+    auth.require_scope("analytics:read")
+        .map_err(|_| StatusCode::FORBIDDEN)?;
+    let project_id = params
+        .project_id
+        .unwrap_or_else(|| auth.default_project_id());
     verify_project_ownership(&state, auth.org_id, project_id).await?;
 
     let hours = params.hours.unwrap_or(720); // default: 30 days
@@ -241,14 +286,23 @@ pub async fn get_spend_breakdown(
     let group_by = params.group_by.as_deref().unwrap_or("model");
 
     let (dimension_label, rows) = if group_by == "model" {
-        ("model", state.db.get_spend_by_model(project_id, hours).await)
+        (
+            "model",
+            state.db.get_spend_by_model(project_id, hours).await,
+        )
     } else if group_by == "token" {
-        ("token", state.db.get_spend_by_token(project_id, hours).await)
+        (
+            "token",
+            state.db.get_spend_by_token(project_id, hours).await,
+        )
     } else if let Some(tag_key) = group_by.strip_prefix("tag:") {
         if tag_key.is_empty() || tag_key.len() > 64 {
             return Err(StatusCode::BAD_REQUEST);
         }
-        (tag_key, state.db.get_spend_by_tag(project_id, hours, tag_key).await)
+        (
+            tag_key,
+            state.db.get_spend_by_tag(project_id, hours, tag_key).await,
+        )
     } else {
         return Err(StatusCode::BAD_REQUEST);
     };

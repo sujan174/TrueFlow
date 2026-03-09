@@ -19,8 +19,12 @@ pub struct UpstreamTarget {
     pub priority: u32,
 }
 
-fn default_weight() -> u32 { 100 }
-fn default_priority() -> u32 { 1 }
+fn default_weight() -> u32 {
+    100
+}
+fn default_priority() -> u32 {
+    1
+}
 
 // ── Circuit Breaker Config ─────────────────────────────────────
 
@@ -51,10 +55,18 @@ pub struct CircuitBreakerConfig {
     pub min_sample_size: Option<u32>,
 }
 
-fn default_cb_enabled() -> bool { true }
-fn default_failure_threshold() -> u32 { 3 }
-fn default_recovery_secs() -> u64 { 30 }
-fn default_half_open_max() -> u32 { 1 }
+fn default_cb_enabled() -> bool {
+    true
+}
+fn default_failure_threshold() -> u32 {
+    3
+}
+fn default_recovery_secs() -> u64 {
+    30
+}
+fn default_half_open_max() -> u32 {
+    1
+}
 
 impl Default for CircuitBreakerConfig {
     fn default() -> Self {
@@ -132,14 +144,29 @@ impl LoadBalancer {
     /// Select the best upstream target using weighted round-robin within priority tiers.
     /// Returns the index into the `upstreams` slice, or `None` if all are unhealthy.
     /// When `config.enabled` is false, bypasses health checks and uses simple round-robin.
-    pub fn select(&self, token_id: &str, upstreams: &[UpstreamTarget], config: &CircuitBreakerConfig) -> Option<usize> {
-        tracing::info!(token_id = token_id, upstream_count = upstreams.len(), cb_enabled = config.enabled, "LoadBalancer::select called");
+    pub fn select(
+        &self,
+        token_id: &str,
+        upstreams: &[UpstreamTarget],
+        config: &CircuitBreakerConfig,
+    ) -> Option<usize> {
+        tracing::info!(
+            token_id = token_id,
+            upstream_count = upstreams.len(),
+            cb_enabled = config.enabled,
+            "LoadBalancer::select called"
+        );
 
         // When CB is disabled, skip all health tracking and do simple round-robin.
         if !config.enabled {
-            if upstreams.is_empty() { return None; }
-            if upstreams.len() == 1 { return Some(0); }
-            let counter = self.counters
+            if upstreams.is_empty() {
+                return None;
+            }
+            if upstreams.len() == 1 {
+                return Some(0);
+            }
+            let counter = self
+                .counters
                 .entry(token_id.to_string())
                 .or_insert_with(|| Arc::new(AtomicU64::new(0)));
             let idx = counter.fetch_add(1, Ordering::Relaxed) as usize % upstreams.len();
@@ -174,7 +201,14 @@ impl LoadBalancer {
                 .iter()
                 .enumerate()
                 .filter(|(i, u)| {
-                    u.priority == priority && self.is_healthy_at(health_vec, *i, &u.url, cooldown, config.half_open_max_requests)
+                    u.priority == priority
+                        && self.is_healthy_at(
+                            health_vec,
+                            *i,
+                            &u.url,
+                            cooldown,
+                            config.half_open_max_requests,
+                        )
                 })
                 .collect();
 
@@ -327,11 +361,7 @@ impl LoadBalancer {
 
     /// Query Redis for the distributed failure count.
     /// Returns the Redis count if available, or the local count as fallback.
-    pub async fn get_distributed_failure_count(
-        &self,
-        token_id: &str,
-        url: &str,
-    ) -> u32 {
+    pub async fn get_distributed_failure_count(&self, token_id: &str, url: &str) -> u32 {
         if let Some(redis) = &self.redis {
             let mut conn = redis.clone();
             let key = Self::cb_redis_key(token_id, url);
@@ -350,7 +380,10 @@ impl LoadBalancer {
         self.health
             .get(token_id)
             .and_then(|healths| {
-                healths.iter().find(|h| h.url == url).map(|h| h.failure_count)
+                healths
+                    .iter()
+                    .find(|h| h.url == url)
+                    .map(|h| h.failure_count)
             })
             .unwrap_or(0)
     }
@@ -515,7 +548,11 @@ impl LoadBalancer {
         if let Some(counter) = self.in_flight.get(url) {
             // Avoid wrapping below zero
             let _ = counter.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |v| {
-                if v > 0 { Some(v - 1) } else { Some(0) }
+                if v > 0 {
+                    Some(v - 1)
+                } else {
+                    Some(0)
+                }
             });
         }
     }
@@ -550,7 +587,10 @@ pub struct UpstreamStatus {
 impl LoadBalancer {
     /// Return a snapshot of all tracked upstream health status.
     pub fn get_all_status(&self) -> Vec<UpstreamStatus> {
-        tracing::info!(map_size = self.health.len(), "LoadBalancer::get_all_status called");
+        tracing::info!(
+            map_size = self.health.len(),
+            "LoadBalancer::get_all_status called"
+        );
         let mut statuses = Vec::new();
         for entry in self.health.iter() {
             let token_id = entry.key().clone();
@@ -599,13 +639,19 @@ mod tests {
     fn test_select_single_upstream() {
         let lb = LoadBalancer::new();
         let upstreams = make_upstreams(1);
-        assert_eq!(lb.select("tok1", &upstreams, &CircuitBreakerConfig::default()), Some(0));
+        assert_eq!(
+            lb.select("tok1", &upstreams, &CircuitBreakerConfig::default()),
+            Some(0)
+        );
     }
 
     #[test]
     fn test_select_empty_returns_none() {
         let lb = LoadBalancer::new();
-        assert_eq!(lb.select("tok1", &[], &CircuitBreakerConfig::default()), None);
+        assert_eq!(
+            lb.select("tok1", &[], &CircuitBreakerConfig::default()),
+            None
+        );
     }
 
     #[test]
@@ -661,7 +707,10 @@ mod tests {
                 }
             }
         }
-        assert_eq!(primary_count, 0, "primary should be avoided after circuit opens");
+        assert_eq!(
+            primary_count, 0,
+            "primary should be avoided after circuit opens"
+        );
     }
 
     #[test]
@@ -705,7 +754,7 @@ mod tests {
                 url: "https://backup.com".into(),
                 credential_id: None,
                 weight: 100,
-                priority: 2,  // lower priority (higher number)
+                priority: 2, // lower priority (higher number)
             },
         ];
 
@@ -802,10 +851,23 @@ mod tests {
     #[test]
     fn test_cb_disabled_bypasses_health() {
         let lb = LoadBalancer::new();
-        let config = CircuitBreakerConfig { enabled: false, ..Default::default() };
+        let config = CircuitBreakerConfig {
+            enabled: false,
+            ..Default::default()
+        };
         let upstreams = vec![
-            UpstreamTarget { url: "https://a.com".into(), credential_id: None, weight: 100, priority: 1 },
-            UpstreamTarget { url: "https://b.com".into(), credential_id: None, weight: 100, priority: 1 },
+            UpstreamTarget {
+                url: "https://a.com".into(),
+                credential_id: None,
+                weight: 100,
+                priority: 1,
+            },
+            UpstreamTarget {
+                url: "https://b.com".into(),
+                credential_id: None,
+                weight: 100,
+                priority: 1,
+            },
         ];
 
         lb.select("tok1", &upstreams, &config);
@@ -819,7 +881,10 @@ mod tests {
             }
         }
         // With CB disabled, round-robin means both get selected
-        assert!(a_count > 0, "CB disabled: upstream A should still be routable");
+        assert!(
+            a_count > 0,
+            "CB disabled: upstream A should still be routable"
+        );
     }
 
     #[test]
@@ -846,7 +911,10 @@ mod tests {
     fn test_get_circuit_state_closed_by_default() {
         let lb = LoadBalancer::new();
         // No health data yet — should return "closed"
-        assert_eq!(lb.get_circuit_state("tok1", "https://api.com", 30), "closed");
+        assert_eq!(
+            lb.get_circuit_state("tok1", "https://api.com", 30),
+            "closed"
+        );
     }
 
     #[test]
@@ -854,15 +922,28 @@ mod tests {
         let lb = LoadBalancer::new();
         let config = CircuitBreakerConfig::default();
         let upstreams = vec![
-            UpstreamTarget { url: "https://primary.com".into(), credential_id: None, weight: 100, priority: 1 },
-            UpstreamTarget { url: "https://backup.com".into(), credential_id: None, weight: 100, priority: 1 },
+            UpstreamTarget {
+                url: "https://primary.com".into(),
+                credential_id: None,
+                weight: 100,
+                priority: 1,
+            },
+            UpstreamTarget {
+                url: "https://backup.com".into(),
+                credential_id: None,
+                weight: 100,
+                priority: 1,
+            },
         ];
 
         // Initialize health tracking
         lb.select("tok1", &upstreams, &config);
 
         // Initially closed
-        assert_eq!(lb.get_circuit_state("tok1", "https://primary.com", config.recovery_cooldown_secs), "closed");
+        assert_eq!(
+            lb.get_circuit_state("tok1", "https://primary.com", config.recovery_cooldown_secs),
+            "closed"
+        );
 
         // Fail until circuit opens
         for _ in 0..config.failure_threshold {
@@ -870,11 +951,17 @@ mod tests {
         }
 
         // Now open
-        assert_eq!(lb.get_circuit_state("tok1", "https://primary.com", config.recovery_cooldown_secs), "open");
+        assert_eq!(
+            lb.get_circuit_state("tok1", "https://primary.com", config.recovery_cooldown_secs),
+            "open"
+        );
 
         // Mark healthy → should be closed again
         lb.mark_healthy("tok1", "https://primary.com");
-        assert_eq!(lb.get_circuit_state("tok1", "https://primary.com", config.recovery_cooldown_secs), "closed");
+        assert_eq!(
+            lb.get_circuit_state("tok1", "https://primary.com", config.recovery_cooldown_secs),
+            "closed"
+        );
     }
 
     #[test]
@@ -888,8 +975,18 @@ mod tests {
             ..Default::default()
         };
         let upstreams = vec![
-            UpstreamTarget { url: "https://primary.com".into(), credential_id: None, weight: 100, priority: 1 },
-            UpstreamTarget { url: "https://backup.com".into(), credential_id: None, weight: 100, priority: 1 },
+            UpstreamTarget {
+                url: "https://primary.com".into(),
+                credential_id: None,
+                weight: 100,
+                priority: 1,
+            },
+            UpstreamTarget {
+                url: "https://backup.com".into(),
+                credential_id: None,
+                weight: 100,
+                priority: 1,
+            },
         ];
 
         lb.select("tok1", &upstreams, &config);
@@ -898,25 +995,44 @@ mod tests {
         for _ in 0..3 {
             lb.mark_failed("tok1", "https://primary.com", &config);
         }
-        assert_eq!(lb.get_circuit_state("tok1", "https://primary.com", config.recovery_cooldown_secs), "closed",
-                   "Circuit should still be closed at 3 failures when threshold is 5");
+        assert_eq!(
+            lb.get_circuit_state("tok1", "https://primary.com", config.recovery_cooldown_secs),
+            "closed",
+            "Circuit should still be closed at 3 failures when threshold is 5"
+        );
 
         // Fail 2 more times to hit threshold of 5
         for _ in 0..2 {
             lb.mark_failed("tok1", "https://primary.com", &config);
         }
-        assert_eq!(lb.get_circuit_state("tok1", "https://primary.com", config.recovery_cooldown_secs), "open",
-                   "Circuit should open after 5 failures");
+        assert_eq!(
+            lb.get_circuit_state("tok1", "https://primary.com", config.recovery_cooldown_secs),
+            "open",
+            "Circuit should open after 5 failures"
+        );
     }
 
     #[test]
     fn test_mark_failed_noop_when_disabled() {
         let lb = LoadBalancer::new();
         let enabled_config = CircuitBreakerConfig::default();
-        let disabled_config = CircuitBreakerConfig { enabled: false, ..Default::default() };
+        let disabled_config = CircuitBreakerConfig {
+            enabled: false,
+            ..Default::default()
+        };
         let upstreams = vec![
-            UpstreamTarget { url: "https://api.com".into(), credential_id: None, weight: 100, priority: 1 },
-            UpstreamTarget { url: "https://backup.com".into(), credential_id: None, weight: 100, priority: 1 },
+            UpstreamTarget {
+                url: "https://api.com".into(),
+                credential_id: None,
+                weight: 100,
+                priority: 1,
+            },
+            UpstreamTarget {
+                url: "https://backup.com".into(),
+                credential_id: None,
+                weight: 100,
+                priority: 1,
+            },
         ];
 
         // Initialize health with enabled config
@@ -928,8 +1044,11 @@ mod tests {
         }
 
         // Circuit should still be closed because mark_failed was no-op
-        assert_eq!(lb.get_circuit_state("tok1", "https://api.com", 30), "closed",
-                   "mark_failed should be no-op when CB is disabled");
+        assert_eq!(
+            lb.get_circuit_state("tok1", "https://api.com", 30),
+            "closed",
+            "mark_failed should be no-op when CB is disabled"
+        );
     }
 
     #[test]
@@ -937,8 +1056,18 @@ mod tests {
         let lb = LoadBalancer::new();
         let config = CircuitBreakerConfig::default();
         let upstreams = vec![
-            UpstreamTarget { url: "https://api.com".into(), credential_id: None, weight: 100, priority: 1 },
-            UpstreamTarget { url: "https://backup.com".into(), credential_id: None, weight: 100, priority: 1 },
+            UpstreamTarget {
+                url: "https://api.com".into(),
+                credential_id: None,
+                weight: 100,
+                priority: 1,
+            },
+            UpstreamTarget {
+                url: "https://backup.com".into(),
+                credential_id: None,
+                weight: 100,
+                priority: 1,
+            },
         ];
 
         // Initialize health tracking
@@ -946,8 +1075,14 @@ mod tests {
 
         let statuses = lb.get_all_status();
         assert_eq!(statuses.len(), 2, "Should have 2 upstream entries");
-        assert!(statuses.iter().all(|s| s.is_healthy), "All should be healthy initially");
-        assert!(statuses.iter().all(|s| s.failure_count == 0), "All should have 0 failures");
+        assert!(
+            statuses.iter().all(|s| s.is_healthy),
+            "All should be healthy initially"
+        );
+        assert!(
+            statuses.iter().all(|s| s.failure_count == 0),
+            "All should have 0 failures"
+        );
 
         // Fail one upstream
         for _ in 0..config.failure_threshold {
@@ -955,10 +1090,16 @@ mod tests {
         }
 
         let statuses = lb.get_all_status();
-        let failed = statuses.iter().find(|s| s.url == "https://api.com").unwrap();
+        let failed = statuses
+            .iter()
+            .find(|s| s.url == "https://api.com")
+            .unwrap();
         assert!(!failed.is_healthy, "Failed upstream should be unhealthy");
         assert_eq!(failed.failure_count, config.failure_threshold);
-        assert!(failed.cooldown_remaining_secs.is_some(), "Should have cooldown remaining");
+        assert!(
+            failed.cooldown_remaining_secs.is_some(),
+            "Should have cooldown remaining"
+        );
     }
 
     #[test]
@@ -972,7 +1113,7 @@ mod tests {
         };
         let json = serde_json::to_value(&config).unwrap();
         let deserialized: CircuitBreakerConfig = serde_json::from_value(json).unwrap();
-        assert_eq!(deserialized.enabled, false);
+        assert!(!deserialized.enabled);
         assert_eq!(deserialized.failure_threshold, 10);
         assert_eq!(deserialized.recovery_cooldown_secs, 120);
         assert_eq!(deserialized.half_open_max_requests, 3);
@@ -1001,8 +1142,18 @@ mod tests {
             ..Default::default()
         };
         let upstreams = vec![
-            UpstreamTarget { url: "https://api.openai.com".into(), credential_id: None, weight: 100, priority: 1 },
-            UpstreamTarget { url: "https://backup.azure.com".into(), credential_id: None, weight: 100, priority: 1 },
+            UpstreamTarget {
+                url: "https://api.openai.com".into(),
+                credential_id: None,
+                weight: 100,
+                priority: 1,
+            },
+            UpstreamTarget {
+                url: "https://backup.azure.com".into(),
+                credential_id: None,
+                weight: 100,
+                priority: 1,
+            },
         ];
         lb.select("tok_prod", &upstreams, &config);
 
@@ -1014,10 +1165,15 @@ mod tests {
         let mut openai_count = 0;
         for _ in 0..20 {
             if let Some(idx) = lb.select("tok_prod", &upstreams, &config) {
-                if idx == 0 { openai_count += 1; }
+                if idx == 0 {
+                    openai_count += 1;
+                }
             }
         }
-        assert_eq!(openai_count, 0, "OpenAI (circuit OPEN) should receive 0 requests");
+        assert_eq!(
+            openai_count, 0,
+            "OpenAI (circuit OPEN) should receive 0 requests"
+        );
     }
 
     /// All upstreams failed → LB must return None (no healthy target available).
@@ -1032,16 +1188,28 @@ mod tests {
             ..Default::default()
         };
         let upstreams = vec![
-            UpstreamTarget { url: "https://a.com".into(), credential_id: None, weight: 100, priority: 1 },
-            UpstreamTarget { url: "https://b.com".into(), credential_id: None, weight: 100, priority: 1 },
+            UpstreamTarget {
+                url: "https://a.com".into(),
+                credential_id: None,
+                weight: 100,
+                priority: 1,
+            },
+            UpstreamTarget {
+                url: "https://b.com".into(),
+                credential_id: None,
+                weight: 100,
+                priority: 1,
+            },
         ];
         lb.select("tok1", &upstreams, &config);
         for _ in 0..2 {
             lb.mark_failed("tok1", "https://a.com", &config);
             lb.mark_failed("tok1", "https://b.com", &config);
         }
-        assert!(lb.select("tok1", &upstreams, &config).is_none(),
-            "All upstreams failed — should return None");
+        assert!(
+            lb.select("tok1", &upstreams, &config).is_none(),
+            "All upstreams failed — should return None"
+        );
     }
 
     /// After cooldown=0, a failed upstream should become eligible for half-open retry.
@@ -1056,8 +1224,18 @@ mod tests {
             ..Default::default()
         };
         let upstreams = vec![
-            UpstreamTarget { url: "https://primary.com".into(), credential_id: None, weight: 100, priority: 1 },
-            UpstreamTarget { url: "https://backup.com".into(), credential_id: None, weight: 100, priority: 2 },
+            UpstreamTarget {
+                url: "https://primary.com".into(),
+                credential_id: None,
+                weight: 100,
+                priority: 1,
+            },
+            UpstreamTarget {
+                url: "https://backup.com".into(),
+                credential_id: None,
+                weight: 100,
+                priority: 2,
+            },
         ];
         lb.select("tok1", &upstreams, &config);
         lb.mark_failed("tok1", "https://primary.com", &config);
@@ -1069,7 +1247,10 @@ mod tests {
                 break;
             }
         }
-        assert!(found_primary, "Primary should be retryable after cooldown=0");
+        assert!(
+            found_primary,
+            "Primary should be retryable after cooldown=0"
+        );
     }
 
     // ── In-Flight Tracking (Least Busy) ────────────────────────
@@ -1160,4 +1341,3 @@ mod tests {
         lb.mark_healthy("tok", &upstreams[0].url);
     }
 }
-

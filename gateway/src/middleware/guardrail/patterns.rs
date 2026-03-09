@@ -39,9 +39,8 @@ static JAILBREAK_PATTERNS: &[&str] = &[
     r"(?i)no\s+longer\s+bound\s+by\s+(rules|guidelines|restrictions|ethics)",
 ];
 
-pub(super) static JAILBREAK_SET: Lazy<RegexSet> = Lazy::new(|| {
-    RegexSet::new(JAILBREAK_PATTERNS).expect("invalid jailbreak regex patterns")
-});
+pub(super) static JAILBREAK_SET: Lazy<RegexSet> =
+    Lazy::new(|| RegexSet::new(JAILBREAK_PATTERNS).expect("invalid jailbreak regex patterns"));
 
 /// Harmful content patterns (separate from jailbreak — these are content-level).
 static HARMFUL_PATTERNS: &[&str] = &[
@@ -53,9 +52,8 @@ static HARMFUL_PATTERNS: &[&str] = &[
     r"(?i)(detailed|specific)\s+(method|way|technique)\s+(to|for)\s+(kill|harm)\s+(yourself|oneself|myself)",
 ];
 
-pub(super) static HARMFUL_SET: Lazy<RegexSet> = Lazy::new(|| {
-    RegexSet::new(HARMFUL_PATTERNS).expect("invalid harmful regex patterns")
-});
+pub(super) static HARMFUL_SET: Lazy<RegexSet> =
+    Lazy::new(|| RegexSet::new(HARMFUL_PATTERNS).expect("invalid harmful regex patterns"));
 
 /// Code injection / data exfiltration patterns.
 static CODE_INJECTION_PATTERNS: &[&str] = &[
@@ -116,9 +114,8 @@ static PROFANITY_PATTERNS: &[&str] = &[
     r"(?i)\ba+s+s+h+o+l+e\b",
 ];
 
-pub(super) static PROFANITY_SET: Lazy<RegexSet> = Lazy::new(|| {
-    RegexSet::new(PROFANITY_PATTERNS).expect("invalid profanity regex patterns")
-});
+pub(super) static PROFANITY_SET: Lazy<RegexSet> =
+    Lazy::new(|| RegexSet::new(PROFANITY_PATTERNS).expect("invalid profanity regex patterns"));
 
 // ── NEW: Bias / Discrimination Patterns ──────────────────────
 
@@ -137,9 +134,8 @@ static BIAS_PATTERNS: &[&str] = &[
     r"(?i)(don.t|do\s+not)\s+(hire|trust|associate\s+with)\s+(women|men|blacks?|whites?|asians?|hispanics?|muslims?|jews?)",
 ];
 
-pub(super) static BIAS_SET: Lazy<RegexSet> = Lazy::new(|| {
-    RegexSet::new(BIAS_PATTERNS).expect("invalid bias regex patterns")
-});
+pub(super) static BIAS_SET: Lazy<RegexSet> =
+    Lazy::new(|| RegexSet::new(BIAS_PATTERNS).expect("invalid bias regex patterns"));
 
 // ── NEW: Sensitive Topics Patterns ───────────────────────────
 
@@ -189,9 +185,8 @@ static GIBBERISH_PATTERNS: &[&str] = &[
     r"[0]{20,}",
 ];
 
-pub(super) static GIBBERISH_SET: Lazy<RegexSet> = Lazy::new(|| {
-    RegexSet::new(GIBBERISH_PATTERNS).expect("invalid gibberish regex patterns")
-});
+pub(super) static GIBBERISH_SET: Lazy<RegexSet> =
+    Lazy::new(|| RegexSet::new(GIBBERISH_PATTERNS).expect("invalid gibberish regex patterns"));
 
 // ── NEW: Contact Information Patterns ────────────────────────
 
@@ -235,6 +230,5 @@ static IP_LEAKAGE_PATTERNS: &[&str] = &[
     r"(?i)(source\s+code|architecture\s+diagram|system\s+design|database\s+schema)\s+(of|for|from)\s+(our|the\s+company|internal)",
 ];
 
-pub(super) static IP_LEAKAGE_SET: Lazy<RegexSet> = Lazy::new(|| {
-    RegexSet::new(IP_LEAKAGE_PATTERNS).expect("invalid IP leakage regex patterns")
-});
+pub(super) static IP_LEAKAGE_SET: Lazy<RegexSet> =
+    Lazy::new(|| RegexSet::new(IP_LEAKAGE_PATTERNS).expect("invalid IP leakage regex patterns"));

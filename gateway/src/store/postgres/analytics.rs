@@ -1,6 +1,8 @@
-use uuid::Uuid;
+use super::types::{
+    SpendByDimension, TokenLatencyStat, TokenStatusStat, TokenSummary, TokenVolumeStat,
+};
 use super::PgStore;
-use super::types::{SpendByDimension, TokenSummary, TokenVolumeStat, TokenStatusStat, TokenLatencyStat};
+use uuid::Uuid;
 
 impl PgStore {
     // -- Analytics Operations --
@@ -152,7 +154,7 @@ impl PgStore {
     ) -> anyhow::Result<Vec<crate::models::analytics::AnalyticsTimeseriesPoint>> {
         // Dynamic bucket size based on range
         let bucket = if hours <= 24 { "hour" } else { "day" };
-        
+
         let rows = sqlx::query_as::<_, crate::models::analytics::AnalyticsTimeseriesPoint>(
             r#"
             SELECT 
@@ -165,7 +167,7 @@ impl PgStore {
             WHERE project_id = $1 AND created_at > now() - ($2 || ' hours')::interval
             GROUP BY 1
             ORDER BY 1 ASC
-            "#
+            "#,
         )
         .bind(project_id)
         .bind(hours.to_string())
@@ -269,10 +271,7 @@ impl PgStore {
 
     // ── Per-Token Analytics ──────────────────────────────────────
 
-    pub async fn get_token_summary(
-        &self,
-        project_id: Uuid,
-    ) -> anyhow::Result<Vec<TokenSummary>> {
+    pub async fn get_token_summary(&self, project_id: Uuid) -> anyhow::Result<Vec<TokenSummary>> {
         // sqlx doesn't map directly to struct with aggregate functions easily without `AS` aliases matching struct fields exactly.
         // We'll use query_as! with explicit mapping if needed, or ensuring column names match.
         // Note: avg returns numeric/float, COUNT returns bigint (i64).
@@ -348,7 +347,7 @@ impl PgStore {
         project_id: Uuid,
         token_id: &str,
     ) -> anyhow::Result<TokenLatencyStat> {
-         let row = sqlx::query!(
+        let row = sqlx::query!(
             r#"SELECT 
                 percentile_cont(0.5) WITHIN GROUP (ORDER BY response_latency_ms) as p50,
                 percentile_cont(0.9) WITHIN GROUP (ORDER BY response_latency_ms) as p90,
@@ -387,7 +386,7 @@ impl PgStore {
              FROM audit_logs
              WHERE project_id = $1 AND experiment_name IS NOT NULL
              GROUP BY experiment_name, variant_name
-             ORDER BY experiment_name, variant_name"#
+             ORDER BY experiment_name, variant_name"#,
         )
         .bind(project_id)
         .fetch_all(&self.pool)

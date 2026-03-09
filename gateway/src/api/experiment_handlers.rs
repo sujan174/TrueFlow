@@ -133,10 +133,14 @@ pub async fn list_experiments(
     auth.require_scope("experiments:read")?;
     let project_id = auth.default_project_id();
 
-    let policies = state.db.list_policies(project_id, 1000, 0).await.map_err(|e| {
-        tracing::error!("list_experiments failed: {}", e);
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+    let policies = state
+        .db
+        .list_policies(project_id, 1000, 0)
+        .await
+        .map_err(|e| {
+            tracing::error!("list_experiments failed: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
 
     let experiments: Vec<serde_json::Value> = policies
         .into_iter()
@@ -166,10 +170,14 @@ pub async fn get_experiment(
     let project_id = auth.default_project_id();
 
     // Find the policy
-    let policies = state.db.list_policies(project_id, 1000, 0).await.map_err(|e| {
-        tracing::error!("get_experiment failed: {}", e);
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+    let policies = state
+        .db
+        .list_policies(project_id, 1000, 0)
+        .await
+        .map_err(|e| {
+            tracing::error!("get_experiment failed: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
 
     let policy = policies
         .into_iter()
@@ -193,7 +201,11 @@ pub async fn get_experiment(
         .filter(|a| a.experiment_name == experiment_name)
         .collect();
 
-    let status = if policy.is_active { "running" } else { "stopped" };
+    let status = if policy.is_active {
+        "running"
+    } else {
+        "stopped"
+    };
 
     Ok(Json(serde_json::json!({
         "id": policy.id,
@@ -222,10 +234,14 @@ pub async fn get_experiment_results(
     let project_id = auth.default_project_id();
 
     // Find the policy to get the experiment name
-    let policies = state.db.list_policies(project_id, 1000, 0).await.map_err(|e| {
-        tracing::error!("get_experiment_results failed: {}", e);
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+    let policies = state
+        .db
+        .list_policies(project_id, 1000, 0)
+        .await
+        .map_err(|e| {
+            tracing::error!("get_experiment_results failed: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
 
     let policy = policies
         .into_iter()
@@ -285,14 +301,10 @@ pub async fn stop_experiment(
     auth.require_scope("experiments:write")?;
     let project_id = auth.default_project_id();
 
-    let deleted = state
-        .db
-        .delete_policy(id, project_id)
-        .await
-        .map_err(|e| {
-            tracing::error!("stop_experiment failed: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+    let deleted = state.db.delete_policy(id, project_id).await.map_err(|e| {
+        tracing::error!("stop_experiment failed: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
     if !deleted {
         return Err(StatusCode::NOT_FOUND);
@@ -319,10 +331,14 @@ pub async fn update_experiment(
     }
 
     // Find the existing policy to get the experiment name
-    let policies = state.db.list_policies(project_id, 1000, 0).await.map_err(|e| {
-        tracing::error!("update_experiment failed: {}", e);
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+    let policies = state
+        .db
+        .list_policies(project_id, 1000, 0)
+        .await
+        .map_err(|e| {
+            tracing::error!("update_experiment failed: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
 
     let policy = policies
         .into_iter()

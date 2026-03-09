@@ -2,14 +2,21 @@ use axum::http::HeaderMap;
 
 /// SEC-03 FIX: Headers that must be redacted in audit logs (credential-bearing).
 pub(crate) const REDACTED_HEADER_NAMES: &[&str] = &[
-    "authorization", "x-admin-key", "cookie", "set-cookie",
-    "x-api-key", "x-real-authorization", "x-upstream-authorization",
+    "authorization",
+    "x-admin-key",
+    "cookie",
+    "set-cookie",
+    "x-api-key",
+    "x-real-authorization",
+    "x-upstream-authorization",
     "proxy-authorization",
 ];
 
 /// Returns true if a header name should be redacted in audit logs.
 pub(crate) fn is_sensitive_header(name: &str) -> bool {
-    REDACTED_HEADER_NAMES.iter().any(|h| name.eq_ignore_ascii_case(h))
+    REDACTED_HEADER_NAMES
+        .iter()
+        .any(|h| name.eq_ignore_ascii_case(h))
 }
 
 /// Convert axum HeaderMap to JSON object for Level 2 logging.

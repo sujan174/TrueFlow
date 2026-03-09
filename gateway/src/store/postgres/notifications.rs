@@ -1,5 +1,5 @@
-use uuid::Uuid;
 use super::PgStore;
+use uuid::Uuid;
 
 impl PgStore {
     pub async fn create_notification(
@@ -44,10 +44,7 @@ impl PgStore {
         Ok(rows)
     }
 
-    pub async fn count_unread_notifications(
-        &self,
-        project_id: Uuid,
-    ) -> anyhow::Result<i64> {
+    pub async fn count_unread_notifications(&self, project_id: Uuid) -> anyhow::Result<i64> {
         let count = sqlx::query_scalar::<_, i64>(
             r#"SELECT COUNT(*) FROM notifications WHERE project_id = $1 AND is_read = false"#,
         )
@@ -57,11 +54,7 @@ impl PgStore {
         Ok(count)
     }
 
-    pub async fn mark_notification_read(
-        &self,
-        id: Uuid,
-        project_id: Uuid,
-    ) -> anyhow::Result<bool> {
+    pub async fn mark_notification_read(&self, id: Uuid, project_id: Uuid) -> anyhow::Result<bool> {
         let result = sqlx::query(
             r#"UPDATE notifications SET is_read = true WHERE id = $1 AND project_id = $2"#,
         )
@@ -72,10 +65,7 @@ impl PgStore {
         Ok(result.rows_affected() > 0)
     }
 
-    pub async fn mark_all_notifications_read(
-        &self,
-        project_id: Uuid,
-    ) -> anyhow::Result<bool> {
+    pub async fn mark_all_notifications_read(&self, project_id: Uuid) -> anyhow::Result<bool> {
         let result = sqlx::query(
             r#"UPDATE notifications SET is_read = true WHERE project_id = $1 AND is_read = false"#,
         )

@@ -90,14 +90,12 @@ fn extract_content_for_validation(body: &serde_json::Value) -> serde_json::Value
 /// ```
 fn extract_json_from_markdown(text: &str) -> Option<String> {
     // Find opening fence
-    let start = text.find("```json")
-        .or_else(|| text.find("```JSON"))?;
+    let start = text.find("```json").or_else(|| text.find("```JSON"))?;
     let after_fence = &text[start + 7..]; // skip "```json"
-    // Find closing fence
+                                          // Find closing fence
     let end = after_fence.find("```")?;
     Some(after_fence[..end].trim().to_owned())
 }
-
 
 #[cfg(test)]
 mod schema_tests {

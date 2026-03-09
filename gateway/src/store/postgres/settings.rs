@@ -8,7 +8,7 @@ impl PgStore {
         key: &str,
     ) -> anyhow::Result<Option<T>> {
         let row = sqlx::query_scalar::<_, serde_json::Value>(
-            "SELECT value FROM system_settings WHERE key = $1"
+            "SELECT value FROM system_settings WHERE key = $1",
         )
         .bind(key)
         .fetch_optional(&self.pool)
@@ -29,7 +29,7 @@ impl PgStore {
         description: Option<&str>,
     ) -> anyhow::Result<()> {
         let json_val = serde_json::to_value(value)?;
-        
+
         sqlx::query(
             r#"
             INSERT INTO system_settings (key, value, description)
@@ -38,20 +38,22 @@ impl PgStore {
             SET value = EXCLUDED.value,
                 description = COALESCE(EXCLUDED.description, system_settings.description),
                 updated_at = NOW()
-            "#
+            "#,
         )
         .bind(key)
         .bind(json_val)
         .bind(description)
         .execute(&self.pool)
         .await?;
-        
+
         Ok(())
     }
 
-    pub async fn get_all_system_settings(&self) -> anyhow::Result<std::collections::HashMap<String, serde_json::Value>> {
+    pub async fn get_all_system_settings(
+        &self,
+    ) -> anyhow::Result<std::collections::HashMap<String, serde_json::Value>> {
         let rows = sqlx::query_as::<_, (String, serde_json::Value)>(
-            "SELECT key, value FROM system_settings"
+            "SELECT key, value FROM system_settings",
         )
         .fetch_all(&self.pool)
         .await?;

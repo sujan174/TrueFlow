@@ -102,10 +102,7 @@ impl RbacContext {
             ));
         }
         if !self.has_scope(scope) {
-            return Err(format!(
-                "Insufficient scope: '{}' required",
-                scope
-            ));
+            return Err(format!("Insufficient scope: '{}' required", scope));
         }
         Ok(())
     }
@@ -126,10 +123,14 @@ pub fn enforce(
             "RBAC access denied: {}",
             msg
         );
-        (StatusCode::FORBIDDEN, serde_json::json!({
-            "error": "forbidden",
-            "message": msg
-        }).to_string())
+        (
+            StatusCode::FORBIDDEN,
+            serde_json::json!({
+                "error": "forbidden",
+                "message": msg
+            })
+            .to_string(),
+        )
     })
 }
 
@@ -145,7 +146,10 @@ mod tests {
         assert_eq!(Role::from_str("Admin"), Role::Admin);
         assert_eq!(Role::from_str("editor"), Role::Editor);
         assert_eq!(Role::from_str("viewer"), Role::Viewer);
-        assert_eq!(Role::from_str("custom_role"), Role::Custom("custom_role".into()));
+        assert_eq!(
+            Role::from_str("custom_role"),
+            Role::Custom("custom_role".into())
+        );
     }
 
     #[test]

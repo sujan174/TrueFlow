@@ -3,8 +3,7 @@ use std::sync::Arc;
 use axum::{
     extract::{Path, State},
     http::StatusCode,
-    Extension,
-    Json,
+    Extension, Json,
 };
 
 use crate::api::AuthContext;
@@ -14,9 +13,10 @@ pub async fn list_teams(
     State(state): State<Arc<AppState>>,
     Extension(auth): Extension<AuthContext>,
 ) -> Result<Json<Vec<crate::middleware::teams::Team>>, StatusCode> {
-    auth.require_scope("tokens:read").map_err(|_| StatusCode::FORBIDDEN)?;
+    auth.require_scope("tokens:read")
+        .map_err(|_| StatusCode::FORBIDDEN)?;
     let rows = sqlx::query_as::<_, crate::middleware::teams::Team>(
-        "SELECT * FROM teams WHERE org_id = $1 ORDER BY name"
+        "SELECT * FROM teams WHERE org_id = $1 ORDER BY name",
     )
     .bind(auth.org_id)
     .fetch_all(state.db.pool())
@@ -34,11 +34,17 @@ pub async fn create_team(
     Extension(auth): Extension<AuthContext>,
     Json(body): Json<serde_json::Value>,
 ) -> Result<Json<crate::middleware::teams::Team>, StatusCode> {
-    auth.require_scope("tokens:write").map_err(|_| StatusCode::FORBIDDEN)?;
+    auth.require_scope("tokens:write")
+        .map_err(|_| StatusCode::FORBIDDEN)?;
 
-    let name = body.get("name").and_then(|v| v.as_str()).ok_or(StatusCode::BAD_REQUEST)?;
+    let name = body
+        .get("name")
+        .and_then(|v| v.as_str())
+        .ok_or(StatusCode::BAD_REQUEST)?;
     let description = body.get("description").and_then(|v| v.as_str());
-    let max_budget = body.get("max_budget_usd").and_then(|v| v.as_f64())
+    let max_budget = body
+        .get("max_budget_usd")
+        .and_then(|v| v.as_f64())
         .map(|f| rust_decimal::Decimal::from_f64_retain(f).unwrap_or_default());
     let budget_duration = body.get("budget_duration").and_then(|v| v.as_str());
     let allowed_models = body.get("allowed_models");
@@ -78,11 +84,14 @@ pub async fn update_team(
     Path(team_id): Path<uuid::Uuid>,
     Json(body): Json<serde_json::Value>,
 ) -> Result<Json<crate::middleware::teams::Team>, StatusCode> {
-    auth.require_scope("tokens:write").map_err(|_| StatusCode::FORBIDDEN)?;
+    auth.require_scope("tokens:write")
+        .map_err(|_| StatusCode::FORBIDDEN)?;
 
     let name = body.get("name").and_then(|v| v.as_str());
     let description = body.get("description").and_then(|v| v.as_str());
-    let max_budget = body.get("max_budget_usd").and_then(|v| v.as_f64())
+    let max_budget = body
+        .get("max_budget_usd")
+        .and_then(|v| v.as_f64())
         .map(|f| rust_decimal::Decimal::from_f64_retain(f).unwrap_or_default());
     let budget_duration = body.get("budget_duration").and_then(|v| v.as_str());
     let allowed_models = body.get("allowed_models");
@@ -98,7 +107,7 @@ pub async fn update_team(
             tags = COALESCE($8, tags),
             updated_at = NOW()
            WHERE id = $1 AND org_id = $2
-           RETURNING *"#
+           RETURNING *"#,
     )
     .bind(team_id)
     .bind(auth.org_id)
@@ -127,19 +136,18 @@ pub async fn delete_team(
     Extension(auth): Extension<AuthContext>,
     Path(team_id): Path<uuid::Uuid>,
 ) -> Result<StatusCode, StatusCode> {
-    auth.require_scope("tokens:write").map_err(|_| StatusCode::FORBIDDEN)?;
+    auth.require_scope("tokens:write")
+        .map_err(|_| StatusCode::FORBIDDEN)?;
 
-    let result = sqlx::query(
-        "DELETE FROM teams WHERE id = $1 AND org_id = $2"
-    )
-    .bind(team_id)
-    .bind(auth.org_id)
-    .execute(state.db.pool())
-    .await
-    .map_err(|e| {
-        tracing::error!("Failed to delete team: {}", e);
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+    let result = sqlx::query("DELETE FROM teams WHERE id = $1 AND org_id = $2")
+        .bind(team_id)
+        .bind(auth.org_id)
+        .execute(state.db.pool())
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to delete team: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
 
     if result.rows_affected() == 0 {
         Err(StatusCode::NOT_FOUND)
@@ -154,7 +162,8 @@ pub async fn list_team_members(
     Extension(auth): Extension<AuthContext>,
     Path(team_id): Path<uuid::Uuid>,
 ) -> Result<Json<Vec<serde_json::Value>>, StatusCode> {
-    auth.require_scope("tokens:read").map_err(|_| StatusCode::FORBIDDEN)?;
+    auth.require_scope("tokens:read")
+        .map_err(|_| StatusCode::FORBIDDEN)?;
 
     let rows = sqlx::query_as::<_, crate::middleware::teams::TeamMember>(
         "SELECT tm.* FROM team_members tm JOIN teams t ON tm.team_id = t.id WHERE tm.team_id = $1 AND t.org_id = $2"
@@ -168,15 +177,18 @@ pub async fn list_team_members(
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
-    let members: Vec<serde_json::Value> = rows.iter().map(|m| {
-        serde_json::json!({
-            "id": m.id,
-            "team_id": m.team_id,
-            "user_id": m.user_id,
-            "role": m.role,
-            "created_at": m.created_at,
+    let members: Vec<serde_json::Value> = rows
+        .iter()
+        .map(|m| {
+            serde_json::json!({
+                "id": m.id,
+                "team_id": m.team_id,
+                "user_id": m.user_id,
+                "role": m.role,
+                "created_at": m.created_at,
+            })
         })
-    }).collect();
+        .collect();
 
     Ok(Json(members))
 }
@@ -188,17 +200,22 @@ pub async fn add_team_member(
     Path(team_id): Path<uuid::Uuid>,
     Json(body): Json<serde_json::Value>,
 ) -> Result<Json<crate::middleware::teams::TeamMember>, StatusCode> {
-    auth.require_scope("tokens:write").map_err(|_| StatusCode::FORBIDDEN)?;
+    auth.require_scope("tokens:write")
+        .map_err(|_| StatusCode::FORBIDDEN)?;
 
-    let user_id: uuid::Uuid = body.get("user_id")
+    let user_id: uuid::Uuid = body
+        .get("user_id")
         .and_then(|v| v.as_str())
         .and_then(|s| s.parse().ok())
         .ok_or(StatusCode::BAD_REQUEST)?;
-    let role = body.get("role").and_then(|v| v.as_str()).unwrap_or("member");
+    let role = body
+        .get("role")
+        .and_then(|v| v.as_str())
+        .unwrap_or("member");
 
     // Verify team belongs to org
     let team_exists = sqlx::query_scalar::<_, bool>(
-        "SELECT EXISTS(SELECT 1 FROM teams WHERE id = $1 AND org_id = $2)"
+        "SELECT EXISTS(SELECT 1 FROM teams WHERE id = $1 AND org_id = $2)",
     )
     .bind(team_id)
     .bind(auth.org_id)
@@ -213,7 +230,7 @@ pub async fn add_team_member(
     let row = sqlx::query_as::<_, crate::middleware::teams::TeamMember>(
         r#"INSERT INTO team_members (team_id, user_id, role)
            VALUES ($1, $2, $3)
-           RETURNING *"#
+           RETURNING *"#,
     )
     .bind(team_id)
     .bind(user_id)
@@ -226,7 +243,12 @@ pub async fn add_team_member(
             tracing::warn!("Duplicate team member: team={}, user={}", team_id, user_id);
             StatusCode::CONFLICT
         } else if msg.contains("foreign key") || msg.contains("violates foreign key") {
-            tracing::warn!("Team member FK violation (user_id not found): team={}, user={}: {}", team_id, user_id, msg);
+            tracing::warn!(
+                "Team member FK violation (user_id not found): team={}, user={}: {}",
+                team_id,
+                user_id,
+                msg
+            );
             StatusCode::UNPROCESSABLE_ENTITY
         } else {
             tracing::error!("Failed to add team member: {}", msg);
@@ -243,12 +265,13 @@ pub async fn remove_team_member(
     Extension(auth): Extension<AuthContext>,
     Path((team_id, user_id)): Path<(uuid::Uuid, uuid::Uuid)>,
 ) -> Result<StatusCode, StatusCode> {
-    auth.require_scope("tokens:write").map_err(|_| StatusCode::FORBIDDEN)?;
+    auth.require_scope("tokens:write")
+        .map_err(|_| StatusCode::FORBIDDEN)?;
 
     let result = sqlx::query(
         r#"DELETE FROM team_members
            WHERE team_id = $1 AND user_id = $2
-           AND team_id IN (SELECT id FROM teams WHERE org_id = $3)"#
+           AND team_id IN (SELECT id FROM teams WHERE org_id = $3)"#,
     )
     .bind(team_id)
     .bind(user_id)
@@ -273,13 +296,14 @@ pub async fn get_team_spend(
     Extension(auth): Extension<AuthContext>,
     Path(team_id): Path<uuid::Uuid>,
 ) -> Result<Json<Vec<crate::middleware::teams::TeamSpend>>, StatusCode> {
-    auth.require_scope("tokens:read").map_err(|_| StatusCode::FORBIDDEN)?;
+    auth.require_scope("tokens:read")
+        .map_err(|_| StatusCode::FORBIDDEN)?;
 
     let rows = sqlx::query_as::<_, crate::middleware::teams::TeamSpend>(
         r#"SELECT ts.* FROM team_spend ts
            JOIN teams t ON ts.team_id = t.id
            WHERE ts.team_id = $1 AND t.org_id = $2
-           ORDER BY ts.period DESC LIMIT 30"#
+           ORDER BY ts.period DESC LIMIT 30"#,
     )
     .bind(team_id)
     .bind(auth.org_id)

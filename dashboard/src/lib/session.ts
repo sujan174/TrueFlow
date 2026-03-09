@@ -22,6 +22,7 @@ export function useSession(): UserSession | null {
     const [session, setSession] = useState<UserSession | null>(null);
 
     useEffect(() => {
+        let active = true;
         try {
             // Read from a client-visible cookie or localStorage
             const raw = document.cookie
@@ -29,15 +30,20 @@ export function useSession(): UserSession | null {
                 .find((c) => c.startsWith("trueflow_user="))
                 ?.split("=")[1];
 
-            if (raw) {
+            if (raw && active) {
                 const decoded = JSON.parse(
                     atob(decodeURIComponent(raw))
                 );
-                setSession(decoded);
+                setTimeout(() => {
+                    if (active) setSession(decoded);
+                }, 0);
             }
         } catch {
             // No session or parse error
         }
+        return () => {
+            active = false;
+        };
     }, []);
 
     return session;

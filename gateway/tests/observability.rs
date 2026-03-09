@@ -7,7 +7,10 @@ use gateway::store::payload_store::*;
 #[tokio::test]
 async fn test_payload_store_should_offload() {
     let pg_store = PayloadStore::Postgres;
-    assert!(!pg_store.should_offload(10000, 10000), "Postgres backend never offloads");
+    assert!(
+        !pg_store.should_offload(10000, 10000),
+        "Postgres backend never offloads"
+    );
 
     // Mock ObjectStore bypassing network
     let obj_store = PayloadStore::from_env().unwrap_or(PayloadStore::Postgres);

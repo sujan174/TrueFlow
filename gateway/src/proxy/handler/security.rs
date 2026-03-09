@@ -9,13 +9,13 @@ pub(crate) fn is_public_ip(ip: std::net::IpAddr) -> bool {
             if v4.is_loopback() && std::env::var("TRUEFLOW_TEST_ALLOW_LOCAL_WEBHOOKS").is_ok() {
                 return true;
             }
-            !v4.is_loopback()
-                && !v4.is_private()
-                && !v4.is_link_local()
-                && !v4.is_unspecified()
-                && !(v4.octets()[0] == 169 && v4.octets()[1] == 254)
+            !(v4.is_loopback()
+                || v4.is_private()
+                || v4.is_link_local()
+                || v4.is_unspecified()
+                || (v4.octets()[0] == 169 && v4.octets()[1] == 254)
                 // Alibaba Cloud ECS metadata service
-                && !(v4.octets() == [100, 100, 100, 200])
+                || v4.octets() == [100, 100, 100, 200])
         }
         std::net::IpAddr::V6(v6) => {
             // SEC: Allow loopback for integration tests (wiremock)
@@ -29,9 +29,8 @@ pub(crate) fn is_public_ip(ip: std::net::IpAddr) -> bool {
                 // Link-local fe80::/10
                 && (v6.segments()[0] & 0xffc0) != 0xfe80
                 // IPv4-mapped ::ffff:x.x.x.x — validate the embedded v4
-                && !v6
-                    .to_ipv4_mapped()
-                    .is_some_and(|v4| !is_public_ip(std::net::IpAddr::V4(v4)))
+                && v6
+                    .to_ipv4_mapped().is_none_or(|v4| is_public_ip(std::net::IpAddr::V4(v4)))
         }
     }
 }
@@ -79,12 +78,17 @@ pub(crate) async fn is_safe_webhook_url(url_str: &str) -> bool {
         "[fd00:ec2::254]",
         "[::1]",
     ];
-    if blocked_hosts.contains(&host) && !(allow_local && (host == "localhost" || host == "ip6-localhost")) {
+    if blocked_hosts.contains(&host)
+        && !(allow_local && (host == "localhost" || host == "ip6-localhost"))
+    {
         return false;
     }
 
     // If host is a literal IP address, validate immediately (no DNS lookup needed)
-    if let Ok(ip) = host.trim_matches(|c| c == '[' || c == ']').parse::<std::net::IpAddr>() {
+    if let Ok(ip) = host
+        .trim_matches(|c| c == '[' || c == ']')
+        .parse::<std::net::IpAddr>()
+    {
         return is_public_ip(ip);
     }
 
