@@ -22,6 +22,7 @@ mod tests;
 pub use self::types::*;
 
 use sqlx::PgPool;
+use sqlx::postgres::PgPoolOptions;
 
 #[derive(Clone)]
 pub struct PgStore {
@@ -30,7 +31,14 @@ pub struct PgStore {
 
 impl PgStore {
     pub async fn connect(database_url: &str) -> anyhow::Result<Self> {
-        let pool = PgPool::connect(database_url).await?;
+        let max_conns: u32 = std::env::var("DATABASE_MAX_CONNECTIONS")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(50);
+        let pool = PgPoolOptions::new()
+            .max_connections(max_conns)
+            .connect(database_url)
+            .await?;
         Ok(Self { pool })
     }
 

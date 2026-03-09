@@ -1,4 +1,4 @@
-import { setupAdminClient, createTestToken } from '../utils/setup.js';
+import { setupAdminClient, createTestToken, createRateLimitBypassPolicy } from '../utils/setup.js';
 import http from 'k6/http';
 import { check, sleep } from 'k6';
 
@@ -23,7 +23,8 @@ export const options = {
 
 export function setup() {
     const adminClient = setupAdminClient();
-    const tokenId = createTestToken(adminClient, {}, { failure_threshold: 3, reset_timeout_ms: 10000 });
+    const bypassPolicyId = createRateLimitBypassPolicy(adminClient);
+    const tokenId = createTestToken(adminClient, {}, { failure_threshold: 3, reset_timeout_ms: 10000 }, bypassPolicyId ? [bypassPolicyId] : []);
     return { sharedTokenId: tokenId };
 }
 

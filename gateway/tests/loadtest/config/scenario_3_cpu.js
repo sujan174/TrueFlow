@@ -1,4 +1,4 @@
-import { setupAdminClient, createTestToken, createComplexPolicy, attachPolicyToToken } from '../utils/setup.js';
+import { setupAdminClient, createTestToken, createComplexPolicy, createRateLimitBypassPolicy } from '../utils/setup.js';
 import http from 'k6/http';
 import { check, sleep } from 'k6';
 
@@ -21,9 +21,11 @@ export const options = {
 
 export function setup() {
     const adminClient = setupAdminClient();
-    const tokenId = createTestToken(adminClient);
-    const policyId = createComplexPolicy(adminClient);
-    attachPolicyToToken(adminClient, tokenId, policyId);
+    // Create policy first, then token with policy_ids — no separate "attach" endpoint exists
+    const bypassPolicyId = createRateLimitBypassPolicy(adminClient);
+    const complexPolicyId = createComplexPolicy(adminClient);
+    const policyIds = [bypassPolicyId, complexPolicyId].filter(Boolean);
+    const tokenId = createTestToken(adminClient, {}, undefined, policyIds);
     return { sharedTokenId: tokenId };
 }
 

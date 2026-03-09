@@ -403,7 +403,7 @@ impl LoadBalancer {
     }
 
     /// Ensure health entries exist for the token's upstreams.
-    fn ensure_health(&self, token_id: &str, upstreams: &[UpstreamTarget]) {
+    pub fn ensure_health(&self, token_id: &str, upstreams: &[UpstreamTarget]) {
         self.health.entry(token_id.to_string()).or_insert_with(|| {
             tracing::info!(token_id = token_id, "Initializing health map for token");
             upstreams

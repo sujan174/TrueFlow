@@ -1,4 +1,4 @@
-import { setupAdminClient, createTestToken } from '../utils/setup.js';
+import { setupAdminClient, createTestToken, createRateLimitBypassPolicy } from '../utils/setup.js';
 import http from 'k6/http';
 import { check, sleep } from 'k6';
 
@@ -23,10 +23,8 @@ export const options = {
 export function setup() {
     // Generate a SINGLE token for all VUs to hit simultaneously to test Redis lock contention
     const adminClient = setupAdminClient();
-    const tokenId = createTestToken(adminClient, {
-        "monthly_spend_cap": 1000.0,
-        "daily_spend_cap": 100.0
-    });
+    const bypassPolicyId = createRateLimitBypassPolicy(adminClient);
+    const tokenId = createTestToken(adminClient, {}, undefined, bypassPolicyId ? [bypassPolicyId] : []);
     return { sharedTokenId: tokenId };
 }
 

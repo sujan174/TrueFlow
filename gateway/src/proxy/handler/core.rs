@@ -726,10 +726,19 @@ pub async fn proxy_handler(
             }
 
             // ── Redact (pre-flight, request-side) ──
+            // SEC: Run regex-heavy redaction on a blocking thread to prevent
+            // Tokio worker starvation under large payloads (100KB+).
             Action::Redact { .. } => {
                 if let Some(ref mut body_val) = parsed_body {
-                    let result =
-                        middleware::redact::apply_redact(body_val, &triggered.action, true);
+                    let action_clone = triggered.action.clone();
+                    let mut body_owned = std::mem::take(body_val);
+                    let (returned_body, result) = tokio::task::spawn_blocking(move || {
+                        let r = middleware::redact::apply_redact(&mut body_owned, &action_clone, true);
+                        (body_owned, r)
+                    })
+                    .await
+                    .map_err(|e| AppError::Internal(anyhow::anyhow!("redact task failed: {}", e)))?;
+                    *body_val = returned_body;
                     if !result.matched_types.is_empty() {
                         tracing::info!(
                             policy = %triggered.policy_name,
@@ -1873,6 +1882,25 @@ pub async fn proxy_handler(
         upstream_headers.insert(reqwest::header::ACCEPT, accept.clone());
     }
 
+    // Forward custom x-* headers from client to upstream.
+    // This allows test/debug headers (e.g. x-mock-flaky) and custom metadata
+    // to reach the upstream. Security-sensitive gateway headers are excluded.
+    for (name, value) in headers.iter() {
+        let name_str = name.as_str();
+        if name_str.starts_with("x-")
+            && !name_str.starts_with("x-trueflow-")
+            && !name_str.starts_with("x-real-")
+            && !name_str.starts_with("x-upstream-")
+            && name_str != "x-forwarded-for"
+            && name_str != "x-forwarded-proto"
+            && name_str != "x-forwarded-host"
+        {
+            if let Ok(hname) = name_str.parse::<reqwest::header::HeaderName>() {
+                upstream_headers.insert(hname, value.clone());
+            }
+        }
+    }
+
     // Convert method Axum -> Reqwest
     let reqwest_method = reqwest::Method::from_bytes(method.as_str().as_bytes())
         .map_err(|e| AppError::Internal(anyhow::anyhow!("invalid method: {}", e)))?;
@@ -1897,6 +1925,36 @@ pub async fn proxy_handler(
 
     // Track in-flight requests for least-busy routing
     state.lb.increment_in_flight(&final_upstream_url);
+
+    // Ensure CB health state is initialized for single-upstream tokens.
+    // Multi-upstream tokens are initialized via select_upstream(), but single-upstream
+    // tokens skip that path and need explicit initialization.
+    if cb_config.enabled {
+        let synthetic = vec![proxy::loadbalancer::UpstreamTarget {
+            url: final_upstream_url.clone(),
+            credential_id: None,
+            weight: 100,
+            priority: 1,
+        }];
+        state.lb.ensure_health(&token.id, &synthetic);
+    }
+
+    // ── Circuit Breaker pre-check ────────────────────────────────────────────
+    // For single-upstream tokens, fail fast with 503 when the circuit is OPEN.
+    // This prevents flooding a known-broken upstream with requests.
+    if cb_config.enabled {
+        let cb_state = state.lb.get_circuit_state(&token.id, &final_upstream_url, cb_config.recovery_cooldown_secs);
+        if cb_state == "open" {
+            state.lb.decrement_in_flight(&final_upstream_url);
+            return Err(AppError::AllUpstreamsExhausted {
+                details: Some(serde_json::json!({
+                    "reason": "circuit_breaker_open",
+                    "upstream": final_upstream_url,
+                    "cooldown_secs": cb_config.recovery_cooldown_secs,
+                })),
+            });
+        }
+    }
 
     // Save upstream headers for potential MCP tool loop continuation requests
     let mcp_upstream_headers = if !mcp_server_names.is_empty() {
@@ -2677,13 +2735,18 @@ pub async fn proxy_handler(
                         reason: message.clone(),
                     });
                 }
+                // SEC: Run regex-heavy redaction on a blocking thread to prevent
+                // Tokio worker starvation under large payloads (100KB+).
                 Action::Redact { .. } => {
-                    if let Some(mut resp_json) = parsed_resp_body.clone() {
-                        let result = middleware::redact::apply_redact(
-                            &mut resp_json,
-                            &triggered.action,
-                            false,
-                        );
+                    if let Some(resp_json) = parsed_resp_body.clone() {
+                        let action_clone = triggered.action.clone();
+                        let (returned_body, result) = tokio::task::spawn_blocking(move || {
+                            let mut body_owned = resp_json;
+                            let r = middleware::redact::apply_redact(&mut body_owned, &action_clone, false);
+                            (body_owned, r)
+                        })
+                        .await
+                        .map_err(|e| AppError::Internal(anyhow::anyhow!("redact task failed: {}", e)))?;
                         if !result.matched_types.is_empty() {
                             tracing::info!(
                                 policy = %triggered.policy_name,
@@ -2692,7 +2755,7 @@ pub async fn proxy_handler(
                             );
                             redacted_by_policy.extend(result.matched_types);
                             // Reserialize the redacted response body
-                            if let Ok(new_body) = serde_json::to_vec(&resp_json) {
+                            if let Ok(new_body) = serde_json::to_vec(&returned_body) {
                                 resp_body_vec = new_body;
                             }
                         }

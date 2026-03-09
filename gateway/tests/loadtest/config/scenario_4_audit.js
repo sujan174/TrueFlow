@@ -1,4 +1,4 @@
-import { setupAdminClient, createTestToken } from '../utils/setup.js';
+import { setupAdminClient, createTestToken, createRateLimitBypassPolicy } from '../utils/setup.js';
 import http from 'k6/http';
 import { check, sleep } from 'k6';
 
@@ -19,12 +19,14 @@ export const options = {
 
 export function setup() {
     const adminClient = setupAdminClient();
+    const bypassPolicyId = createRateLimitBypassPolicy(adminClient);
+    const policyIds = bypassPolicyId ? [bypassPolicyId] : [];
 
     // We create multiple tokens to spread out L1 cache hits and force more Postgres interactions if needed,
     // though the main goal here is Audit Store INSERTS
     const tokenIds = [];
     for(let i=0; i<10; i++) {
-        tokenIds.push(createTestToken(adminClient));
+        tokenIds.push(createTestToken(adminClient, {}, undefined, policyIds));
     }
     return { tokenIds };
 }
