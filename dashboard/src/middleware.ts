@@ -16,7 +16,7 @@ import { jwtVerify } from "jose";
  *
  * Routes excluded from auth: /login, /api/auth/*, static assets.
  */
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
     const { pathname } = request.nextUrl;
     const response = NextResponse.next();
 
