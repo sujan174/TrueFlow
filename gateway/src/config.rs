@@ -56,14 +56,27 @@ pub fn load() -> anyhow::Result<Config> {
         );
     }
 
+    let database_url = std::env::var("DATABASE_URL").map_err(|_| {
+        anyhow::anyhow!(
+            "DATABASE_URL is not set. \
+             Example: postgres://postgres:password@localhost:5432/trueflow"
+        )
+    })?;
+
+    let redis_url = std::env::var("REDIS_URL").map_err(|_| {
+        anyhow::anyhow!(
+            "REDIS_URL is not set. \
+             Example: redis://127.0.0.1:6379"
+        )
+    })?;
+
     Ok(Config {
         port: std::env::var("TRUEFLOW_PORT")
             .unwrap_or_else(|_| "8443".into())
             .parse()
             .unwrap_or(8443),
-        database_url: std::env::var("DATABASE_URL")
-            .unwrap_or_else(|_| "postgres://localhost/trueflow".into()),
-        redis_url: std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379".into()),
+        database_url,
+        redis_url,
         master_key,
         admin_key: std::env::var("TRUEFLOW_ADMIN_KEY").ok(),
         slack_webhook_url: std::env::var("TRUEFLOW_SLACK_WEBHOOK_URL").ok(),
