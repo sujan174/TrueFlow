@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { jwtVerify } from "jose";
 
 /**
  * Next.js middleware — runs on every request server-side.
@@ -39,19 +40,14 @@ export function middleware(request: NextRequest) {
             return NextResponse.redirect(loginUrl);
         }
 
-        // Validate session expiry
+        // Verify JWT signature and expiry
         try {
-            const payload = JSON.parse(
-                Buffer.from(session, "base64url").toString()
-            );
-            if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) {
-                const loginUrl = new URL("/login", request.url);
-                loginUrl.searchParams.set("error", "Session expired — please sign in again");
-                const redirect = NextResponse.redirect(loginUrl);
-                redirect.cookies.delete("trueflow_session");
-                redirect.cookies.delete("trueflow_user");
-                return redirect;
+            const sessionSecret = process.env.SESSION_SECRET;
+            if (!sessionSecret) {
+                throw new Error("SESSION_SECRET not set");
             }
+            const secretKey = new TextEncoder().encode(sessionSecret);
+            const { payload } = await jwtVerify(session, secretKey);
 
             // Set a client-readable mirror cookie (non-httpOnly) with display info
             const userInfo = JSON.stringify({
@@ -70,8 +66,9 @@ export function middleware(request: NextRequest) {
                 });
             }
         } catch {
-            // Malformed session — redirect to login
+            // Invalid or expired JWT — redirect to login
             const loginUrl = new URL("/login", request.url);
+            loginUrl.searchParams.set("error", "Session expired — please sign in again");
             const redirect = NextResponse.redirect(loginUrl);
             redirect.cookies.delete("trueflow_session");
             redirect.cookies.delete("trueflow_user");

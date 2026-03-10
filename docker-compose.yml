@@ -12,13 +12,12 @@ services:
     ports:
       - "8443:8443"
     environment:
-      - DATABASE_URL=postgres://postgres:password@postgres:5432/trueflow
+      - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}@postgres:5432/trueflow
       - REDIS_URL=redis://redis:6379
       - RUST_LOG=info
-      - TRUEFLOW_MASTER_KEY=000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f
-      - TRUEFLOW_ADMIN_KEY=trueflow-admin-test
-      - DASHBOARD_ORIGIN=http://localhost:3000
-      - TRUEFLOW_ENABLE_TEST_HOOKS=1
+      - TRUEFLOW_MASTER_KEY=${TRUEFLOW_MASTER_KEY:?Set TRUEFLOW_MASTER_KEY to a 64-char hex string}
+      - TRUEFLOW_ADMIN_KEY=${TRUEFLOW_ADMIN_KEY:?Set TRUEFLOW_ADMIN_KEY to a strong secret}
+      - DASHBOARD_ORIGIN=${DASHBOARD_ORIGIN:-http://localhost:3000}
     depends_on:
       postgres:
         condition: service_healthy
@@ -52,11 +51,12 @@ services:
       NEXT_PUBLIC_API_URL: "http://localhost:8443/api/v1"
       API_URL: "http://gateway:8443/api/v1"
       GATEWAY_INTERNAL_URL: "http://gateway:8443"
-      TRUEFLOW_ADMIN_KEY: "trueflow-admin-test"
-      DASHBOARD_SECRET: "trueflow-dashboard-dev-secret"
+      TRUEFLOW_ADMIN_KEY: "${TRUEFLOW_ADMIN_KEY:?Set TRUEFLOW_ADMIN_KEY}"
+      DASHBOARD_SECRET: "${DASHBOARD_SECRET:?Set DASHBOARD_SECRET to a strong secret}"
+      SESSION_SECRET: "${SESSION_SECRET:?Set SESSION_SECRET to a strong secret}"
       GOOGLE_CLIENT_ID: "${GOOGLE_CLIENT_ID}"
       GOOGLE_CLIENT_SECRET: "${GOOGLE_CLIENT_SECRET}"
-      NEXTAUTH_URL: "http://localhost:3000"
+      NEXTAUTH_URL: "${NEXTAUTH_URL:-http://localhost:3000}"
     depends_on:
       gateway:
         condition: service_healthy
@@ -78,8 +78,7 @@ services:
     environment:
       POSTGRES_DB: trueflow
       POSTGRES_USER: postgres
-      # ⚠️  DEV ONLY — override in production with a strong password
-      POSTGRES_PASSWORD: password
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
     ports:
       - "5432:5432"
     volumes:

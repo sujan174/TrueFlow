@@ -47,6 +47,13 @@ pub fn load() -> anyhow::Result<Config> {
             );
         }
         eprintln!("⚠️  TRUEFLOW_MASTER_KEY is not set — using insecure placeholder. Set a 64-char hex key for production.");
+    } else if master_key.len() < 32 {
+        anyhow::bail!(
+            "TRUEFLOW_MASTER_KEY is too short ({} chars). \
+             A minimum of 32 hex characters (16 bytes) is required; \
+             use 64 hex characters (32 bytes) for AES-256.",
+            master_key.len()
+        );
     }
 
     Ok(Config {

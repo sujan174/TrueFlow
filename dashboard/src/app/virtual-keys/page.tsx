@@ -15,7 +15,7 @@ import {
   swrFetcher,
 } from "@/lib/api";
 import {
-  Plus, RefreshCw, Key, Shield, Trash2, Loader2, AlertTriangle, Blocks
+  Plus, RefreshCw, Key, Shield, Trash2, Loader2, AlertTriangle, Blocks, Copy, Check
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CountUp } from "@/components/ui/count-up";
@@ -51,6 +51,7 @@ export default function TokensPage() {
   const { data: rawTokens = [], mutate: mutateTokens, isLoading: loading } = useSWR<Token[]>("/tokens", swrFetcher);
   const [createOpen, setCreateOpen] = useState(false);
   const [revokeTokenData, setRevokeTokenData] = useState<Token | null>(null);
+  const [createdToken, setCreatedToken] = useState<{ id: string; name: string } | null>(null);
 
   const tokens = [...rawTokens].sort((a, b) => {
     if (a.is_active && !b.is_active) return -1;
@@ -101,9 +102,11 @@ export default function TokensPage() {
       mcp_blocked_tools: data.mcp_blocked_tools ?? null,
     };
 
+    let realTokenId = tempId;
     await mutateTokens(
       async () => {
-        await createToken(data);
+        const result = await createToken(data);
+        realTokenId = result.token_id;
         // Trigger revalidation to get the real token
         return [...rawTokens, tempToken];
       },
@@ -113,6 +116,7 @@ export default function TokensPage() {
         revalidate: true
       }
     );
+    setCreatedToken({ id: realTokenId, name: data.name });
   };
 
   const activeCount = tokens.filter((t) => t.is_active).length;
@@ -143,8 +147,7 @@ export default function TokensPage() {
                   onSuccess={() => setCreateOpen(false)}
                   onCreate={handleCreateToken}
                 />
-              </div>
-            </DialogContent>
+              </div>            </DialogContent>
           </Dialog>
         </div>
       </div>
@@ -237,6 +240,15 @@ export default function TokensPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Token Created — Show Integration Snippet */}
+      {createdToken && (
+        <TokenCreatedDialog
+          tokenId={createdToken.id}
+          tokenName={createdToken.name}
+          onClose={() => setCreatedToken(null)}
+        />
+      )}
     </div>
   );
 }
@@ -334,7 +346,6 @@ function CreateTokenForm({ onSuccess, onCreate }: { onSuccess: () => void; onCre
       await onCreate(payload);
       toast.success("Token created successfully");
       onSuccess();
-    } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to create token");
     } finally {
       setLoading(false);
@@ -673,5 +684,105 @@ function CreateTokenForm({ onSuccess, onCreate }: { onSuccess: () => void; onCre
         </Button>
       </DialogFooter>
     </form>
+  );
+}
+
+// ── Token Created Success Dialog ───────────────────────────────
+
+function TokenCreatedDialog({
+  tokenId,
+  tokenName,
+  onClose,
+}: {
+  tokenId: string;
+  tokenName: string;
+  onClose: () => void;
+}) {
+  const [copied, setCopied] = useState(false);
+  const gatewayUrl =
+    typeof window !== "undefined"
+      ? (process.env.NEXT_PUBLIC_GATEWAY_URL || window.location.origin.replace(":3000", ":8443"))
+      : "http://localhost:8443";
+
+  const curlSnippet = `curl ${gatewayUrl}/v1/chat/completions \\
+  -H "Authorization: Bearer ${tokenId}" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "model": "gpt-4o",
+    "messages": [{"role": "user", "content": "Hello!"}]
+  }'`;
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(curlSnippet);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-[560px] bg-zinc-950 border-white/10 text-white p-0 overflow-hidden">
+        <div className="p-6 space-y-5">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-white font-medium">
+              <div className="h-5 w-5 rounded-full bg-emerald-500/15 flex items-center justify-center">
+                <Check className="h-3 w-3 text-emerald-400" />
+              </div>
+              Token Created
+            </DialogTitle>
+            <DialogDescription className="text-zinc-400 text-[13px]">
+              <span className="font-mono text-white">{tokenName}</span> is ready. Point your OpenAI SDK at TrueFlow by changing the{" "}
+              <code className="text-zinc-300 bg-white/5 px-1 py-0.5 rounded text-[11px]">base_url</code> and key.
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* Token ID */}
+          <div className="space-y-1.5">
+            <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest">Your Virtual Token</p>
+            <div className="flex items-center gap-2 rounded-md border border-white/10 bg-black px-3 py-2">
+              <code className="flex-1 font-mono text-[12px] text-emerald-400 truncate">{tokenId}</code>
+            </div>
+            <p className="text-[10px] text-zinc-600">This token is shown once. Save it now — it cannot be retrieved again from the dashboard.</p>
+          </div>
+
+          {/* Base URL */}
+          <div className="space-y-1.5">
+            <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest">Gateway Base URL</p>
+            <div className="flex items-center gap-2 rounded-md border border-white/10 bg-black px-3 py-2">
+              <code className="flex-1 font-mono text-[12px] text-zinc-300">{gatewayUrl}/v1</code>
+            </div>
+          </div>
+
+          {/* curl snippet */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest">Quick Start</p>
+              <button
+                onClick={handleCopy}
+                className="flex items-center gap-1 text-[10px] text-zinc-500 hover:text-white transition-colors"
+              >
+                {copied ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
+                {copied ? "Copied!" : "Copy"}
+              </button>
+            </div>
+            <pre className="rounded-md border border-white/10 bg-black px-4 py-3 font-mono text-[11px] text-zinc-300 overflow-x-auto whitespace-pre scrollbar-none leading-relaxed">
+              {curlSnippet}
+            </pre>
+          </div>
+
+          {/* SDK hint */}
+          <div className="rounded-md border border-white/[0.06] bg-white/[0.02] px-4 py-3 text-[12px] text-zinc-400 space-y-1">
+            <p className="font-semibold text-zinc-300">OpenAI SDK drop-in</p>
+            <pre className="font-mono text-[11px] text-zinc-500 whitespace-pre-wrap">{`client = OpenAI(
+  base_url="${gatewayUrl}/v1",
+  api_key="${tokenId}",
+)`}</pre>
+          </div>
+        </div>
+
+        <div className="border-t border-white/[0.06] px-6 py-4 flex justify-end">
+          <Button onClick={onClose}>Done</Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }

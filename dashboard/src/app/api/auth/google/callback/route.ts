@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { SignJWT } from "jose";
 
 /**
  * GET /api/auth/google/callback — Google OAuth 2.0 callback handler.
@@ -74,19 +75,28 @@ export async function GET(request: NextRequest) {
         const user = await userRes.json();
 
         // Create session payload
-        const session = {
+        const sessionSecret = process.env.SESSION_SECRET;
+        if (!sessionSecret) {
+            console.error("SESSION_SECRET is not set");
+            return NextResponse.redirect(
+                `${baseUrl}/login?error=${encodeURIComponent("Server configuration error")}`
+            );
+        }
+
+        const secretKey = new TextEncoder().encode(sessionSecret);
+        const now = Math.floor(Date.now() / 1000);
+
+        // Sign session as a JWT (HMAC-SHA256)
+        const sessionToken = await new SignJWT({
             email: user.email,
             name: user.name,
             picture: user.picture,
             sub: user.id,
-            iat: Math.floor(Date.now() / 1000),
-            exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 7, // 7 days
-        };
-
-        // Encode session as base64 (in production, sign with HMAC)
-        const sessionToken = Buffer.from(JSON.stringify(session)).toString(
-            "base64url"
-        );
+        })
+            .setProtectedHeader({ alg: "HS256" })
+            .setIssuedAt(now)
+            .setExpirationTime(now + 60 * 60 * 24 * 7) // 7 days
+            .sign(secretKey);
 
         const response = NextResponse.redirect(`${baseUrl}/`);
 

@@ -22,7 +22,6 @@ import {
     FlaskRound,
     Webhook,
     Wrench,
-    CreditCard,
     FileCode2,
     Database,
     ShieldCheck,
@@ -119,7 +118,6 @@ export function Sidebar({ className }: SidebarProps) {
             routes: [
                 { href: "/", label: "Dashboard", icon: LayoutDashboard },
                 { href: "/analytics", label: "Analytics", icon: BarChart3 },
-                { href: "/billing", label: "Billing", icon: CreditCard },
             ]
         },
         {
