@@ -15,6 +15,7 @@ fn cc_redact_action() -> Action {
         patterns: vec!["credit_card".to_string()],
         fields: vec![],
         on_match: RedactOnMatch::Redact,
+        nlp_backend: None,
     }
 }
 
@@ -84,6 +85,7 @@ fn test_multiple_pii_types_in_one_message() {
         ],
         fields: vec![],
         on_match: RedactOnMatch::Redact,
+        nlp_backend: None,
     };
     let mut body = json!({
         "messages": [{"role": "user",
@@ -110,6 +112,7 @@ fn test_pii_block_mode_triggers_on_match() {
         patterns: vec!["credit_card".to_string()],
         fields: vec![],
         on_match: RedactOnMatch::Block,
+        nlp_backend: None,
     };
     let mut body = json!({"messages": [{"role": "user", "content": "Card: 4111111111111111"}]});
     let result = apply_redact(&mut body, &action, true);
@@ -127,6 +130,7 @@ fn test_pii_block_mode_no_false_positive() {
         patterns: vec!["credit_card".to_string()],
         fields: vec![],
         on_match: RedactOnMatch::Block,
+        nlp_backend: None,
     };
     let mut body = json!({"messages": [{"role": "user", "content": "What is the weather today?"}]});
     let result = apply_redact(&mut body, &action, true);

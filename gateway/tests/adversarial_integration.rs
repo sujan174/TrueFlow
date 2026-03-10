@@ -115,6 +115,7 @@ fn test_redact_and_sanitize_no_double_redaction() {
         patterns: vec!["ssn".to_string()],
         fields: vec![],
         on_match: RedactOnMatch::Redact,
+        nlp_backend: None,
     };
     let mut body = json!({
         "messages": [{"role": "user", "content": "SSN: 123-45-6789"}]
@@ -295,6 +296,7 @@ fn test_redact_both_direction_applies_to_request_and_response() {
         patterns: vec!["email".to_string()],
         fields: vec![],
         on_match: RedactOnMatch::Redact,
+        nlp_backend: None,
     };
 
     // Request body
@@ -340,6 +342,7 @@ fn test_block_mode_short_circuits_on_match() {
         patterns: vec!["credit_card".to_string(), "ssn".to_string()],
         fields: vec![],
         on_match: RedactOnMatch::Block,
+        nlp_backend: None,
     };
     let mut body = json!({
         "messages": [{"role": "user", "content": "Card 4111111111111111 and SSN 123-45-6789"}]

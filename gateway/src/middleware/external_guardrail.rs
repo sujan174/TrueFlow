@@ -28,7 +28,7 @@ pub const DEFAULT_GUARDRAIL_TIMEOUT_SECS: u64 = 5;
 
 /// Return the configured guardrail timeout, reading `TRUEFLOW_GUARDRAIL_TIMEOUT_SECS`
 /// from the environment if set.
-fn guardrail_timeout() -> Duration {
+pub fn guardrail_timeout() -> Duration {
     let secs = std::env::var("TRUEFLOW_GUARDRAIL_TIMEOUT_SECS")
         .ok()
         .and_then(|v| v.parse::<u64>().ok())

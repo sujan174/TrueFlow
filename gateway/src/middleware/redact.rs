@@ -165,6 +165,7 @@ pub fn apply_redact(body: &mut Value, action: &Action, is_request: bool) -> Reda
             patterns,
             fields,
             on_match,
+            ..
         } => (direction, patterns, fields, on_match),
         _ => return RedactResult::default(),
     };
@@ -323,6 +324,7 @@ pub async fn apply_redact_tokenize(
             patterns,
             fields,
             on_match: _,
+            ..
         } => (direction, patterns, fields, ()),
         _ => return RedactResult::default(),
     };
@@ -677,6 +679,7 @@ mod tests {
             patterns: vec!["email".to_string()],
             fields: vec![],
             on_match: RedactOnMatch::Redact,
+            nlp_backend: None,
         };
         let mut body = json!({"user": {"email": "alice@example.com", "name": "Alice"}});
         let result = apply_redact(&mut body, &action, true);
@@ -693,6 +696,7 @@ mod tests {
             patterns: vec!["ssn".to_string()],
             fields: vec![],
             on_match: RedactOnMatch::Redact,
+            nlp_backend: None,
         };
         let mut body = json!({"data": "My SSN is 123-45-6789"});
         let result = apply_redact(&mut body, &action, true);
@@ -708,6 +712,7 @@ mod tests {
             patterns: vec!["email".to_string(), "api_key".to_string()],
             fields: vec![],
             on_match: RedactOnMatch::Redact,
+            nlp_backend: None,
         };
         let mut body = json!({
             "from": "user@test.com",
@@ -727,6 +732,7 @@ mod tests {
             patterns: vec![r"\b[A-Z]{2}\d{6}\b".to_string()], // passport-like
             fields: vec![],
             on_match: RedactOnMatch::Redact,
+            nlp_backend: None,
         };
         let mut body = json!({"passport": "AB123456"});
         let result = apply_redact(&mut body, &action, true);
@@ -742,6 +748,7 @@ mod tests {
             patterns: vec!["email".to_string()],
             fields: vec![],
             on_match: RedactOnMatch::Redact,
+            nlp_backend: None,
         };
         let mut body = json!({
             "users": [
@@ -765,6 +772,7 @@ mod tests {
             patterns: vec![],
             fields: vec!["password".to_string(), "secret".to_string()],
             on_match: RedactOnMatch::Redact,
+            nlp_backend: None,
         };
         let mut body = json!({
             "user": "alice",
@@ -786,6 +794,7 @@ mod tests {
             patterns: vec![],
             fields: vec!["token".to_string()],
             on_match: RedactOnMatch::Redact,
+            nlp_backend: None,
         };
         let mut body = json!({
             "auth": {"token": "xyz"},
@@ -806,6 +815,7 @@ mod tests {
             patterns: vec!["email".to_string()],
             fields: vec![],
             on_match: RedactOnMatch::Redact,
+            nlp_backend: None,
         };
         let mut body = json!({"email": "a@b.com"});
 
@@ -827,6 +837,7 @@ mod tests {
             patterns: vec!["ssn".to_string()],
             fields: vec![],
             on_match: RedactOnMatch::Redact,
+            nlp_backend: None,
         };
         let mut body = json!({"data": "SSN: 123-45-6789"});
 
@@ -846,6 +857,7 @@ mod tests {
             patterns: vec!["email".to_string()],
             fields: vec![],
             on_match: RedactOnMatch::Redact,
+            nlp_backend: None,
         };
         let mut body_req = json!({"email": "a@b.com"});
         let mut body_resp = json!({"email": "c@d.com"});
@@ -968,6 +980,7 @@ mod tests {
             patterns: vec![],
             fields: vec![],
             on_match: RedactOnMatch::Redact,
+            nlp_backend: None,
         };
         let mut body = json!({"email": "a@b.com"});
         let result = apply_redact(&mut body, &action, true);
@@ -994,6 +1007,7 @@ mod tests {
             patterns: vec!["phone".to_string()],
             fields: vec![],
             on_match: RedactOnMatch::Redact,
+            nlp_backend: None,
         };
         let mut body = json!({"contact": "Call me at 555-123-4567"});
         let result = apply_redact(&mut body, &action, true);

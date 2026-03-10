@@ -208,6 +208,7 @@ fn test_destructive_redact_unaffected_by_tokenize_addition() {
         patterns: vec!["email".to_string(), "ssn".to_string()],
         fields: vec![],
         on_match: RedactOnMatch::Redact,
+        nlp_backend: None,
     };
 
     let mut body = json!({
@@ -237,6 +238,7 @@ fn test_block_mode_unaffected_by_tokenize_addition() {
         patterns: vec!["credit_card".to_string()],
         fields: vec![],
         on_match: RedactOnMatch::Block,
+        nlp_backend: None,
     };
 
     let mut body = json!({

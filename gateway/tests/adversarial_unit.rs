@@ -17,6 +17,7 @@ use gateway::errors::AppError;
 use gateway::middleware::engine::{evaluate_condition, evaluate_policies};
 use gateway::middleware::fields::RequestContext;
 use gateway::middleware::guardrail::check_content;
+use gateway::middleware::pii::PiiDetector;
 use gateway::middleware::oidc;
 use gateway::middleware::pii_vault;
 use gateway::middleware::redact::apply_redact;
@@ -938,6 +939,7 @@ fn test_redact_field_specific_key() {
         patterns: vec![],
         fields: vec!["password".to_string()],
         on_match: RedactOnMatch::Redact,
+        nlp_backend: None,
     };
     let mut body = json!({
         "messages": [{"role": "user", "content": "test"}],
@@ -967,6 +969,7 @@ fn test_redact_block_mode_triggers_on_pii() {
         patterns: vec!["ssn".to_string()],
         fields: vec![],
         on_match: RedactOnMatch::Block,
+        nlp_backend: None,
     };
     let mut body = json!({
         "messages": [{"role": "user", "content": "My SSN is 123-45-6789"}]
@@ -988,6 +991,7 @@ fn test_redact_block_mode_no_false_positive() {
         patterns: vec!["ssn".to_string()],
         fields: vec![],
         on_match: RedactOnMatch::Block,
+        nlp_backend: None,
     };
     let mut body = json!({
         "messages": [{"role": "user", "content": "What is the weather today?"}]
@@ -1009,6 +1013,7 @@ fn test_redact_direction_request_skips_response() {
         patterns: vec!["ssn".to_string()],
         fields: vec![],
         on_match: RedactOnMatch::Redact,
+        nlp_backend: None,
     };
     let mut body = json!({
         "messages": [{"role": "assistant", "content": "SSN is 123-45-6789"}]
@@ -1020,3 +1025,190 @@ fn test_redact_direction_request_skips_response() {
         "Request-direction redaction must not apply to response"
     );
 }
+
+// ── I — NLP PII Detection ──────────────────────────────────────
+
+/// Unit test: apply_nlp_entities correctly redacts NLP-detected spans in JSON body.
+#[test]
+fn test_nlp_pii_entities_redact_names_and_locations() {
+    use gateway::middleware::pii::{apply_nlp_entities, PiiEntity};
+
+    let mut body = json!({
+        "messages": [
+            {"role": "user", "content": "My doctor is Dr. Sarah Johnson at 456 Oak Avenue, Chicago"}
+        ]
+    });
+
+    let entities = vec![
+        PiiEntity {
+            entity_type: "PERSON".to_string(),
+            start: 17,
+            end: 34,
+            score: 0.95,
+            text: "Dr. Sarah Johnson".to_string(),
+        },
+        PiiEntity {
+            entity_type: "LOCATION".to_string(),
+            start: 38,
+            end: 56,
+            score: 0.88,
+            text: "456 Oak Avenue, Chicago".to_string(),
+        },
+    ];
+
+    let matched = apply_nlp_entities(&mut body, &entities);
+    let content = body["messages"][0]["content"].as_str().unwrap();
+
+    assert!(
+        content.contains("[REDACTED_PERSON]"),
+        "Person name should be redacted, got: {}",
+        content
+    );
+    assert!(
+        content.contains("[REDACTED_LOCATION]"),
+        "Location should be redacted, got: {}",
+        content
+    );
+    assert!(
+        !content.contains("Sarah Johnson"),
+        "Original name should be gone"
+    );
+    assert!(!content.contains("Oak Avenue"), "Original address should be gone");
+    assert_eq!(matched.len(), 2);
+}
+
+/// Unit test: NLP entities that don't match any string in the body are silently skipped.
+#[test]
+fn test_nlp_pii_entities_no_false_positive() {
+    use gateway::middleware::pii::{apply_nlp_entities, PiiEntity};
+
+    let mut body = json!({"text": "The weather is nice today"});
+    let entities = vec![PiiEntity {
+        entity_type: "PERSON".to_string(),
+        start: 0,
+        end: 5,
+        score: 0.7,
+        text: "Alice".to_string(), // not in body
+    }];
+
+    let matched = apply_nlp_entities(&mut body, &entities);
+    assert_eq!(body["text"], "The weather is nice today");
+    assert!(matched.is_empty(), "No false positive expected");
+}
+
+/// Unit test: extract_text_from_value collects all strings for NLP analysis.
+#[test]
+fn test_extract_text_for_nlp_analysis() {
+    use gateway::middleware::pii::extract_text_from_value;
+
+    let body = json!({
+        "messages": [
+            {"role": "user", "content": "Contact John at john@example.com"},
+            {"role": "system", "content": "You are helpful"}
+        ],
+        "model": "gpt-4"
+    });
+
+    let text = extract_text_from_value(&body);
+    assert!(text.contains("Contact John"), "Should extract user message");
+    assert!(text.contains("You are helpful"), "Should extract system message");
+    assert!(text.contains("gpt-4"), "Should extract model field");
+}
+
+/// Integration test: NlpBackendConfig deserializes correctly from JSON policy.
+#[test]
+fn test_nlp_backend_config_deserialization() {
+    use gateway::models::policy::NlpBackendType;
+
+    let json = r#"{
+        "action": "redact",
+        "direction": "request",
+        "patterns": ["ssn", "email"],
+        "nlp_backend": {
+            "type": "presidio",
+            "endpoint": "http://presidio:5002",
+            "language": "en",
+            "score_threshold": 0.8,
+            "entities": ["PERSON", "LOCATION"]
+        }
+    }"#;
+
+    let action: Action = serde_json::from_str(json).unwrap();
+    match action {
+        Action::Redact {
+            nlp_backend: Some(cfg),
+            patterns,
+            ..
+        } => {
+            assert_eq!(cfg.backend_type, NlpBackendType::Presidio);
+            assert_eq!(cfg.endpoint, "http://presidio:5002");
+            assert_eq!(cfg.language, "en");
+            assert!((cfg.score_threshold - 0.8).abs() < f32::EPSILON);
+            assert_eq!(cfg.entities, vec!["PERSON", "LOCATION"]);
+            assert_eq!(patterns, vec!["ssn", "email"]);
+        }
+        _ => panic!("Expected Redact with nlp_backend"),
+    }
+}
+
+/// Integration test: NlpBackendConfig absent means regex-only (backward compat).
+#[test]
+fn test_nlp_backend_absent_backward_compatible() {
+    let json = r#"{
+        "action": "redact",
+        "direction": "both",
+        "patterns": ["email"]
+    }"#;
+
+    let action: Action = serde_json::from_str(json).unwrap();
+    match action {
+        Action::Redact { nlp_backend, .. } => {
+            assert!(nlp_backend.is_none(), "nlp_backend should default to None");
+        }
+        _ => panic!("Expected Redact"),
+    }
+}
+
+/// Integration test: PresidioDetector can be constructed from NlpBackendConfig.
+#[test]
+fn test_presidio_detector_from_config() {
+    use gateway::middleware::pii::presidio::PresidioDetector;
+    use gateway::models::policy::{NlpBackendConfig, NlpBackendType};
+
+    let cfg = NlpBackendConfig {
+        backend_type: NlpBackendType::Presidio,
+        endpoint: "http://localhost:5002".to_string(),
+        language: "en".to_string(),
+        score_threshold: 0.7,
+        entities: vec!["PERSON".to_string()],
+    };
+
+    let detector = PresidioDetector::from_config(&cfg, std::time::Duration::from_secs(5));
+    assert_eq!(detector.name(), "presidio");
+}
+
+/// Integration test: PresidioDetector fails gracefully (fail-open) on unreachable endpoint.
+#[tokio::test]
+async fn test_presidio_detector_fail_open_on_unreachable() {
+    use gateway::middleware::pii::presidio::PresidioDetector;
+    use gateway::middleware::pii::PiiDetector;
+
+    // Point at a port that's certainly not running Presidio
+    let detector = PresidioDetector::new(
+        "http://127.0.0.1:59999".to_string(),
+        "en".to_string(),
+        0.7,
+        std::time::Duration::from_secs(1),
+    );
+
+    let result = detector.detect("John Smith lives in New York", None).await;
+    assert!(result.is_err(), "Should fail on unreachable endpoint");
+
+    // The error should be Unavailable, not a panic
+    match result.unwrap_err() {
+        gateway::middleware::pii::PiiError::Unavailable(_) => {} // expected
+        gateway::middleware::pii::PiiError::Timeout(_) => {}     // also acceptable
+        other => panic!("Expected Unavailable or Timeout, got: {:?}", other),
+    }
+}
+

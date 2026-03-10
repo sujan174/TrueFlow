@@ -12,6 +12,7 @@ pub mod metrics;
 pub mod model_access;
 pub mod observer;
 pub mod oidc;
+pub mod pii;
 pub mod pii_vault;
 pub mod policy;
 pub mod rbac;

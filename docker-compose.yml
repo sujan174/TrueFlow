@@ -114,6 +114,23 @@ services:
     environment:
       - COLLECTOR_OTLP_ENABLED=true
 
+  presidio-analyzer:
+    image: mcr.microsoft.com/presidio-analyzer:latest
+    profiles: [ "nlp-pii" ]
+    ports:
+      - "5002:5002"
+    environment:
+      - DEFAULT_LANGUAGE=en
+    healthcheck:
+      test: [ "CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5002/health')" ]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+
 volumes:
   pgdata:
   redisdata:

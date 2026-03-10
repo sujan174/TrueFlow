@@ -11,6 +11,7 @@ use uuid::Uuid;
 use crate::errors::AppError;
 use crate::middleware;
 use crate::middleware::fields::RequestContext;
+use crate::middleware::pii::PiiDetector as _;
 use crate::models::cost::{self, extract_model, extract_usage};
 use crate::models::policy::{Action, RedactDirection, RedactOnMatch, TriggeredAction};
 use crate::proxy;
@@ -339,6 +340,7 @@ pub async fn proxy_handler(
                     .collect(),
                     fields: vec![],
                     on_match: RedactOnMatch::Redact,
+                    nlp_backend: None,
                 }),
                 "pii_block" => Some(Action::Redact {
                     direction: RedactDirection::Request,
@@ -348,6 +350,7 @@ pub async fn proxy_handler(
                         .collect(),
                     fields: vec![],
                     on_match: RedactOnMatch::Block,
+                    nlp_backend: None,
                 }),
                 "prompt_injection" => Some(Action::ContentFilter {
                     block_jailbreak: true,
@@ -822,7 +825,7 @@ pub async fn proxy_handler(
             // ── Redact (pre-flight, request-side) ──
             // SEC: Run regex-heavy redaction on a blocking thread to prevent
             // Tokio worker starvation under large payloads (100KB+).
-            Action::Redact { .. } => {
+            Action::Redact { nlp_backend, .. } => {
                 if let Some(ref mut body_val) = parsed_body {
                     let action_clone = triggered.action.clone();
                     let mut body_owned = std::mem::take(body_val);
@@ -836,10 +839,50 @@ pub async fn proxy_handler(
                         AppError::Internal(anyhow::anyhow!("redact task failed: {}", e))
                     })?;
                     *body_val = returned_body;
-                    if !result.matched_types.is_empty() {
+
+                    // NLP augmentation: detect unstructured PII if nlp_backend is configured
+                    let mut nlp_matched = Vec::new();
+                    if let Some(nlp_cfg) = nlp_backend {
+                        let timeout = middleware::external_guardrail::guardrail_timeout();
+                        let text = middleware::pii::extract_text_from_value(body_val);
+                        if !text.is_empty() {
+                            let detector = middleware::pii::presidio::PresidioDetector::from_config(nlp_cfg, timeout);
+                            let entities = if nlp_cfg.entities.is_empty() {
+                                detector.detect(&text, Some(&nlp_cfg.language)).await
+                            } else {
+                                middleware::pii::presidio::detect_with_entities(
+                                    &detector, &text, Some(&nlp_cfg.language), &nlp_cfg.entities,
+                                ).await
+                            };
+                            match entities {
+                                Ok(ents) if !ents.is_empty() => {
+                                    nlp_matched = middleware::pii::apply_nlp_entities(body_val, &ents);
+                                    tracing::info!(
+                                        policy = %triggered.policy_name,
+                                        nlp_types = ?nlp_matched,
+                                        "NLP PII detection augmented request-side redaction"
+                                    );
+                                }
+                                Ok(_) => {} // no entities found
+                                Err(e) => {
+                                    // Fail-open: log warning and continue with regex-only
+                                    tracing::warn!(
+                                        policy = %triggered.policy_name,
+                                        error = %e,
+                                        "NLP PII detection failed (fail-open), continuing with regex-only"
+                                    );
+                                }
+                            }
+                        }
+                    }
+
+                    let mut all_matched = result.matched_types;
+                    all_matched.extend(nlp_matched);
+
+                    if !all_matched.is_empty() {
                         tracing::info!(
                             policy = %triggered.policy_name,
-                            patterns = ?result.matched_types,
+                            patterns = ?all_matched,
                             blocked = result.should_block,
                             "applied request-side redaction"
                         );
@@ -852,12 +895,12 @@ pub async fn proxy_handler(
                                 ),
                                 details: Some(serde_json::json!({
                                     "policy": triggered.policy_name,
-                                    "detected_pii": result.matched_types,
+                                    "detected_pii": all_matched,
                                     "action": "Remove sensitive data and retry"
                                 })),
                             });
                         }
-                        redacted_by_policy.extend(result.matched_types);
+                        redacted_by_policy.extend(all_matched);
                     }
                 }
             }
@@ -3218,7 +3261,7 @@ pub async fn proxy_handler(
                 }
                 // SEC: Run regex-heavy redaction on a blocking thread to prevent
                 // Tokio worker starvation under large payloads (100KB+).
-                Action::Redact { .. } => {
+                Action::Redact { nlp_backend, .. } => {
                     if let Some(resp_json) = parsed_resp_body.clone() {
                         let action_clone = triggered.action.clone();
                         let (returned_body, result) = tokio::task::spawn_blocking(move || {
@@ -3234,15 +3277,56 @@ pub async fn proxy_handler(
                         .map_err(|e| {
                             AppError::Internal(anyhow::anyhow!("redact task failed: {}", e))
                         })?;
-                        if !result.matched_types.is_empty() {
+
+                        let mut redacted_body = returned_body;
+
+                        // NLP augmentation for post-flight
+                        let mut nlp_matched = Vec::new();
+                        if let Some(nlp_cfg) = nlp_backend {
+                            let timeout = middleware::external_guardrail::guardrail_timeout();
+                            let text = middleware::pii::extract_text_from_value(&redacted_body);
+                            if !text.is_empty() {
+                                let detector = middleware::pii::presidio::PresidioDetector::from_config(nlp_cfg, timeout);
+                                let entities = if nlp_cfg.entities.is_empty() {
+                                    detector.detect(&text, Some(&nlp_cfg.language)).await
+                                } else {
+                                    middleware::pii::presidio::detect_with_entities(
+                                        &detector, &text, Some(&nlp_cfg.language), &nlp_cfg.entities,
+                                    ).await
+                                };
+                                match entities {
+                                    Ok(ents) if !ents.is_empty() => {
+                                        nlp_matched = middleware::pii::apply_nlp_entities(&mut redacted_body, &ents);
+                                        tracing::info!(
+                                            policy = %triggered.policy_name,
+                                            nlp_types = ?nlp_matched,
+                                            "NLP PII detection augmented response-side redaction"
+                                        );
+                                    }
+                                    Ok(_) => {}
+                                    Err(e) => {
+                                        tracing::warn!(
+                                            policy = %triggered.policy_name,
+                                            error = %e,
+                                            "NLP PII detection failed (fail-open), continuing with regex-only"
+                                        );
+                                    }
+                                }
+                            }
+                        }
+
+                        let mut all_matched = result.matched_types;
+                        all_matched.extend(nlp_matched);
+
+                        if !all_matched.is_empty() {
                             tracing::info!(
                                 policy = %triggered.policy_name,
-                                patterns = ?result.matched_types,
+                                patterns = ?all_matched,
                                 "applied response-side redaction"
                             );
-                            redacted_by_policy.extend(result.matched_types);
+                            redacted_by_policy.extend(all_matched);
                             // Reserialize the redacted response body
-                            if let Ok(new_body) = serde_json::to_vec(&returned_body) {
+                            if let Ok(new_body) = serde_json::to_vec(&redacted_body) {
                                 resp_body_vec = new_body;
                             }
                         }

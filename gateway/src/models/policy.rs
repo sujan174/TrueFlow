@@ -223,6 +223,10 @@ pub enum Action {
         /// Default is "redact" for backwards compatibility.
         #[serde(default)]
         on_match: RedactOnMatch,
+        /// Optional NLP backend for unstructured PII detection (names, addresses, etc.).
+        /// When absent, regex-only redaction is used (fully backward compatible).
+        #[serde(default)]
+        nlp_backend: Option<NlpBackendConfig>,
     },
     /// Transform the request (set headers, append system prompt, etc.)
     Transform { operations: Vec<TransformOp> },
@@ -591,6 +595,44 @@ pub enum RedactOnMatch {
     /// Replace PII with a vault-backed reversible token (e.g. `tok_pii_cc_a3f1b2...`).
     /// Authorized callers with `pii:rehydrate` scope can recover the original value.
     Tokenize,
+}
+
+// ── NLP Backend Configuration ─────────────────────────────────
+
+/// Configuration for an NLP-based PII detection backend (e.g. Presidio).
+/// When attached to `Action::Redact`, the NLP backend augments regex detection.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct NlpBackendConfig {
+    /// Backend type — currently only "presidio" is supported.
+    #[serde(rename = "type")]
+    pub backend_type: NlpBackendType,
+    /// HTTP endpoint of the NLP service (e.g. "http://presidio:5002").
+    pub endpoint: String,
+    /// Language code for analysis (default: "en").
+    #[serde(default = "default_nlp_language")]
+    pub language: String,
+    /// Minimum confidence score for entity detection (default: 0.7).
+    #[serde(default = "default_nlp_score_threshold")]
+    pub score_threshold: f32,
+    /// Entity types to detect (e.g. ["PERSON", "LOCATION"]).
+    /// If empty, the backend uses its default entity set.
+    #[serde(default)]
+    pub entities: Vec<String>,
+}
+
+fn default_nlp_language() -> String {
+    "en".to_string()
+}
+
+fn default_nlp_score_threshold() -> f32 {
+    0.7
+}
+
+/// Supported NLP backend types.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum NlpBackendType {
+    Presidio,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
