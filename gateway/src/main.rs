@@ -13,6 +13,7 @@ mod cache;
 mod cli;
 mod config;
 mod errors;
+mod iac;
 mod jobs;
 mod mcp;
 mod middleware;
@@ -178,6 +179,7 @@ async fn main() -> anyhow::Result<()> {
 
             handle_policy_command(command, &state).await
         }
+        Some(cli::Commands::Config { command }) => handle_config_command(command).await,
         None => run_server(cfg, 8443).await,
     };
 
@@ -886,4 +888,151 @@ fn parse_project_id(id: Option<String>) -> anyhow::Result<uuid::Uuid> {
     let raw = id.unwrap_or_else(|| "00000000-0000-0000-0000-000000000001".into());
     raw.parse()
         .map_err(|_| anyhow::anyhow!("invalid project ID: {}", raw))
+}
+
+// ── Config (IaC) command handler ─────────────────────────────
+
+async fn handle_config_command(cmd: cli::ConfigCommands) -> anyhow::Result<()> {
+    match cmd {
+        cli::ConfigCommands::Export {
+            file,
+            gateway_url,
+            api_key,
+            project_id,
+        } => {
+            let client = iac::client::ApiClient::new(&gateway_url, &api_key, project_id)?;
+            let doc = client.export().await?;
+            let yaml = doc.to_yaml()?;
+
+            if let Some(path) = file {
+                std::fs::write(&path, &yaml)?;
+                println!("Exported config to {}", path);
+            } else {
+                print!("{}", yaml);
+            }
+            Ok(())
+        }
+
+        cli::ConfigCommands::Plan {
+            file,
+            gateway_url,
+            api_key,
+            project_id,
+        } => {
+            let local = iac::schema::ConfigDoc::from_file(std::path::Path::new(&file))?;
+            let client = iac::client::ApiClient::new(&gateway_url, &api_key, project_id)?;
+            let live = client.export().await?;
+            let plan = iac::diff::compute_plan(&local, &live);
+
+            println!("\n{}", plan);
+
+            if plan.is_empty() {
+                std::process::exit(0);
+            } else {
+                // Exit 2 = changes detected (useful for CI)
+                std::process::exit(2);
+            }
+        }
+
+        cli::ConfigCommands::Apply {
+            file,
+            gateway_url,
+            api_key,
+            project_id,
+            yes,
+        } => {
+            let local = iac::schema::ConfigDoc::from_file(std::path::Path::new(&file))?;
+            let client = iac::client::ApiClient::new(&gateway_url, &api_key, project_id)?;
+            let live = client.export().await?;
+            let plan = iac::diff::compute_plan(&local, &live);
+
+            if plan.is_empty() {
+                println!("No changes. Live state matches the config file.");
+                return Ok(());
+            }
+
+            println!("\n{}", plan);
+
+            if !yes {
+                eprint!("Apply these changes? [y/N] ");
+                let mut input = String::new();
+                std::io::stdin().read_line(&mut input)?;
+                if !input.trim().eq_ignore_ascii_case("y") {
+                    println!("Cancelled.");
+                    return Ok(());
+                }
+            }
+
+            // 1. Apply policies + tokens via config import
+            let result = client.import_config(&local).await?;
+            println!(
+                "Policies: {} created, {} updated",
+                result.policies_created, result.policies_updated
+            );
+            println!(
+                "Tokens:   {} created, {} updated",
+                result.tokens_created, result.tokens_updated
+            );
+
+            // 2. Apply spend caps (not covered by the v1 import API)
+            // Re-fetch live state to get token IDs for newly created tokens
+            let refreshed = client.export().await?;
+
+            // Build a name→live_token map from refreshed state
+            // We need to find token IDs via the list endpoint
+            let mut spend_cap_changes = 0;
+            for local_token in &local.tokens {
+                if local_token.spend_caps.is_empty() {
+                    continue;
+                }
+
+                // Find the token's live spend caps from the refreshed export
+                let live_token = refreshed
+                    .tokens
+                    .iter()
+                    .find(|t| t.name == local_token.name);
+
+                let live_caps = live_token
+                    .map(|t| &t.spend_caps)
+                    .cloned()
+                    .unwrap_or_default();
+
+                for (period, &limit) in &local_token.spend_caps {
+                    let needs_update = match live_caps.get(period) {
+                        Some(&live_limit) => (limit - live_limit).abs() > 0.001,
+                        None => true,
+                    };
+
+                    if needs_update {
+                        // We need the token ID — get it from the API
+                        // The refreshed export doesn't have IDs, so we need to use
+                        // a workaround: the spend cap API takes the token ID, not name.
+                        // We'll call the list_tokens internal method via a fresh export.
+                        // For now, use the import result + re-export approach:
+                        // Actually — let's just call the spend cap endpoint.
+                        // The client needs token IDs. Let's get them.
+                        if spend_cap_changes == 0 {
+                            // Lazy-init: only fetch token list if we actually need it
+                        }
+
+                        // Use the client to set the spend cap by resolving name → ID
+                        // via the tokens list API
+                        let token_id =
+                            client.find_token_id(&local_token.name).await?;
+                        client
+                            .upsert_spend_cap(&token_id, period, limit)
+                            .await?;
+                        spend_cap_changes += 1;
+                    }
+                }
+            }
+
+            if spend_cap_changes > 0 {
+                println!("Spend caps: {} updated", spend_cap_changes);
+            }
+
+            println!("\nApply complete.");
+            Ok(())
+        }
+    }
 }

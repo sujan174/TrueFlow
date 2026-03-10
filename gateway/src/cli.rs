@@ -40,6 +40,12 @@ pub enum Commands {
         #[command(subcommand)]
         command: PolicyCommands,
     },
+
+    /// Declarative config management (plan/apply/export)
+    Config {
+        #[command(subcommand)]
+        command: ConfigCommands,
+    },
 }
 
 #[derive(Subcommand)]
@@ -139,5 +145,59 @@ pub enum PolicyCommands {
     Delete {
         #[arg(long)]
         id: String,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum ConfigCommands {
+    /// Export live config as a YAML file
+    Export {
+        /// Output file path (default: stdout)
+        #[arg(short, long)]
+        file: Option<String>,
+        /// Gateway URL
+        #[arg(long, env = "TRUEFLOW_GATEWAY_URL", default_value = "http://localhost:8443")]
+        gateway_url: String,
+        /// Admin or API key for authentication
+        #[arg(long, env = "TRUEFLOW_ADMIN_KEY")]
+        api_key: String,
+        /// Project ID (optional, uses default project if omitted)
+        #[arg(long)]
+        project_id: Option<String>,
+    },
+
+    /// Show what would change if the config file were applied
+    Plan {
+        /// Path to the config YAML file
+        #[arg(short, long, default_value = "trueflow.yaml")]
+        file: String,
+        /// Gateway URL
+        #[arg(long, env = "TRUEFLOW_GATEWAY_URL", default_value = "http://localhost:8443")]
+        gateway_url: String,
+        /// Admin or API key for authentication
+        #[arg(long, env = "TRUEFLOW_ADMIN_KEY")]
+        api_key: String,
+        /// Project ID (optional)
+        #[arg(long)]
+        project_id: Option<String>,
+    },
+
+    /// Apply the config file to the live gateway
+    Apply {
+        /// Path to the config YAML file
+        #[arg(short, long, default_value = "trueflow.yaml")]
+        file: String,
+        /// Gateway URL
+        #[arg(long, env = "TRUEFLOW_GATEWAY_URL", default_value = "http://localhost:8443")]
+        gateway_url: String,
+        /// Admin or API key for authentication
+        #[arg(long, env = "TRUEFLOW_ADMIN_KEY")]
+        api_key: String,
+        /// Project ID (optional)
+        #[arg(long)]
+        project_id: Option<String>,
+        /// Skip confirmation prompt
+        #[arg(long)]
+        yes: bool,
     },
 }
