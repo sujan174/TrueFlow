@@ -42,7 +42,7 @@ pub enum AppError {
     ApprovalRejected,
 
     #[error("rate limit exceeded")]
-    RateLimitExceeded,
+    RateLimitExceeded { retry_after_secs: u64 },
 
     #[error("spend cap reached: {message}")]
     SpendCapReached { message: String },
@@ -146,11 +146,11 @@ impl AppError {
                 "Request was rejected by a reviewer.".to_string(),
                 None,
             ),
-            AppError::RateLimitExceeded => (
+            AppError::RateLimitExceeded { .. } => (
                 StatusCode::TOO_MANY_REQUESTS,
                 "rate_limit_error",
                 "rate_limit_exceeded",
-                "Rate limit exceeded. See X-RateLimit-Reset for when the window resets.".to_string(),
+                "Rate limit exceeded. Retry after the number of seconds in the Retry-After header.".to_string(),
                 None,
             ),
             AppError::SpendCapReached { message } => (
@@ -253,11 +253,19 @@ impl AppError {
             response.headers_mut().insert("x-request-id", val);
         }
 
-        // Retry-After header for rate limit responses
-        if matches!(self, AppError::RateLimitExceeded) {
-            response
-                .headers_mut()
-                .insert("retry-after", axum::http::HeaderValue::from_static("60"));
+        // Retry-After and X-RateLimit-Reset headers for rate limit responses
+        if let AppError::RateLimitExceeded { retry_after_secs } = &self {
+            let retry_after = retry_after_secs.to_string();
+            let reset_at = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs() + retry_after_secs)
+                .unwrap_or(*retry_after_secs);
+            if let Ok(val) = axum::http::HeaderValue::from_str(&retry_after) {
+                response.headers_mut().insert("retry-after", val);
+            }
+            if let Ok(val) = axum::http::HeaderValue::from_str(&reset_at.to_string()) {
+                response.headers_mut().insert("x-ratelimit-reset", val);
+            }
         }
 
         response

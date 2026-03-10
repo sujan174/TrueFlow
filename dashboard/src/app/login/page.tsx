@@ -56,6 +56,11 @@ function LoginContent() {
                     </a>
                 </div>
 
+                {/* Auth note */}
+                <p className="text-center text-[12px] text-muted-foreground">
+                    TrueFlow uses Google for authentication — no password required.
+                </p>
+
                 {/* Footer */}
                 <p className="text-center text-[11px] text-muted-foreground">
                     By signing in, you agree to the TrueFlow Terms of Service and Privacy Policy.

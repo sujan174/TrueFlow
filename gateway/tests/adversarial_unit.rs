@@ -177,7 +177,7 @@ fn test_every_app_error_variant_correct_status() {
             "ApprovalRejected → 403",
         ),
         (
-            AppError::RateLimitExceeded,
+            AppError::RateLimitExceeded { retry_after_secs: 60 },
             StatusCode::TOO_MANY_REQUESTS,
             "RateLimitExceeded → 429",
         ),
@@ -238,13 +238,13 @@ fn test_every_app_error_variant_correct_status() {
     }
 }
 
-/// STATE: RateLimitExceeded must include Retry-After header.
+/// STATE: RateLimitExceeded must include Retry-After and X-RateLimit-Reset headers.
 /// BREAK: Missing the header insertion code would leave rate-limited clients
 ///        without retry guidance, causing thundering herd retries.
-/// ASSERT: Response includes Retry-After header with value "60".
+/// ASSERT: Response includes Retry-After header with value "60" and X-RateLimit-Reset.
 #[test]
 fn test_rate_limit_has_retry_after_header() {
-    let error = AppError::RateLimitExceeded;
+    let error = AppError::RateLimitExceeded { retry_after_secs: 60 };
     let response = error.into_response();
     let retry_after = response.headers().get("retry-after");
     assert!(
@@ -252,6 +252,10 @@ fn test_rate_limit_has_retry_after_header() {
         "RateLimitExceeded must include Retry-After header"
     );
     assert_eq!(retry_after.unwrap().to_str().unwrap(), "60");
+    assert!(
+        response.headers().get("x-ratelimit-reset").is_some(),
+        "RateLimitExceeded must include X-RateLimit-Reset header"
+    );
 }
 
 /// STATE: Every error response must include x-request-id header.

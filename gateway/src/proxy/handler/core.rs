@@ -590,7 +590,7 @@ pub async fn proxy_handler(
                             .await;
                     });
 
-                    return Err(AppError::RateLimitExceeded);
+                    return Err(AppError::RateLimitExceeded { retry_after_secs: window_secs });
                 }
                 policy_rate_limited = true;
             }
@@ -1144,7 +1144,7 @@ pub async fn proxy_handler(
                 Some(shadow_violations)
             };
             audit.emit(&state);
-            return Err(AppError::RateLimitExceeded);
+            return Err(AppError::RateLimitExceeded { retry_after_secs: state.config.default_rate_limit_window });
         }
     }
 
