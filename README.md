@@ -1,289 +1,180 @@
 <p align="center">
-  <img src="https://img.shields.io/badge/A-TrueFlow-49111c?style=for-the-badge&labelColor=49111c&color=8e2137" alt="TrueFlow" height="40"/>
+  <img src="https://img.shields.io/badge/TrueFlow-AI%20Gateway-0a0a0f?style=for-the-badge&labelColor=0a0a0f&color=22d3ee" alt="TrueFlow" height="36"/>
 </p>
 
 <h1 align="center">TrueFlow</h1>
-<h3 align="center">The Enterprise AI Agent Gateway</h3>
+
+<p align="center"><strong>The open-source AI gateway that sits between your agents and the models —<br/>enforcing policies, guarding secrets, and keeping a human in the loop.</strong></p>
 
 <p align="center">
-  Route, govern, and observe every AI call — from any agent, to any model, through one secure layer.
+  <a href="#quickstart">Quickstart</a> ·
+  <a href="#features">Features</a> ·
+  <a href="docs/reference/api.md">API Docs</a> ·
+  <a href="ROADMAP.md">Roadmap</a> ·
+  <a href="https://trueflow.ai">Cloud ↗</a>
 </p>
 
 <p align="center">
-  <a href="docs/getting-started/quickstart.md"><strong>Quickstart</strong></a> ·
-  <a href="docs/FEATURES.md"><strong>Features</strong></a> ·
-  <a href="docs/reference/api.md"><strong>API Reference</strong></a> ·
-  <a href="docs/reference/architecture.md"><strong>Architecture</strong></a> ·
-  <a href="ROADMAP.md"><strong>Roadmap</strong></a>
-</p>
-
-<p align="center">
-  <img src="https://img.shields.io/badge/rust-1.75+-D2691E?logo=rust&logoColor=white" alt="Rust" />
-  <img src="https://img.shields.io/badge/license-Proprietary-red" alt="License" />
-  <img src="https://img.shields.io/badge/tests-1%2C051%20passing-brightgreen" alt="Tests" />
-  <img src="https://img.shields.io/badge/latency-%3C1ms%20overhead-8e2137" alt="Latency" />
-  <img src="https://img.shields.io/badge/docker-ready-2496ED?logo=docker&logoColor=white" alt="Docker" />
+  <img src="https://img.shields.io/badge/rust-1.75+-D2691E?logo=rust&logoColor=white" alt="Rust"/>
+  <img src="https://img.shields.io/badge/tests-1%2C051%20passing-22d3ee" alt="Tests"/>
+  <img src="https://img.shields.io/badge/latency-%3C1ms%20overhead-a78bfa" alt="Latency"/>
+  <img src="https://img.shields.io/badge/docker-ready-2496ED?logo=docker&logoColor=white" alt="Docker"/>
+  <img src="https://img.shields.io/badge/license-Proprietary-f59e0b" alt="License"/>
 </p>
 
 ---
 
-## Why TrueFlow?
+## Two-line migration. Zero trust required.
 
-Your AI agents need API keys to do anything useful — OpenAI, Anthropic, Gemini, AWS.
-Most teams hardcode them in `.env` files with **zero governance**.
+Your agents call OpenAI directly — real API keys in `.env` files, no spend limits, no audit trail, no way to stop them. TrueFlow intercepts every call: enforcing your policies, stripping PII, capping spend, and pausing for human review before anything sensitive ships.
 
-**TrueFlow changes that.** Instead of handing agents real keys (`sk_live_...`), you issue **virtual tokens** (`tf_v1_...`). The gateway enforces your policies, injects the real key server-side, and the agent never sees it.
+**Before** — your agent holds the real key:
 
-### Before TrueFlow (Hardcoded Keys)
 ```bash
 curl https://api.openai.com/v1/chat/completions \
-  -H "Authorization: Bearer sk_live_YOUR_REAL_KEY" \
-  -d '{"model": "gpt-4o", "messages": [{"role": "user", "content": "Hello"}]}'
+  -H "Authorization: Bearer sk-prod-YOUR_REAL_KEY_HERE" \
+  -d '{"model": "gpt-4o", "messages": [{"role": "user", "content": "..."}]}'
 ```
 
-### After TrueFlow (Governed Virtual Tokens)
+**After** — change the URL and the key. Everything else is identical:
+
 ```bash
-# Drop-in replacement: just change the URL and the key!
-curl http://localhost:8443/v1/chat/completions \
+curl https://localhost:8443/v1/chat/completions \
   -H "Authorization: Bearer tf_v1_YOUR_VIRTUAL_TOKEN" \
-  -d '{"model": "gpt-4o", "messages": [{"role": "user", "content": "Hello"}]}'
+  -d '{"model": "gpt-4o", "messages": [{"role": "user", "content": "..."}]}'
 ```
 
-> **"You manage the Intelligence. We manage the Access."**
+The real key never leaves TrueFlow's encrypted vault. Your agent holds a virtual token that expires when you say, costs what you allow, and can't do anything your policy doesn't permit. If it leaks, you rotate it in one click — no key rotation across every service.
 
----
-
-## Quickstart
-
-### 1. Start the stack
-
-```bash
-git clone https://github.com/sujan174/trueflow.git && cd trueflow
-docker compose up -d
-```
-
-> **Dashboard** → [localhost:3000](http://localhost:3000) &nbsp;|&nbsp; **Gateway** → [localhost:8443](http://localhost:8443)
-
-### 2. Store a credential, create a policy, issue a token
-
-1. **Vault** → Add your OpenAI / Anthropic / Gemini API key
-2. **Policies** → Create a content filter or spend cap
-3. **Virtual Keys** → Generate an `tf_v1_...` token
-
-### 3. Use it — change 2 lines of code
-
-```python
-# pip install trueflow
-from trueflow import TrueFlowClient
-
-client = TrueFlowClient(
-    api_key="tf_v1_...",
-    gateway_url="http://localhost:8443"
-)
-
-# Drop-in replacement for OpenAI
-oai = client.openai()
-resp = oai.chat.completions.create(
-    model="gpt-4o",
-    messages=[{"role": "user", "content": "Hello from TrueFlow!"}]
-)
-print(resp.choices[0].message.content)
-```
-
-Works with **any OpenAI-compatible SDK** — LangChain, CrewAI, LlamaIndex, Vercel AI SDK — just point `base_url` at TrueFlow.
+Works with any OpenAI-compatible SDK — **LangChain, CrewAI, LlamaIndex, Vercel AI SDK** — just point `base_url` at TrueFlow.
 
 ---
 
 ## Features
 
-<table>
-<tr>
-<td width="50%">
+### Human-in-the-Loop approval gates
+Before a high-stakes tool call or sensitive prompt reaches the model, TrueFlow pauses and notifies your team via Slack or webhook. A reviewer approves or rejects in real time. The agent waits. No code changes required — configure it entirely from the dashboard.
 
-### 🔐 Security & Access Control
-- **Key Isolation** — Real keys never leave the vault
-- **AES-256-GCM** envelope encryption at rest
-- **OIDC / SSO** — Okta, Auth0, Entra ID with JWKS
-- **RBAC** — Teams, model access groups, scoped tokens
-- **Human-in-the-Loop** — Approval gates for high-stakes ops
+### Policy engine with 15+ action types
+Write conditions against any field in the request or response — method, path, body, headers, model, cost, agent name. When a rule matches, fire any combination of actions:
 
-</td>
-<td width="50%">
-
-### 🛡️ Guardrails & Safety
-- **100+ safety patterns** with 22 presets
-- **5 vendor integrations** — Azure, AWS, LlamaGuard, Palo Alto, Prompt Security
-- **PII redaction** — SSN, email, CC, phone auto-stripped
-- **PII tokenization** — Deterministic vault tokens
-- **Content filters** — Jailbreak, injection, topic deny/allow
-
-</td>
-</tr>
-<tr>
-<td>
-
-### ⚙️ Policy Engine
-- **15+ action types** — deny, throttle, transform, split, shadow, webhook
-- **A/B Traffic Splitting** — weighted variants with analytics
-- **Nested AND/OR conditions** on method, path, body, headers
-- **Shadow mode** — Test policies without blocking traffic
-- **Config-as-Code** — Export/import via YAML or JSON
-
-</td>
-<td>
-
-### 📊 Observability & Cost
-- **Full audit trail** — Who, what, when, which policy, cost
-- **Spend caps** — Daily / monthly / lifetime per token
-- **Team budgets** — Per-team spend tracking and enforcement
-- **Anomaly detection** — Sigma-based velocity spike alerts
-- **Export** — Prometheus, Langfuse, DataDog, OpenTelemetry
-
-</td>
-</tr>
-<tr>
-<td>
-
-### 🔄 Routing & Resilience
-- **5 load-balancing strategies** — Round-robin, weighted, latency, cost, least-busy
-- **Smart retries** — Exponential backoff with Retry-After
-- **Circuit breakers** — Per-token failure tracking & recovery
-- **Response caching** — Deterministic cache keys
-- **Multi-provider translation** — OpenAI ↔ Anthropic ↔ Gemini
-
-</td>
-<td>
-
-### 🤖 AI-Native Features
-- **Prompt Management** — CRUD, versioning, label-based deploy
-- **A/B Experiments** — Model comparison with traffic splitting
-- **MCP integration** — Auto-discover & inject MCP tools
-- **SSE streaming** — Word-by-word delta proxying
-- **Multimodal** — Vision, audio transcription, embeddings
-
-</td>
-</tr>
-</table>
-
-**[View all features →](docs/FEATURES.md)**
-
----
-
-## Architecture
-
-```
-                              ┌─────────────────────────────────────────────────────────┐
-                              │                    TrueFlow Gateway (Rust)                 │
-                              │                                                         │
-  Agent / SDK                 │   Token Auth ──▶ Policy Engine ──▶ Guardrails            │        Providers
- ─────────────▶               │       │              │                │                  │    ──────────────▶
-  tf_v1_...               │       ▼              ▼                ▼                  │      OpenAI
-                              │   AES Vault     Transform        PII Redact              │      Anthropic
-                              │       │          (headers,        (SSN, CC,              │      Gemini
-                              │       ▼          body, system)     email)                │      Azure
-                              │   Credential                          │                  │      Bedrock
-                              │   Injection ──────────────────────────┘                  │      Cohere
-                              │       │                                                  │      Ollama
-                              │       ▼                                                  │
-                              │   Load Balancer ──▶ Circuit Breaker ──▶ Retry            │
-                              │       │                                   │              │
-                              │       ▼                                   ▼              │
-                              │   Audit Log + Spend Tracking + Anomaly Detection         │
-                              └─────────────────────────────────────────────────────────┘
-                                         │                  │                │
-                                    PostgreSQL           Redis           Jaeger
+```json
+{
+  "name": "Protect PII and cap spend",
+  "conditions": { "and": [
+    { "==": [{ "var": "request.body.model" }, "gpt-4o"] }
+  ]},
+  "actions": [
+    { "action": "redact", "patterns": ["ssn", "email", "credit_card"] },
+    { "action": "rate_limit", "max_requests": 100, "window": "1m" }
+  ]
+}
 ```
 
+**Actions:** deny · rate-limit · throttle · redact · transform · route · split · shadow-log · webhook · require-approval · tool-scope · override · cache · spend-cap · anomaly-alert
+
+### PII redaction & tokenization
+11 built-in patterns (SSN, email, credit card, phone, IBAN, DOB, IP, API key, AWS key, driver's license, MRN) stripped automatically before the request reaches the model. Add Microsoft Presidio as a sidecar for names, addresses, and multilingual entities — fully optional, fail-open.
+
+### Spend caps that actually stop spending
+Daily, monthly, and lifetime budgets per virtual token. When a token hits its cap, requests block — not just alert. Track real-time spend across every token from the dashboard.
+
+### Credential vault with envelope encryption
+Real API keys are encrypted at rest with AES-256-GCM. Each key gets a unique per-credential data key wrapped by a master key that never touches the database. Your agents hold virtual tokens — if one leaks, rotate it in one click without touching any infrastructure.
+
+### Routing, retries, and circuit breakers
+Five load-balancing strategies (round-robin, weighted, lowest-latency, lowest-cost, least-busy) across any provider mix. Automatic retries with exponential backoff. Circuit breakers per endpoint open before your agents start seeing failures — and self-heal when the upstream recovers.
+
+### Full audit trail, always
+Every request logged: who sent it, which model, which policy triggered, what was redacted, how long it took, and what it cost. Partitioned by month for high-throughput writes. Export to **Prometheus, Langfuse, DataDog, or OpenTelemetry** in one config line.
+
+### A/B model experiments
+Split traffic across model variants by weight. Compare latency, cost, and quality side by side. Promote the winner from the dashboard — zero agent code changes.
+
 ---
 
-## Tech Stack
+## Quickstart
 
-| Layer | Technology |
-|---|---|
-| **Gateway** | Rust — Axum, Tower, Hyper, Tokio |
-| **Data** | PostgreSQL 16 + Redis 7 (tiered cache) |
-| **Encryption** | AES-256-GCM envelope encryption |
-| **Dashboard** | Next.js 16 (App Router, ShadCN) |
-| **SDKs** | Python & TypeScript |
-| **Observability** | OpenTelemetry → Jaeger / Langfuse / DataDog / Prometheus |
-| **Deployment** | Docker Compose / Kubernetes |
+```bash
+# 1. Clone and configure
+git clone https://github.com/your-org/trueflow && cd trueflow
+cp .env.example .env        # add POSTGRES_PASSWORD, TRUEFLOW_MASTER_KEY, TRUEFLOW_ADMIN_KEY
+
+# 2. Start the full stack (gateway + dashboard + postgres + redis)
+docker compose up -d
+
+# 3. Open the dashboard
+open http://localhost:3000
+```
+
+In the dashboard: **Vault** → add your provider key → **Policies** → create a rule → **Virtual Keys** → issue a `tf_v1_...` token.
+
+That token is what your agents use. You own everything else.
 
 ---
 
-## Supported Providers
+## Supported providers
 
 | Provider | Chat | Streaming | Vision | Embeddings |
 |---|:---:|:---:|:---:|:---:|
-| **OpenAI** | ✅ | ✅ | ✅ | ✅ |
-| **Anthropic** | ✅ | ✅ | ✅ | — |
-| **Google Gemini** | ✅ | ✅ | ✅ | ✅ |
-| **Azure OpenAI** | ✅ | ✅ | ✅ | ✅ |
-| **AWS Bedrock** | ✅ | ✅ | ✅ | ✅ |
-| **Cohere** | ✅ | ✅ | — | ✅ |
-| **Mistral** | ✅ | ✅ | — | ✅ |
-| **Groq** | ✅ | ✅ | — | — |
-| **Together AI** | ✅ | ✅ | — | ✅ |
-| **Ollama** | ✅ | ✅ | ✅ | ✅ |
-
-**[View full provider details →](docs/guides/providers.md)**
+| OpenAI | ✅ | ✅ | ✅ | ✅ |
+| Anthropic | ✅ | ✅ | ✅ | — |
+| Google Gemini | ✅ | ✅ | ✅ | ✅ |
+| Azure OpenAI | ✅ | ✅ | ✅ | ✅ |
+| AWS Bedrock | ✅ | ✅ | ✅ | ✅ |
+| Cohere | ✅ | ✅ | — | ✅ |
+| Mistral | ✅ | ✅ | — | ✅ |
+| Groq | ✅ | ✅ | — | — |
+| Together AI | ✅ | ✅ | — | ✅ |
+| Ollama | ✅ | ✅ | ✅ | ✅ |
 
 ---
 
-## Project Structure
+## Stack
 
-```
-trueflow/
-├── gateway/                  # Rust gateway — the core (39k lines)
-│   ├── src/
-│   │   ├── middleware/       # Policy engine, guardrails, PII, audit, MCP
-│   │   ├── proxy/            # Upstream proxy, retry, model router, streaming
-│   │   ├── vault/            # AES-256-GCM credential storage
-│   │   ├── api/              # Management REST API
-│   │   └── mcp/              # MCP client, registry, types
-│   └── migrations/           # SQL migrations (001–036)
-├── dashboard/                # Next.js admin UI (26k lines)
-├── sdk/python/               # Python SDK — pip install trueflow
-├── sdk/typescript/           # TypeScript SDK — npm install @trueflow/sdk
-├── tests/                    # 1,051 tests across all layers
-└── docker-compose.yml
-```
+| Layer | Technology |
+|---|---|
+| Gateway | Rust — Axum, Tower, Hyper, Tokio |
+| Storage | PostgreSQL 16 + Redis 7 (tiered L1/L2 cache) |
+| Encryption | AES-256-GCM envelope encryption |
+| Dashboard | Next.js 16 (App Router) |
+| SDKs | Python · TypeScript |
+| Observability | OpenTelemetry → Jaeger / Langfuse / DataDog / Prometheus |
+
+**< 1 ms** overhead on the hot path. 1,051 tests across unit, integration, adversarial, and E2E layers. Word-by-word SSE streaming proxied with no buffering.
 
 ---
 
 ## Documentation
 
-| Doc | Description |
+| | |
 |---|---|
-| **[Quickstart](docs/getting-started/quickstart.md)** | Zero to running in 5 minutes |
-| **[All Features](docs/FEATURES.md)** | Comprehensive feature reference |
-| **[API Reference](docs/reference/api.md)** | Every endpoint, request/response |
-| **[Policy Guide](docs/guides/policies.md)** | Conditions, actions, shadow mode |
-| **[Python SDK](sdk/python/README.md)** | OpenAI drop-in, LangChain, async |
-| **[TypeScript SDK](sdk/typescript/README.md)** | OpenAI/Anthropic drop-in, SSE streaming |
-| **[Providers](docs/guides/providers.md)** | 10 LLM providers — auth, models, features |
-| **[Architecture](docs/reference/architecture.md)** | System design, data flow |
-| **[Docker](docs/deployment/docker.md)** | Docker Compose for dev and production |
-| **[Kubernetes](docs/deployment/kubernetes.md)** | K8s manifests, health probes |
-| **[Frameworks](docs/guides/framework-integrations.md)** | LangChain, CrewAI, LlamaIndex |
+| [Quickstart](docs/getting-started/quickstart.md) | Zero to running in 5 minutes |
+| [Policy Guide](docs/guides/policies.md) | Conditions, actions, shadow mode |
+| [API Reference](docs/reference/api.md) | Every management endpoint |
+| [Python SDK](sdk/python/README.md) | OpenAI drop-in, LangChain, async |
+| [TypeScript SDK](sdk/typescript/README.md) | OpenAI / Anthropic drop-in, SSE |
+| [Providers](docs/guides/providers.md) | Auth details for all 10 providers |
+| [Architecture](docs/reference/architecture.md) | System design and data flow |
+| [Docker](docs/deployment/docker.md) | Compose for dev and production |
+| [Kubernetes](docs/deployment/kubernetes.md) | K8s manifests and health probes |
+| [Frameworks](docs/guides/framework-integrations.md) | LangChain · CrewAI · LlamaIndex |
 
 ---
 
 ## Tests
 
 ```bash
-cargo test                                    # 1,051 Rust unit + integration tests
-python3 -m pytest tests/unit/ -v             # Python unit tests
-python3 tests/e2e/test_mock_suite.py          # Full E2E (49 phases, requires Docker)
+cargo test                              # 1,051 Rust tests
+python -m pytest tests/unit/ -v        # Python SDK unit tests
+python tests/e2e/test_mock_suite.py    # Full E2E — 49 phases, requires Docker
 ```
 
 ---
 
-## Contributing
-
-See **[CONTRIBUTING.md](.github/CONTRIBUTING.md)** for development setup and PR guidelines.
-
----
-
-## License
-
-**Proprietary** — Source available for evaluation only. Commercial use requires a license. See [LICENSE](LICENSE).
+<p align="center">
+  <br/>
+  <strong>Cloud version at <a href="https://trueflow.ai">trueflow.ai</a> — free to start, no credit card required.</strong>
+  <br/><br/>
+  <sub>Proprietary — source available for evaluation. Commercial use requires a license. See <a href="LICENSE">LICENSE</a>.</sub>
+</p>
