@@ -109,9 +109,17 @@ pub enum ApprovalCommands {
         project_id: Option<String>,
     },
     /// Approve a pending request
-    Approve { request_id: String },
+    Approve {
+        request_id: String,
+        #[arg(long)]
+        project_id: Option<String>,
+    },
     /// Reject a pending request
-    Reject { request_id: String },
+    Reject {
+        request_id: String,
+        #[arg(long)]
+        project_id: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -145,6 +153,8 @@ pub enum PolicyCommands {
     Delete {
         #[arg(long)]
         id: String,
+        #[arg(long)]
+        project_id: Option<String>,
     },
 }
 

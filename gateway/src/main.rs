@@ -110,8 +110,8 @@ async fn main() -> anyhow::Result<()> {
         .with(telemetry_layer)
         .init();
 
-    let cfg = config::load()?;
     let args = cli::Cli::parse();
+    let cfg = config::load()?;
 
     let result = match args.command {
         Some(cli::Commands::Serve { port }) => run_server(cfg, port).await,
@@ -551,9 +551,7 @@ async fn handle_policy_command(
             hitl_timeout,
             hitl_fallback,
         } => {
-            let pid =
-                project_id.unwrap_or_else(|| "00000000-0000-0000-0000-000000000001".to_string());
-            let pid = uuid::Uuid::parse_str(&pid).context("Invalid project_id")?;
+            let pid = parse_project_id(project_id)?;
 
             let mut rules = Vec::new();
 
@@ -613,12 +611,10 @@ async fn handle_policy_command(
                 }
             }
         }
-        cli::PolicyCommands::Delete { id } => {
-            // For now assume default project
-            let pid = uuid::Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap();
-            let pid_uuid = pid;
+        cli::PolicyCommands::Delete { id, project_id } => {
+            let pid = parse_project_id(project_id)?;
             let pol_uuid = uuid::Uuid::parse_str(&id).context("Invalid policy ID")?;
-            let deleted = state.db.delete_policy(pol_uuid, pid_uuid).await?;
+            let deleted = state.db.delete_policy(pol_uuid, pid).await?;
             if deleted {
                 println!("Policy deleted.");
             } else {
@@ -641,9 +637,7 @@ async fn handle_token_command(
             project_id,
             policy_ids,
         } => {
-            let pid =
-                project_id.unwrap_or_else(|| "00000000-0000-0000-0000-000000000001".to_string());
-            let pid = uuid::Uuid::parse_str(&pid).context("Invalid project_id")?;
+            let pid = parse_project_id(project_id)?;
 
             // Resolve credential ID (could be name or UUID)
             // Ideally we should lookup by name if not UUID, but for now let's try UUID first
@@ -842,14 +836,12 @@ async fn handle_approval_command(db: &PgStore, cmd: cli::ApprovalCommands) -> an
                 println!("{:<38} {:<30} {}", r.id, summary_display, r.expires_at);
             }
         }
-        cli::ApprovalCommands::Approve { request_id } => {
+        cli::ApprovalCommands::Approve { request_id, project_id } => {
             let id = uuid::Uuid::parse_str(&request_id)?;
-            // TODO: In a real CLI, we'd need the project_id from args or config context
-            // For now, we'll assume the default project ID for local dev call
-            let project_id = uuid::Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap();
+            let project = parse_project_id(project_id)?;
 
             let ok = db
-                .update_approval_status(id, project_id, models::approval::ApprovalStatus::Approved)
+                .update_approval_status(id, project, models::approval::ApprovalStatus::Approved)
                 .await?;
             if ok {
                 println!("Request {} approved.", id);
@@ -857,14 +849,12 @@ async fn handle_approval_command(db: &PgStore, cmd: cli::ApprovalCommands) -> an
                 println!("Request {} not found or not pending.", id);
             }
         }
-        cli::ApprovalCommands::Reject { request_id } => {
+        cli::ApprovalCommands::Reject { request_id, project_id } => {
             let id = uuid::Uuid::parse_str(&request_id)?;
-            // TODO: In a real CLI, we'd need the project_id from args or config context
-            // For now, we'll assume the default project ID for local dev call
-            let project_id = uuid::Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap();
+            let project = parse_project_id(project_id)?;
 
             let ok = db
-                .update_approval_status(id, project_id, models::approval::ApprovalStatus::Rejected)
+                .update_approval_status(id, project, models::approval::ApprovalStatus::Rejected)
                 .await?;
             if ok {
                 println!("Request {} rejected.", id);
@@ -885,7 +875,13 @@ fn encrypt_credential(
 }
 
 fn parse_project_id(id: Option<String>) -> anyhow::Result<uuid::Uuid> {
-    let raw = id.unwrap_or_else(|| "00000000-0000-0000-0000-000000000001".into());
+    let raw = id
+        .or_else(|| std::env::var("TRUEFLOW_PROJECT_ID").ok())
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "missing --project-id argument (or set TRUEFLOW_PROJECT_ID env var)"
+            )
+        })?;
     raw.parse()
         .map_err(|_| anyhow::anyhow!("invalid project ID: {}", raw))
 }

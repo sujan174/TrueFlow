@@ -6,16 +6,6 @@ use uuid::Uuid;
 use crate::api::AuthContext;
 use crate::AppState;
 
-#[allow(dead_code)]
-fn default_org_id() -> Uuid {
-    Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap()
-}
-
-#[allow(dead_code)]
-fn default_project_id() -> Uuid {
-    Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap()
-}
-
 /// Verify that `project_id` belongs to `org_id`.
 /// Returns `Err(FORBIDDEN)` if the project doesn't belong to the org,
 /// or `Err(INTERNAL_SERVER_ERROR)` on DB failure.
