@@ -9,17 +9,21 @@ pub fn extract_usage(_upstream_url: &str, body: &[u8]) -> anyhow::Result<Option<
         Err(_) => return Ok(None), // Not JSON, or empty
     };
 
-    // Logical check for standard "usage" object (OpenAI / Anthropic / Mistral)
+    // Logical check for standard "usage" object (OpenAI / Anthropic / Mistral / Bedrock)
     if let Some(usage) = json.get("usage") {
         let input = usage
             .get("prompt_tokens")
             .or_else(|| usage.get("input_tokens"))
+            // FIX H-4: Bedrock Converse API uses camelCase field names
+            .or_else(|| usage.get("inputTokens"))
             .and_then(|v| v.as_u64())
             .unwrap_or(0) as u32;
 
         let output = usage
             .get("completion_tokens")
             .or_else(|| usage.get("output_tokens"))
+            // FIX H-4: Bedrock Converse API uses camelCase field names
+            .or_else(|| usage.get("outputTokens"))
             .and_then(|v| v.as_u64())
             .unwrap_or(0) as u32;
 
@@ -34,18 +38,14 @@ pub fn extract_usage(_upstream_url: &str, body: &[u8]) -> anyhow::Result<Option<
             .get("promptTokenCount")
             .and_then(|v| v.as_u64())
             .unwrap_or(0) as u32;
-        let cached = meta
-            .get("cachedContentTokenCount")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0) as u32;
         let output = meta
             .get("candidatesTokenCount")
             .and_then(|v| v.as_u64())
             .unwrap_or(0) as u32;
-        // Combine uncached prompt tokens with cached tokens for billing
-        let total_input = input.saturating_add(cached);
-        if total_input > 0 || output > 0 {
-            return Ok(Some((total_input, output)));
+        // FIX H-5: Gemini's promptTokenCount already INCLUDES cachedContentTokenCount.
+        // Previously we did input.saturating_add(cached) which double-counted cached tokens.
+        if input > 0 || output > 0 {
+            return Ok(Some((input, output)));
         }
     }
 

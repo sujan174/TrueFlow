@@ -43,6 +43,9 @@ pub async fn execute_post_flight_actions(
 ) -> Result<PostFlightResult, AppError> {
     let mut redacted_fields: Vec<String> = Vec::new();
     let mut body_modified = false;
+    // FIX C-4: Keep a mutable copy of parsed body so that Redact updates
+    // are visible to subsequent actions (ContentFilter, audit log, etc.).
+    let mut live_body = parsed_resp_body.clone();
 
     for triggered in actions {
         match &triggered.action {
@@ -57,7 +60,7 @@ pub async fn execute_post_flight_actions(
                 });
             }
             Action::Redact { .. } => {
-                if let Some(mut resp_json) = parsed_resp_body.clone() {
+                if let Some(mut resp_json) = live_body.clone() {
                     let result =
                         middleware::redact::apply_redact(&mut resp_json, &triggered.action, false);
                     if !result.matched_types.is_empty() {
@@ -70,6 +73,8 @@ pub async fn execute_post_flight_actions(
                         if let Ok(new_body) = serde_json::to_vec(&resp_json) {
                             *resp_body_vec = new_body;
                             body_modified = true;
+                            // FIX C-4: Update live_body so subsequent actions see redacted content
+                            live_body = Some(resp_json);
                         }
                     }
                 }
@@ -124,7 +129,7 @@ pub async fn execute_post_flight_actions(
 
             // ── ContentFilter (post-flight, response-side) ──
             Action::ContentFilter { .. } => {
-                if let Some(ref resp_json) = parsed_resp_body {
+                if let Some(ref resp_json) = live_body {
                     let result = middleware::guardrail::check_content(resp_json, &triggered.action);
                     if result.blocked {
                         let reason = result
@@ -160,7 +165,7 @@ pub async fn execute_post_flight_actions(
 
             // ── Transform (post-flight, response-side) ──
             Action::Transform { operations } => {
-                if let Some(mut resp_json) = parsed_resp_body.clone() {
+                if let Some(mut resp_json) = live_body.clone() {
                     let mut resp_header_mutations = middleware::redact::HeaderMutations::default();
                     for op in operations {
                         middleware::redact::apply_transform(
@@ -177,6 +182,8 @@ pub async fn execute_post_flight_actions(
                     if let Ok(new_body) = serde_json::to_vec(&resp_json) {
                         *resp_body_vec = new_body;
                         body_modified = true;
+                        // Keep live_body in sync so subsequent actions see transformed content
+                        live_body = Some(resp_json);
                     }
                 }
             }
@@ -195,7 +202,7 @@ pub async fn execute_post_flight_actions(
                 not,
                 message,
             } => {
-                if let Some(ref resp_json) = parsed_resp_body {
+                if let Some(ref resp_json) = live_body {
                     let result = middleware::guardrail::validate_schema(resp_json, schema);
                     let should_deny = if *not { result.valid } else { !result.valid };
                     if should_deny {
@@ -235,7 +242,7 @@ pub async fn execute_post_flight_actions(
                 threshold,
                 on_fail,
             } => {
-                let text = parsed_resp_body
+                let text = live_body
                     .as_ref()
                     .map(|v| v.to_string())
                     .unwrap_or_else(|| String::from_utf8_lossy(resp_body_vec).to_string());

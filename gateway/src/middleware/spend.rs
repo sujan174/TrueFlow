@@ -149,6 +149,11 @@ pub async fn check_and_increment_spend(
     // ARGV[7] = lifetime TTL
     //
     // Returns: "OK" if allowed, "DAILY" if daily cap exceeded, "MONTHLY" if monthly exceeded, "LIFETIME" if lifetime exceeded
+    // FIX C-3: Check-first, then increment. Previously the Lua script incremented
+    // all counters before checking caps, so denied requests permanently consumed
+    // budget. Now we GET current values, check if current+cost would exceed any
+    // cap, and only INCRBYFLOAT if all caps pass. This matches the test mock
+    // semantics and prevents phantom spend on denied requests.
     let atomic_lua = r#"
         local cost = tonumber(ARGV[4])
 
@@ -159,38 +164,50 @@ pub async fn check_and_increment_spend(
         local monthly_limit = tonumber(ARGV[2])
         local lifetime_limit = tonumber(ARGV[3])
 
-        -- Phase 1: Increment ALL counters first (so counters always reflect actual spend)
-        local daily_new = 0
-        local monthly_new = 0
-        local lifetime_new = 0
+        -- Phase 1: READ current values (no mutation yet)
+        local daily_cur = 0
+        local monthly_cur = 0
+        local lifetime_cur = 0
 
         if daily_limit >= 0 and daily_key ~= "" then
-            daily_new = tonumber(redis.call('INCRBYFLOAT', daily_key, cost))
+            daily_cur = tonumber(redis.call('GET', daily_key) or "0") or 0
+        end
+
+        if monthly_limit >= 0 and monthly_key ~= "" then
+            monthly_cur = tonumber(redis.call('GET', monthly_key) or "0") or 0
+        end
+
+        if lifetime_limit >= 0 and lifetime_key ~= "" then
+            lifetime_cur = tonumber(redis.call('GET', lifetime_key) or "0") or 0
+        end
+
+        -- Phase 2: Check if current + cost would exceed any cap
+        if daily_limit >= 0 and (daily_cur + cost) > daily_limit then
+            return "DAILY"
+        end
+
+        if monthly_limit >= 0 and (monthly_cur + cost) > monthly_limit then
+            return "MONTHLY"
+        end
+
+        if lifetime_limit >= 0 and (lifetime_cur + cost) > lifetime_limit then
+            return "LIFETIME"
+        end
+
+        -- Phase 3: All caps pass — now atomically increment all counters
+        if daily_limit >= 0 and daily_key ~= "" then
+            redis.call('INCRBYFLOAT', daily_key, cost)
             redis.call('EXPIRE', daily_key, ARGV[5])
         end
 
         if monthly_limit >= 0 and monthly_key ~= "" then
-            monthly_new = tonumber(redis.call('INCRBYFLOAT', monthly_key, cost))
+            redis.call('INCRBYFLOAT', monthly_key, cost)
             redis.call('EXPIRE', monthly_key, ARGV[6])
         end
 
         if lifetime_limit >= 0 and lifetime_key ~= "" then
-            lifetime_new = tonumber(redis.call('INCRBYFLOAT', lifetime_key, cost))
+            redis.call('INCRBYFLOAT', lifetime_key, cost)
             redis.call('EXPIRE', lifetime_key, ARGV[7])
-        end
-
-        -- Phase 2: Check if any cap was breached AFTER incrementing
-        -- Counters are already updated so pre-flight checks will see the real values.
-        if daily_limit >= 0 and daily_new > daily_limit then
-            return "DAILY"
-        end
-
-        if monthly_limit >= 0 and monthly_new > monthly_limit then
-            return "MONTHLY"
-        end
-
-        if lifetime_limit >= 0 and lifetime_new > lifetime_limit then
-            return "LIFETIME"
         end
 
         return "OK"

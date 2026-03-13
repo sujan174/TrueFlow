@@ -8,6 +8,7 @@
 //!
 //! Uses `tokio::sync::Notify` for instant stream-completion signaling.
 
+use std::borrow::Cow;
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -86,41 +87,35 @@ pub fn tee_sse_stream(
                         acc_guard.set_ttft_ms(start.elapsed().as_millis() as u64);
                     }
 
-                    // FIX #1: Avoid unnecessary allocation when no residual.
-                    // When utf8_residual is empty, borrow the bytes directly
-                    // instead of copying with to_vec().
-                    let (combined_owned, combined_ref): (Vec<u8>, &[u8]) =
-                        if utf8_residual.is_empty() {
-                            (Vec::new(), &bytes[..])
-                        } else {
-                            let mut buf = std::mem::take(&mut utf8_residual);
-                            buf.extend_from_slice(&bytes);
-                            let ptr = buf.as_ptr();
-                            let len = buf.len();
-                            // SAFETY: combined_ref borrows from combined_owned which
-                            // we keep alive for the duration of this scope.
-                            (buf, unsafe { std::slice::from_raw_parts(ptr, len) })
-                        };
+                    // FIX H-7: Use Cow to avoid unsafe raw pointer aliasing.
+                    // When no residual, borrow bytes directly (zero alloc).
+                    // When residual exists, combine into owned Vec.
+                    let combined: Cow<[u8]> = if utf8_residual.is_empty() {
+                        Cow::Borrowed(&bytes[..])
+                    } else {
+                        let mut buf = std::mem::take(&mut utf8_residual);
+                        buf.extend_from_slice(&bytes);
+                        Cow::Owned(buf)
+                    };
 
                     // Find the longest valid UTF-8 prefix; keep any trailing
                     // incomplete sequence for the next iteration.
-                    let (valid_str, leftover) = match std::str::from_utf8(combined_ref) {
+                    let (valid_str, leftover) = match std::str::from_utf8(&combined) {
                         Ok(s) => (s, &[][..]),
                         Err(e) => {
                             let valid_up_to = e.valid_up_to();
                             // SAFETY: we just validated up to this index
                             let s = unsafe {
-                                std::str::from_utf8_unchecked(&combined_ref[..valid_up_to])
+                                std::str::from_utf8_unchecked(&combined[..valid_up_to])
                             };
-                            (s, &combined_ref[valid_up_to..])
+                            (s, &combined[valid_up_to..])
                         }
                     };
                     utf8_residual = leftover.to_vec();
-                    let _ = &combined_owned; // keep alive until after leftover is copied
 
                     // Feed each SSE line to the accumulator
                     let mut done = false;
-                    for line in valid_str.lines() {
+                    for line in valid_str.split('\n') {
                         if acc_guard.push_sse_line(line) {
                             done = true;
                         }
@@ -260,28 +255,24 @@ where
                         acc_guard.set_ttft_ms(start.elapsed().as_millis() as u64);
                     }
 
-                    // FIX #1: Avoid unnecessary allocation when no residual.
-                    let (combined_owned, combined_ref): (Vec<u8>, &[u8]) =
-                        if utf8_residual.is_empty() {
-                            (Vec::new(), &bytes[..])
-                        } else {
-                            let mut buf = std::mem::take(&mut utf8_residual);
-                            buf.extend_from_slice(&bytes);
-                            let ptr = buf.as_ptr();
-                            let len = buf.len();
-                            (buf, unsafe { std::slice::from_raw_parts(ptr, len) })
-                        };
+                    // FIX H-7: Use Cow to avoid unsafe raw pointer aliasing.
+                    let combined: Cow<[u8]> = if utf8_residual.is_empty() {
+                        Cow::Borrowed(&bytes[..])
+                    } else {
+                        let mut buf = std::mem::take(&mut utf8_residual);
+                        buf.extend_from_slice(&bytes);
+                        Cow::Owned(buf)
+                    };
 
                     // Find longest valid UTF-8 prefix
-                    let (valid_bytes, leftover) = match std::str::from_utf8(combined_ref) {
-                        Ok(_) => (combined_ref, &[][..]),
+                    let (valid_bytes, leftover) = match std::str::from_utf8(&combined) {
+                        Ok(_) => (&combined[..], &[][..]),
                         Err(e) => {
                             let valid_up_to = e.valid_up_to();
-                            (&combined_ref[..valid_up_to], &combined_ref[valid_up_to..])
+                            (&combined[..valid_up_to], &combined[valid_up_to..])
                         }
                     };
                     utf8_residual = leftover.to_vec();
-                    let _ = &combined_owned; // keep alive
 
                     if valid_bytes.is_empty() {
                         drop(acc_guard);
@@ -294,7 +285,7 @@ where
                     // Feed translated SSE to accumulator
                     if let Ok(translated_str) = std::str::from_utf8(&translated) {
                         let mut done = false;
-                        for line in translated_str.lines() {
+                        for line in translated_str.split('\n') {
                             if acc_guard.push_sse_line(line) {
                                 done = true;
                             }
@@ -638,7 +629,7 @@ pub fn tee_bedrock_stream(
                     // Feed translated SSE lines to accumulator
                     if !sse_output.is_empty() {
                         let mut done = false;
-                        for line in sse_output.lines() {
+                        for line in sse_output.split('\n') {
                             if acc_guard.push_sse_line(line) {
                                 done = true;
                             }

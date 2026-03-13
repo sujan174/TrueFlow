@@ -64,6 +64,28 @@ pub fn sanitize_stream_content(content: &str) -> SanitizationResult {
 /// **Performance:** On the happy path (no PII), each `data:` line pays only
 /// the cost of four `is_match()` calls which short-circuit on non-match.
 /// No allocations occur until a match is found.
+///
+/// # Known Limitation: Split-Across-Chunk PII
+///
+/// **WARNING:** This function processes each SSE chunk independently. PII patterns
+/// that are split across multiple chunks will NOT be detected. For example:
+///
+/// ```text
+/// Chunk 1: data: {"content": "Contact me at user@ex
+/// Chunk 2: data: {"content": "ample.com for help"}
+/// ```
+///
+/// Neither chunk contains a complete email pattern, so both pass through unredacted.
+///
+/// **Mitigation:**
+/// - For non-streaming requests, use `sanitize_response()` which operates on the
+///   complete body and catches all PII.
+/// - For high-security deployments where split-chunk PII is unacceptable, disable
+///   streaming via policy or use the `sanitize_stream_content()` function on the
+///   accumulated full response (used for audit logging).
+///
+/// A sliding-window buffer approach could be implemented for streaming but would
+/// add latency. For now, this tradeoff is acceptable for the MVP.
 pub fn redact_sse_chunk(chunk: &str) -> (String, bool) {
     let mut redacted_any = false;
     let mut output = String::with_capacity(chunk.len());

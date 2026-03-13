@@ -107,10 +107,18 @@ pub async fn tokenize_in_value(
                 ));
             }
             Err(e) => {
-                tracing::warn!(
+                // FIX C-1: Fail-closed — still replace PII with token even if vault
+                // storage fails. This prevents PII from leaking through. Rehydration
+                // will return None (token not in vault), which is safer than exposing PII.
+                tracing::error!(
                     pii_type = %m.pattern_name,
-                    "PII vault store failed, skipping tokenization for this match: {}", e
+                    "PII vault store failed — replacing PII anyway (fail-closed): {}", e
                 );
+                successful_tokens.push((
+                    m.matched_value.clone(),
+                    m.token.clone(),
+                    m.pattern_name.clone(),
+                ));
             }
         }
     }

@@ -190,6 +190,12 @@ impl RotationScheduler {
         let (new_encrypted_dek, new_dek_nonce, new_encrypted_secret, new_secret_nonce) =
             self.vault.encrypt_string(&plaintext_secret)?;
 
+        // FIX: Zeroize the plaintext secret immediately after re-encryption.
+        // This is consistent with the vault's use of zeroize for DEK cleanup.
+        use zeroize::Zeroize;
+        let mut plaintext_secret = plaintext_secret; // rebind as mutable
+        plaintext_secret.zeroize();
+
         let new_version = cred.version + 1;
 
         // Step 3: Atomic DB update — version check prevents concurrent rotation

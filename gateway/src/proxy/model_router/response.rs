@@ -87,28 +87,27 @@ pub(crate) fn anthropic_to_openai_response(body: &Value, model: &str) -> Value {
         .and_then(|u| u.get("input_tokens"))
         .and_then(|t| t.as_u64())
         .unwrap_or_else(|| {
-            // Estimate input tokens from message content when usage is missing
-            let estimate = (content_text.len() / 4).max(1) as u64;
+            // FIX C-2: Use 0 as fallback — we cannot estimate input tokens from
+            // the response text. Previously used content_text.len()/4 which was
+            // the output length, not input. Zero is safer than a wrong number.
             tracing::warn!(
                 model = %model,
-                provider = "gemini",
-                estimated_input_tokens = estimate,
-                "Usage field missing or invalid for input tokens, using conservative estimate"
+                provider = "anthropic",
+                "Usage field missing input_tokens — reporting 0 (cannot estimate from response)"
             );
-            estimate
+            0
         });
     let output_tokens = body
         .get("usage")
         .and_then(|u| u.get("output_tokens"))
         .and_then(|t| t.as_u64())
         .unwrap_or_else(|| {
-            // Estimate output tokens from assistant response when usage is missing
             let estimate = (content_text.len() / 4).max(1) as u64;
             tracing::warn!(
                 model = %model,
-                provider = "gemini",
+                provider = "anthropic",
                 estimated_output_tokens = estimate,
-                "Usage field missing or invalid for output tokens, using conservative estimate"
+                "Usage field missing output_tokens, using response length estimate"
             );
             estimate
         });
@@ -206,14 +205,15 @@ pub(crate) fn gemini_to_openai_response(body: &Value, model: &str) -> Value {
         .and_then(|u| u.get("promptTokenCount"))
         .and_then(|t| t.as_u64())
         .unwrap_or_else(|| {
-            let estimate = (content_text.len() / 4).max(1) as u64;
+            // FIX: Use 0 as fallback — we cannot estimate input tokens from
+            // the response text. Using content_text.len()/4 estimates from
+            // OUTPUT length, not input. Zero is safer than a wrong number.
             tracing::warn!(
                 model = %model,
                 provider = "gemini",
-                estimated_prompt_tokens = estimate,
-                "usageMetadata missing promptTokenCount, using conservative estimate"
+                "usageMetadata missing promptTokenCount — reporting 0 (cannot estimate from response)"
             );
-            estimate
+            0
         });
     let completion_tokens = body
         .get("usageMetadata")

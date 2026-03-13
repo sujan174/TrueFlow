@@ -16,9 +16,26 @@ pub fn evaluate_condition(condition: &Condition, ctx: &RequestContext<'_>) -> bo
             evaluate_operator(op, resolved.as_ref(), value)
         }
 
-        Condition::All { all } => all.iter().all(|c| evaluate_condition(c, ctx)),
+        // FIX: Empty 'all' array evaluates to true (vacuous truth in Rust's .all()).
+        // This is mathematically correct but almost certainly a configuration error.
+        // Log a warning to alert operators. Empty 'any' evaluates to false, also warn.
+        Condition::All { all } => {
+            if all.is_empty() {
+                tracing::warn!(
+                    "Policy condition has empty 'all' array — this always matches (likely a configuration error)"
+                );
+            }
+            all.iter().all(|c| evaluate_condition(c, ctx))
+        }
 
-        Condition::Any { any } => any.iter().any(|c| evaluate_condition(c, ctx)),
+        Condition::Any { any } => {
+            if any.is_empty() {
+                tracing::warn!(
+                    "Policy condition has empty 'any' array — this never matches (likely a configuration error)"
+                );
+            }
+            any.iter().any(|c| evaluate_condition(c, ctx))
+        }
 
         Condition::Not { not } => !evaluate_condition(not, ctx),
     }

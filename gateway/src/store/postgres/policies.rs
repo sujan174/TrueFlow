@@ -12,8 +12,11 @@ impl PgStore {
             return Ok(vec![]);
         }
 
+        // FIX: ORDER BY ensures deterministic policy evaluation order.
+        // Without this, PostgreSQL returns rows in arbitrary order, causing
+        // non-deterministic behavior when multiple policies have conflicting rules.
         let rows = sqlx::query_as::<_, PolicyRow>(
-            "SELECT id, project_id, name, mode, phase, rules, retry, is_active, created_at FROM policies WHERE id = ANY($1) AND project_id = $2 AND is_active = true"
+            "SELECT id, project_id, name, mode, phase, rules, retry, is_active, created_at FROM policies WHERE id = ANY($1) AND project_id = $2 AND is_active = true ORDER BY created_at ASC, id ASC"
         )
         .bind(policy_ids)
         .bind(project_id)

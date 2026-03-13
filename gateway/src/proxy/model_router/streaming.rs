@@ -188,7 +188,10 @@ pub(crate) fn translate_anthropic_sse_to_openai(body: &[u8], model: &str) -> Vec
                     Some("tool_use") => Some("tool_calls"),
                     Some("max_tokens") => Some("length"),
                     Some("stop_sequence") => Some("stop"),
-                    _ => None,
+                    // FIX H-2: Default to "stop" for unknown stop reasons so usage
+                    // is still emitted in the final chunk instead of being silently dropped.
+                    Some(_) => Some("stop"),
+                    None => None,
                 };
                 if let Some(fr) = finish {
                     // FIX #3: Emit usage in the final chunk (matches OpenAI stream_options behavior).
@@ -334,7 +337,10 @@ pub(crate) fn translate_gemini_sse_to_openai(body: &[u8], model: &str) -> Vec<u8
                     Some("STOP") => Some("stop"),
                     Some("MAX_TOKENS") => Some("length"),
                     Some("SAFETY") => Some("content_filter"),
-                    _ => None,
+                    // FIX H-2: Default to "stop" for unknown finish reasons so usage
+                    // is still emitted instead of being silently dropped.
+                    Some(_) => Some("stop"),
+                    None => None,
                 };
                 if let Some(fr) = finish {
                     let pt = prompt_tokens.unwrap_or(0);

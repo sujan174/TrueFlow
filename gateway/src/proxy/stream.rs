@@ -123,13 +123,14 @@ impl StreamAccumulator {
             return true;
         }
 
-        self.chunk_count += 1;
-
         // Parse JSON chunk
         let json: Value = match serde_json::from_str(data) {
             Ok(v) => v,
             Err(_) => return false,
         };
+
+        // FIX M-3: Only count successfully parsed chunks
+        self.chunk_count += 1;
 
         // Extract model (usually in first chunk)
         if self.model.is_none() {

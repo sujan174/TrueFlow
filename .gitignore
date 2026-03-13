@@ -44,3 +44,6 @@ docker-compose.override.yml
 
 # Serena
 .serena/
+
+# Claude Code local data (should never be committed)
+.claude-glm/

@@ -37,14 +37,17 @@ pub fn parse_window_secs(window: &str) -> Option<u64> {
         return None;
     }
 
-    let (num_str, unit) = window.split_at(window.len() - 1);
+    // FIX H-6: Use char boundary instead of byte-offset split_at to prevent
+    // panic on multi-byte UTF-8 last characters (e.g., "5秒").
+    let last_char = window.chars().next_back()?;
+    let num_str = &window[..window.len() - last_char.len_utf8()];
     let num: u64 = num_str.parse().ok()?;
 
-    match unit {
-        "s" => Some(num),
-        "m" => Some(num * 60),
-        "h" => Some(num * 3600),
-        "d" => Some(num * 86400),
+    match last_char {
+        's' => Some(num),
+        'm' => Some(num * 60),
+        'h' => Some(num * 3600),
+        'd' => Some(num * 86400),
         _ => None,
     }
 }

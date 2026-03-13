@@ -187,7 +187,12 @@ pub(crate) fn openai_to_anthropic_request(body: &Value) -> Value {
             Some("required") => {
                 result.insert("tool_choice".into(), json!({"type": "any"}));
             }
-            Some("none") => { /* Anthropic has no "none" — omit tool_choice and tools */ }
+            Some("none") => {
+                // FIX H-3: Anthropic has no "none" tool_choice — omit tool_choice
+                // AND remove tools array (already inserted above) to prevent the
+                // model from attempting tool calls.
+                result.remove("tools");
+            }
             None if tc.is_object() => {
                 // Specific function: forward as Anthropic "tool" type
                 if let Some(name) = tc.get("function").and_then(|f| f.get("name")) {
