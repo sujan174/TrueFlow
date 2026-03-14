@@ -2842,12 +2842,22 @@ pub async fn proxy_handler(
                 let cost = estimated_cost_usd.unwrap_or_default();
                 let tokens =
                     prompt_tokens.unwrap_or(0) as i64 + completion_tokens.unwrap_or(0) as i64;
-                if let Err(e) = state_bg
+                match state_bg
                     .db
                     .increment_session_spend(sid, token_bg_project_id, cost, tokens)
                     .await
                 {
-                    tracing::warn!(session_id = %sid, error = %e, "Failed to increment session spend (streaming)");
+                    Ok(overrun) if overrun => {
+                        tracing::warn!(
+                            session_id = %sid,
+                            cost = %cost,
+                            "Session spend cap overrun detected after increment (streaming)"
+                        );
+                    }
+                    Err(e) => {
+                        tracing::warn!(session_id = %sid, error = %e, "Failed to increment session spend (streaming)");
+                    }
+                    _ => {}
                 }
             }
         });
@@ -3690,12 +3700,22 @@ pub async fn proxy_handler(
         let sid_owned = sid.clone();
         let project_id = token.project_id;
         tokio::spawn(async move {
-            if let Err(e) = state_for_session
+            match state_for_session
                 .db
                 .increment_session_spend(&sid_owned, project_id, cost, tokens)
                 .await
             {
-                tracing::warn!(session_id = %sid_owned, error = %e, "Failed to increment session spend");
+                Ok(overrun) if overrun => {
+                    tracing::warn!(
+                        session_id = %sid_owned,
+                        cost = %cost,
+                        "Session spend cap overrun detected after increment (non-streaming)"
+                    );
+                }
+                Err(e) => {
+                    tracing::warn!(session_id = %sid_owned, error = %e, "Failed to increment session spend");
+                }
+                _ => {}
             }
         });
     }
