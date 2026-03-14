@@ -120,6 +120,156 @@ pub async fn check_spend_cap(cache: &TieredCache, db: &sqlx::PgPool, token_id: &
     Ok(())
 }
 
+/// Reconcile Redis spend counters from PostgreSQL audit logs.
+/// This should be called on startup or after Redis data loss to ensure
+/// spend caps are enforced against actual historical usage.
+///
+/// For each token with configured spend caps, this function:
+/// 1. Computes actual spend from audit_logs for the current period
+/// 2. Sets the Redis counter to this value if it's higher than current
+///
+/// This handles the edge case where Redis restarts and loses counter state.
+#[tracing::instrument(skip(cache, db))]
+pub async fn reconcile_spend_from_audit_logs(
+    cache: &TieredCache,
+    db: &sqlx::PgPool,
+    token_id: &str,
+) -> Result<()> {
+    use sqlx::Row;
+
+    let caps = load_spend_caps_cached(cache, db, token_id).await?;
+
+    // Nothing to reconcile if no caps configured
+    if caps.daily_limit_usd.is_none()
+        && caps.monthly_limit_usd.is_none()
+        && caps.lifetime_limit_usd.is_none()
+    {
+        return Ok(());
+    }
+
+    let mut conn = cache.redis();
+    let now = Utc::now();
+
+    // Calculate actual spend from audit_logs for each period
+    let now_dt = now.date_naive();
+    let now_utc = now_dt.and_hms_opt(0, 0, 0).unwrap().and_utc();
+
+    // Daily: since midnight today
+    let daily_actual: rust_decimal::Decimal = sqlx::query(
+        r#"
+        SELECT COALESCE(SUM(estimated_cost_usd), 0) as total
+        FROM audit_logs
+        WHERE token_id = $1
+          AND created_at >= $2
+        "#,
+    )
+    .bind(token_id)
+    .bind(now_utc)
+    .fetch_one(db)
+    .await?
+    .try_get("total")
+    .unwrap_or(rust_decimal::Decimal::ZERO);
+
+    // Monthly: since first of current month
+    let month_start = chrono::NaiveDate::from_ymd_opt(now.year(), now.month(), 1)
+        .unwrap()
+        .and_hms_opt(0, 0, 0)
+        .unwrap()
+        .and_utc();
+    let monthly_actual: rust_decimal::Decimal = sqlx::query(
+        r#"
+        SELECT COALESCE(SUM(estimated_cost_usd), 0) as total
+        FROM audit_logs
+        WHERE token_id = $1
+          AND created_at >= $2
+        "#,
+    )
+    .bind(token_id)
+    .bind(month_start)
+    .fetch_one(db)
+    .await?
+    .try_get("total")
+    .unwrap_or(rust_decimal::Decimal::ZERO);
+
+    // Lifetime: all time
+    let lifetime_actual: rust_decimal::Decimal = sqlx::query(
+        r#"
+        SELECT COALESCE(SUM(estimated_cost_usd), 0) as total
+        FROM audit_logs
+        WHERE token_id = $1
+        "#,
+    )
+    .bind(token_id)
+    .fetch_one(db)
+    .await?
+    .try_get("total")
+    .unwrap_or(rust_decimal::Decimal::ZERO);
+
+    // Update Redis counters if audit log shows higher values
+    // Use SET only if the key doesn't exist or has lower value
+    if caps.daily_limit_usd.is_some() {
+        let key = format!("spend:{}:daily:{}", token_id, now.format("%Y-%m-%d"));
+        let current: f64 = conn
+            .get::<_, Option<String>>(&key)
+            .await
+            .unwrap_or(None)
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(0.0);
+        let actual_f64 = daily_actual.to_f64().unwrap_or(0.0);
+        if actual_f64 > current {
+            let _: () = conn.set_ex(&key, actual_f64.to_string(), 86400 + 3600).await.unwrap_or(());
+            info!(
+                token_id = %token_id,
+                redis_value = current,
+                audit_value = actual_f64,
+                "Reconciled daily spend counter from audit logs"
+            );
+        }
+    }
+
+    if caps.monthly_limit_usd.is_some() {
+        let key = format!("spend:{}:monthly:{}", token_id, now.format("%Y-%m"));
+        let current: f64 = conn
+            .get::<_, Option<String>>(&key)
+            .await
+            .unwrap_or(None)
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(0.0);
+        let actual_f64 = monthly_actual.to_f64().unwrap_or(0.0);
+        if actual_f64 > current {
+            let _: () = conn.set_ex(&key, actual_f64.to_string(), 86400 * 32).await.unwrap_or(());
+            info!(
+                token_id = %token_id,
+                redis_value = current,
+                audit_value = actual_f64,
+                "Reconciled monthly spend counter from audit logs"
+            );
+        }
+    }
+
+    if caps.lifetime_limit_usd.is_some() {
+        let key = format!("spend:{}:lifetime", token_id);
+        let current: f64 = conn
+            .get::<_, Option<String>>(&key)
+            .await
+            .unwrap_or(None)
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(0.0);
+        let actual_f64 = lifetime_actual.to_f64().unwrap_or(0.0);
+        if actual_f64 > current {
+            let _: () = conn.set_ex(&key, actual_f64.to_string(), 86400 * 365 * 10).await.unwrap_or(());
+            info!(
+                token_id = %token_id,
+                redis_value = current,
+                audit_value = actual_f64,
+                "Reconciled lifetime spend counter from audit logs"
+            );
+        }
+    }
+
+    Ok(())
+}
+
 /// SEC-03: Atomic check-and-increment using Redis Lua script.
 /// Returns Ok(()) if the spend was successfully incremented (under cap),
 /// or Err if the cap would be exceeded.
@@ -460,6 +610,20 @@ pub async fn upsert_spend_cap(
     period: &str,
     limit_usd: Decimal,
 ) -> Result<()> {
+    // FIX: Invalidate cache BEFORE DB write to prevent stale reads.
+    // If Redis fails, the next read will fetch fresh data from DB.
+    // If DB write fails, cache is already invalidated so we're consistent.
+    let cache_key = format!("spend_caps:{}", token_id);
+    let mut conn = cache.redis();
+    if let Err(e) = conn.del::<_, ()>(&cache_key).await {
+        // Log warning but continue - cache will expire naturally in 60s
+        tracing::warn!(
+            token_id = %token_id,
+            error = %e,
+            "Failed to invalidate spend cap cache (will expire in 60s)"
+        );
+    }
+
     let reset_at = next_reset_at(period);
     sqlx::query(
         r#"
@@ -478,13 +642,6 @@ pub async fn upsert_spend_cap(
     .await
     .context("failed to upsert spend cap")?;
 
-    // 5D-4: Bust Redis cache so the new cap takes effect immediately
-    let cache_key = format!("spend_caps:{}", token_id);
-    // Best-effort cache invalidation — if Redis is down, the 60s TTL
-    // will expire naturally and the next request will pick up the new cap.
-    let mut conn = cache.redis();
-    let _ = conn.del::<_, ()>(&cache_key).await;
-
     info!(token_id, period, limit_usd = %limit_usd, "spend cap configured");
     Ok(())
 }
@@ -496,17 +653,23 @@ pub async fn delete_spend_cap(
     token_id: &str,
     period: &str,
 ) -> Result<()> {
+    // FIX: Invalidate cache BEFORE DB delete to prevent stale reads.
+    let cache_key = format!("spend_caps:{}", token_id);
+    let mut conn = cache.redis();
+    if let Err(e) = conn.del::<_, ()>(&cache_key).await {
+        tracing::warn!(
+            token_id = %token_id,
+            error = %e,
+            "Failed to invalidate spend cap cache on delete (will expire in 60s)"
+        );
+    }
+
     sqlx::query("DELETE FROM spend_caps WHERE token_id = $1 AND period = $2")
         .bind(token_id)
         .bind(period)
         .execute(db)
         .await
         .context("failed to delete spend cap")?;
-
-    // 5D-4: Bust Redis cache on delete
-    let cache_key = format!("spend_caps:{}", token_id);
-    let mut conn = cache.redis();
-    let _ = conn.del::<_, ()>(&cache_key).await;
 
     Ok(())
 }

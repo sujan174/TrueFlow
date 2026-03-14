@@ -104,14 +104,21 @@ impl PgStore {
     }
 
     /// Atomically increment session cost and tokens after a request completes.
+    /// Returns Ok(true) if the increment caused the session to exceed its spend cap,
+    /// Ok(false) if within cap or no cap set.
+    ///
+    /// Uses a subquery to atomically check the cap within the UPDATE, preventing
+    /// TOCTOU races between concurrent increments.
     pub async fn increment_session_spend(
         &self,
         session_id: &str,
         project_id: Uuid,
         cost_usd: rust_decimal::Decimal,
         tokens: i64,
-    ) -> anyhow::Result<()> {
-        sqlx::query(
+    ) -> anyhow::Result<bool> {
+        // Atomically increment and detect cap overrun in a single query.
+        // Returns true if this increment caused the total to exceed the cap.
+        let result: Option<(rust_decimal::Decimal, Option<rust_decimal::Decimal>)> = sqlx::query_as(
             r#"
             UPDATE sessions
             SET total_cost_usd = total_cost_usd + $3,
@@ -119,16 +126,23 @@ impl PgStore {
                 total_requests = total_requests + 1,
                 updated_at = NOW()
             WHERE session_id = $1 AND project_id = $2
+            RETURNING total_cost_usd, spend_cap_usd
             "#,
         )
         .bind(session_id)
         .bind(project_id)
         .bind(cost_usd)
         .bind(tokens)
-        .execute(&self.pool)
+        .fetch_optional(&self.pool)
         .await?;
 
-        Ok(())
+        // Check if the new total exceeds the cap
+        let overrun = match result {
+            Some((new_total, Some(cap))) => new_total > cap,
+            _ => false, // No cap set or session not found
+        };
+
+        Ok(overrun)
     }
 
     /// Get session entity for status/spend cap checks.

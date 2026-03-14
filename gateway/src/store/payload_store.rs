@@ -26,6 +26,22 @@
 //! ```text
 //! PAYLOAD_SIZE_THRESHOLD=8192
 //! ```
+//!
+//! ## Security Considerations
+//!
+//! Payloads may contain sensitive data (PII, API keys, prompt content). Ensure:
+//!
+//! 1. **S3 Server-Side Encryption**: Configure SSE-S3 or SSE-KMS on the bucket:
+//!    ```bash
+//!    aws s3api put-bucket-encryption --bucket my-bucket \
+//!      --server-side-encryption-configuration \
+//!      '{"Rules":[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"aws:kms"}}]}'
+//!    ```
+//!
+//! 2. **Bucket Access Controls**: Restrict bucket access to the gateway service only.
+//!
+//! 3. **Local filesystem**: For `file://` backends, ensure the directory has proper
+//!    permissions and is not world-readable.
 
 use std::sync::Arc;
 

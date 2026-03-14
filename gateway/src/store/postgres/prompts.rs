@@ -98,12 +98,23 @@ impl PgStore {
     }
 
     /// Create a new immutable version. Auto-increments version number atomically.
+    /// Uses row-level locking on the parent prompt to prevent race conditions.
     pub async fn insert_prompt_version(
         &self,
         v: &NewPromptVersion,
     ) -> anyhow::Result<PromptVersionRow> {
-        // Use ON CONFLICT DO UPDATE with subquery to atomically get next version
-        // This prevents race conditions when multiple versions are created concurrently
+        // Use a transaction with row-level locking to prevent race conditions
+        // when multiple versions are created concurrently for the same prompt
+        let mut tx = self.pool.begin().await?;
+
+        // Lock the parent prompt row to serialize concurrent version inserts
+        // This prevents the TOCTOU race between reading MAX(version) and inserting
+        sqlx::query("SELECT 1 FROM prompts WHERE id = $1 FOR UPDATE")
+            .bind(v.prompt_id)
+            .execute(&mut *tx)
+            .await?;
+
+        // Now safely calculate and insert the next version within the same transaction
         let row = sqlx::query_as::<_, PromptVersionRow>(
             r#"INSERT INTO prompt_versions
                (prompt_id, version, model, messages, temperature, max_tokens, top_p, tools, commit_message, created_by)
@@ -123,15 +134,16 @@ impl PgStore {
         .bind(&v.tools)
         .bind(&v.commit_message)
         .bind(&v.created_by)
-        .fetch_one(&self.pool)
+        .fetch_one(&mut *tx)
         .await?;
 
-        // Touch parent updated_at
-        let _ = sqlx::query("UPDATE prompts SET updated_at = NOW() WHERE id = $1")
+        // Touch parent updated_at within the same transaction
+        sqlx::query("UPDATE prompts SET updated_at = NOW() WHERE id = $1")
             .bind(v.prompt_id)
-            .execute(&self.pool)
-            .await;
+            .execute(&mut *tx)
+            .await?;
 
+        tx.commit().await?;
         Ok(row)
     }
 
