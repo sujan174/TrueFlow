@@ -1,5 +1,38 @@
 # TrueFlow Changelog
 
+## [Unreleased] — 2026-03-15
+
+### Security
+
+**SEC-FIX-10 — Presidio NLP: SSRF Vulnerability**
+
+The Presidio NLP detector endpoint URL was taken from policy configuration without
+SSRF validation, allowing policy administrators to make requests to internal
+services (e.g., cloud metadata endpoints at 169.254.169.254).
+
+Fix: Added `is_safe_webhook_url()` validation before making HTTP requests to the
+Presidio analyzer endpoint.
+
+Affected files:
+- `gateway/src/middleware/pii/presidio.rs` — added SSRF validation
+
+---
+
+**SEC-FIX-11 — Presidio NLP: UTF-8 Offset Mismatch**
+
+Presidio returns character offsets for detected PII entities, but the Rust code
+used these as byte offsets for string slicing. This caused incorrect text
+extraction or panics when processing multi-byte UTF-8 content (emoji, CJK
+characters, etc.).
+
+Fix: Convert character offsets to byte offsets using `char_indices()` before
+slicing strings.
+
+Affected files:
+- `gateway/src/middleware/pii/presidio.rs` — proper UTF-8 offset handling
+
+---
+
 ## [Unreleased] — 2026-03-14
 
 ### Security
