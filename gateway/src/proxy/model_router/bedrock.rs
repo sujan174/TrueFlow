@@ -2,6 +2,10 @@ use serde_json::{json, Value};
 
 use super::streaming::openai_sse_chunk;
 
+/// Maximum number of events to decode from a Bedrock event stream.
+/// Prevents memory exhaustion from malicious/buggy upstream responses.
+const MAX_BEDROCK_EVENTS: usize = 100000;
+
 pub(crate) fn parse_event_stream_header(data: &[u8]) -> Option<(String, String, usize)> {
     if data.is_empty() {
         return None;
@@ -70,6 +74,23 @@ pub(crate) fn decode_bedrock_event_stream(data: &[u8]) -> Vec<(String, Value)> {
             data[offset + 6],
             data[offset + 7],
         ]) as usize;
+
+        // FIX: Check for overflow in offset + total_length calculation
+        let next_offset = match offset.checked_add(total_length) {
+            Some(n) => n,
+            None => {
+                tracing::warn!(
+                    offset,
+                    total_length,
+                    "Bedrock event stream: offset overflow, stopping decode"
+                );
+                break;
+            }
+        };
+
+        if next_offset > data.len() || total_length < 16 {
+            break; // Incomplete or invalid message
+        }
         // FIX(C2): Validate prelude CRC32 — reject corrupt frames
         let prelude_crc_expected = u32::from_be_bytes([
             data[offset + 8],
@@ -87,12 +108,8 @@ pub(crate) fn decode_bedrock_event_stream(data: &[u8]) -> Vec<(String, Value)> {
             break; // Can't trust total_length if prelude is corrupt
         }
 
-        if offset + total_length > data.len() || total_length < 16 {
-            break; // Incomplete or invalid message
-        }
-
         // FIX(C2): Validate full message CRC32
-        let msg_crc_offset = offset + total_length - 4;
+        let msg_crc_offset = next_offset - 4;
         let msg_crc_expected = u32::from_be_bytes([
             data[msg_crc_offset],
             data[msg_crc_offset + 1],
@@ -131,8 +148,8 @@ pub(crate) fn decode_bedrock_event_stream(data: &[u8]) -> Vec<(String, Value)> {
             }
         }
 
-        // Payload: between headers_end and (offset + total_length - 4) for message CRC
-        let payload_end = offset + total_length - 4; // exclude trailing 4B message CRC
+        // Payload: between headers_end and next_offset - 4 for message CRC
+        let payload_end = msg_crc_offset; // reuse the already calculated offset
         if headers_end <= payload_end {
             let payload_bytes = &data[headers_end..payload_end];
             if !payload_bytes.is_empty() {
@@ -149,11 +166,21 @@ pub(crate) fn decode_bedrock_event_stream(data: &[u8]) -> Vec<(String, Value)> {
                         );
                     }
                     events.push((event_type.clone(), json));
+
+                    // FIX: Check event count to prevent memory exhaustion
+                    if events.len() >= MAX_BEDROCK_EVENTS {
+                        tracing::warn!(
+                            event_count = events.len(),
+                            max_events = MAX_BEDROCK_EVENTS,
+                            "Bedrock event stream exceeded maximum event count, truncating"
+                        );
+                        break;
+                    }
                 }
             }
         }
 
-        offset += total_length;
+        offset = next_offset;
     }
 
     events

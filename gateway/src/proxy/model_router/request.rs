@@ -323,8 +323,23 @@ pub(crate) fn openai_to_gemini_request(body: &Value) -> Value {
                             tc.get("function")
                                 .and_then(|f| f.get("name"))
                                 .and_then(|n| n.as_str())
-                        })
-                        .unwrap_or(tool_call_id); // Fallback to tool_call_id if lookup fails
+                        });
+
+                    // FIX: Log a warning if function name lookup fails instead of silently
+                    // using tool_call_id (which would cause Gemini API errors)
+                    let func_name = match func_name {
+                        Some(name) => name.to_string(),
+                        None => {
+                            tracing::warn!(
+                                tool_call_id = %tool_call_id,
+                                "Could not find function name for tool_call_id in Gemini translation - \
+                                 this may cause API errors if the tool call history is incomplete"
+                            );
+                            // Use a placeholder that indicates the issue
+                            format!("unknown_tool_for_{}", tool_call_id)
+                        }
+                    };
+
                     let content_val = msg.get("content").and_then(|c| c.as_str()).unwrap_or("");
                     contents.push(json!({
                         "role": "user",
@@ -514,13 +529,60 @@ pub(crate) fn openai_to_bedrock_request(body: &Value) -> Value {
                         .get("tool_call_id")
                         .and_then(|t| t.as_str())
                         .unwrap_or("");
-                    let content_str = msg.get("content").and_then(|c| c.as_str()).unwrap_or("");
+
+                    // FIX: Handle different content types for Bedrock tool results
+                    let bedrock_content = match msg.get("content") {
+                        Some(Value::String(s)) => {
+                            vec![json!({"text": s})]
+                        }
+                        Some(Value::Array(arr)) => {
+                            // Handle array content - convert each part
+                            arr.iter()
+                                .filter_map(|part| {
+                                    if let Some(text) = part.get("text").and_then(|t| t.as_str()) {
+                                        Some(json!({"text": text}))
+                                    } else if let Some(image) = part.get("image_url") {
+                                        // Image in tool result - convert to Bedrock format
+                                        let url = image.get("url")
+                                            .and_then(|u| u.as_str())
+                                            .unwrap_or("");
+                                        if url.starts_with("data:") {
+                                            let mime = url.split_once(';')
+                                                .and_then(|(prefix, _)| prefix.strip_prefix("data:"))
+                                                .unwrap_or("image/jpeg");
+                                            let data = url.split_once(',').map(|(_, d)| d).unwrap_or("");
+                                            Some(json!({
+                                                "image": {
+                                                    "format": mime.rsplit_once('/').map(|(_, s)| s).unwrap_or("jpeg"),
+                                                    "source": {"bytes": data}
+                                                }
+                                            }))
+                                        } else {
+                                            // Can't handle HTTP URLs in tool results - skip
+                                            None
+                                        }
+                                    } else {
+                                        // Other content types - stringify
+                                        Some(json!({"text": serde_json::to_string(part).unwrap_or_default()}))
+                                    }
+                                })
+                                .collect()
+                        }
+                        Some(other) => {
+                            // Non-string, non-array content - stringify it
+                            vec![json!({"text": serde_json::to_string(other).unwrap_or_default()})]
+                        }
+                        None => {
+                            vec![json!({"text": ""})]
+                        }
+                    };
+
                     bedrock_messages.push(json!({
                         "role": "user",
                         "content": [{
                             "toolResult": {
                                 "toolUseId": tool_use_id,
-                                "content": [{"text": content_str}]
+                                "content": bedrock_content
                             }
                         }]
                     }));
@@ -604,9 +666,15 @@ pub(crate) fn translate_openai_content_to_bedrock(content: Option<&Value>) -> Ve
                             }
                         })
                     } else {
-                        // HTTP URL: Bedrock doesn't support URL references directly,
-                        // pass as text fallback
-                        json!({"text": format!("[Image: {}]", url)})
+                        // FIX: Bedrock doesn't support HTTP URL references directly.
+                        // Don't expose the URL in text (could leak sensitive info).
+                        // Log a warning and use a generic placeholder.
+                        tracing::warn!(
+                            url = %url,
+                            "Bedrock doesn't support HTTP URL image references - \
+                             image will not be included in the request"
+                        );
+                        json!({"text": "[Image: external URL not supported by Bedrock]"})
                     }
                 }
                 _ => p.clone(),

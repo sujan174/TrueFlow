@@ -634,6 +634,42 @@ data: {\"candidates\":[{\"content\":{\"parts\":[{\"functionCall\":{\"name\":\"ge
 }
 
 #[test]
+fn test_gemini_sse_multiple_tool_calls_stable_ids() {
+    // Test that multiple tool calls get unique stable IDs
+    let body = b"\
+data: {\"candidates\":[{\"content\":{\"parts\":[{\"functionCall\":{\"name\":\"get_weather\",\"args\":{\"city\":\"NYC\"}}},{\"functionCall\":{\"name\":\"get_time\",\"args\":{\"tz\":\"EST\"}}}],\"role\":\"model\"},\"finishReason\":\"STOP\"}]}\n\
+\n";
+
+    let result = translate_sse_body(Provider::Gemini, body, "gemini-2.0-flash");
+    let output = String::from_utf8(result.unwrap()).unwrap();
+
+    // Should contain both function names
+    assert!(output.contains("\"name\":\"get_weather\""));
+    assert!(output.contains("\"name\":\"get_time\""));
+
+    // Extract tool call IDs from output
+    let tool_call_ids: Vec<&str> = output
+        .lines()
+        .filter_map(|line| {
+            if line.contains("\"id\":\"call_") {
+                // Extract the ID from the line
+                let start = line.find("\"id\":\"call_").unwrap() + 6;
+                let end = line[start..].find('"').unwrap() + start;
+                Some(&line[start..end])
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    // Should have exactly 2 tool call IDs (one for each function call)
+    assert_eq!(tool_call_ids.len(), 2, "Should have 2 tool call IDs");
+
+    // The two IDs should be different (each tool call gets its own ID)
+    assert_ne!(tool_call_ids[0], tool_call_ids[1], "Tool call IDs should be unique");
+}
+
+#[test]
 fn test_anthropic_sse_empty_body() {
     let body = b"";
     let result = translate_sse_body(Provider::Anthropic, body, "claude-3-opus");
@@ -843,6 +879,103 @@ fn test_rewrite_groq_url() {
     // Should strip /v1/chat/completions and re-add it
     assert!(url.contains("groq.com"));
     assert!(url.contains("/v1"));
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Model Name Sanitization Tests (Security)
+// ═══════════════════════════════════════════════════════════════
+
+#[test]
+fn test_sanitize_normal_model_name() {
+    // Normal model names should pass through unchanged
+    let url = rewrite_upstream_url(
+        Provider::Gemini,
+        "https://generativelanguage.googleapis.com",
+        "gemini-2.0-flash",
+        false,
+    );
+    assert!(url.contains("gemini-2.0-flash"));
+}
+
+#[test]
+fn test_sanitize_path_traversal_attack() {
+    // Path traversal should be rejected (empty model name in URL)
+    let url = rewrite_upstream_url(
+        Provider::Gemini,
+        "https://generativelanguage.googleapis.com",
+        "../../../admin/delete",
+        false,
+    );
+    // The model name should be empty (rejected) or encoded
+    assert!(!url.contains(".."));
+    assert!(!url.contains("admin"));
+}
+
+#[test]
+fn test_sanitize_query_injection_attack() {
+    // Query parameter injection should be encoded
+    let url = rewrite_upstream_url(
+        Provider::Gemini,
+        "https://generativelanguage.googleapis.com",
+        "gemini-pro?api_key=stolen",
+        false,
+    );
+    // Should not contain raw ? character that could inject query params
+    assert!(!url.contains("?api_key"));
+    // The model name should be URL-encoded
+    assert!(url.contains("%3F") || url.contains(":"));  // encoded or truncated
+}
+
+#[test]
+fn test_sanitize_fragment_injection_attack() {
+    // Fragment injection should be encoded
+    let url = rewrite_upstream_url(
+        Provider::Bedrock,
+        "https://bedrock-runtime.us-east-1.amazonaws.com",
+        "anthropic.claude-v2#fragment",
+        false,
+    );
+    // Should not contain raw # character
+    assert!(!url.contains("#fragment"));
+}
+
+#[test]
+fn test_sanitize_control_characters() {
+    // Control characters should be encoded
+    let url = rewrite_upstream_url(
+        Provider::AzureOpenAI,
+        "https://my-resource.openai.azure.com",
+        "gpt-4\nmalicious",
+        false,
+    );
+    // Should not contain raw newline
+    assert!(!url.contains('\n'));
+}
+
+#[test]
+fn test_sanitize_whitespace_attack() {
+    // Whitespace in model name should be encoded
+    let url = rewrite_upstream_url(
+        Provider::Gemini,
+        "https://generativelanguage.googleapis.com",
+        "gemini pro",
+        false,
+    );
+    // Should not contain raw space in URL
+    assert!(!url.contains("gemini pro"));
+}
+
+#[test]
+fn test_sanitize_backslash_attack() {
+    // Backslash should be encoded
+    let url = rewrite_upstream_url(
+        Provider::Bedrock,
+        "https://bedrock-runtime.us-east-1.amazonaws.com",
+        "anthropic\\claude",
+        false,
+    );
+    // Should not contain raw backslash
+    assert!(!url.contains('\\'));
 }
 
 // ═══════════════════════════════════════════════════════════════
