@@ -1,5 +1,39 @@
 use super::Provider;
 
+/// Sanitize a model name for safe inclusion in a URL path segment.
+///
+/// This prevents URL injection attacks where malicious model names could:
+/// - Inject query parameters (e.g., "model?api_key=stolen")
+/// - Perform path traversal (e.g., "../../../admin")
+/// - Inject URL fragments (e.g., "model#fragment")
+/// - Include control characters that affect downstream processing
+///
+/// The function validates that the model name doesn't contain path traversal
+/// sequences or control characters, then URL-encodes if needed.
+fn sanitize_model_for_url(model: &str) -> String {
+    // Check for path traversal attempts
+    if model.contains("..") {
+        tracing::warn!(
+            model = %model,
+            "Model name contains path traversal sequence, rejecting"
+        );
+        // Return empty string to cause a safe failure downstream
+        return String::new();
+    }
+
+    // Check for characters that could enable injection attacks
+    // If any dangerous characters are present, URL-encode the entire model name
+    let needs_encoding = model.chars().any(|c| {
+        c == '?' || c == '#' || c == '\\' || c.is_control() || c.is_whitespace()
+    });
+
+    if needs_encoding {
+        urlencoding::encode(model).into_owned()
+    } else {
+        model.to_string()
+    }
+}
+
 pub(crate) fn rewrite_upstream_url(
     provider: Provider,
     base_url: &str,
@@ -20,7 +54,8 @@ pub(crate) fn rewrite_upstream_url(
             } else {
                 "generateContent"
             };
-            format!("{}/v1beta/models/{}:{}", sanitized_base, model, method)
+            let safe_model = sanitize_model_for_url(model);
+            format!("{}/v1beta/models/{}:{}", sanitized_base, safe_model, method)
         }
         Provider::Anthropic => {
             // Anthropic API: POST https://api.anthropic.com/v1/messages
@@ -39,9 +74,10 @@ pub(crate) fn rewrite_upstream_url(
                     sanitized_base.to_string()
                 }
             } else {
+                let safe_model = sanitize_model_for_url(model);
                 format!(
                     "{}/openai/deployments/{}/chat/completions?api-version=2024-05-01-preview",
-                    sanitized_base, model
+                    sanitized_base, safe_model
                 )
             }
         }
@@ -56,7 +92,8 @@ pub(crate) fn rewrite_upstream_url(
                 // Already has model path — just ensure correct action
                 sanitized_base.to_string()
             } else {
-                format!("{}/model/{}/{}", sanitized_base, model, action)
+                let safe_model = sanitize_model_for_url(model);
+                format!("{}/model/{}/{}", sanitized_base, safe_model, action)
             }
         }
         Provider::Ollama => {

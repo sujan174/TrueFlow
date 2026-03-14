@@ -1,7 +1,13 @@
+use std::collections::HashMap;
+
 use serde_json::{json, Value};
 
 use super::bedrock::translate_bedrock_event_stream_to_openai;
 use super::Provider;
+
+/// Maximum output size for SSE translation (50MB).
+/// Prevents memory exhaustion from malicious/buggy upstream responses.
+const MAX_SSE_OUTPUT_SIZE: usize = 50 * 1024 * 1024;
 
 #[allow(dead_code)]
 pub(crate) fn translate_sse_body(provider: Provider, body: &[u8], model: &str) -> Option<Vec<u8>> {
@@ -69,6 +75,18 @@ pub(crate) fn translate_anthropic_sse_to_openai(body: &[u8], model: &str) -> Vec
     let mut current_event_type: Option<String> = None;
 
     for line in body_str.lines() {
+        // FIX: Check output size to prevent memory exhaustion
+        if output.len() > MAX_SSE_OUTPUT_SIZE {
+            tracing::warn!(
+                model = %model,
+                output_size = output.len(),
+                max_size = MAX_SSE_OUTPUT_SIZE,
+                "SSE translation output exceeded maximum size, truncating"
+            );
+            break;
+        }
+
+        let line = line.trim();
         let line = line.trim();
 
         if line.is_empty() {
@@ -240,7 +258,24 @@ pub(crate) fn translate_gemini_sse_to_openai(body: &[u8], model: &str) -> Vec<u8
     let mut prompt_tokens: Option<u64> = None;
     let mut completion_tokens: Option<u64> = None;
 
+    // FIX: Track tool call IDs by index to ensure stable IDs across chunks.
+    // Gemini doesn't provide tool call IDs, so we generate stable ones based on
+    // the order we see them. All chunks for the same tool call must have the same ID.
+    let mut tool_call_ids: HashMap<usize, String> = HashMap::new();
+    let mut tool_call_counter: usize = 0;
+
     for line in body_str.lines() {
+        // FIX: Check output size to prevent memory exhaustion
+        if output.len() > MAX_SSE_OUTPUT_SIZE {
+            tracing::warn!(
+                model = %model,
+                output_size = output.len(),
+                max_size = MAX_SSE_OUTPUT_SIZE,
+                "Gemini SSE translation output exceeded maximum size, truncating"
+            );
+            break;
+        }
+
         let line = line.trim();
         if line.is_empty() {
             continue;
@@ -314,17 +349,30 @@ pub(crate) fn translate_gemini_sse_to_openai(body: &[u8], model: &str) -> Vec<u8
                                 .get("args")
                                 .map(|v| serde_json::to_string(v).unwrap_or_default())
                                 .unwrap_or_default();
+
+                            // FIX: Generate a stable ID for this tool call based on its name.
+                            // Gemini doesn't provide tool call IDs, so we create stable IDs
+                            // that persist across chunks for the same tool call.
+                            let tool_index = tool_call_counter;
+                            let tool_id = tool_call_ids
+                                .entry(tool_index)
+                                .or_insert_with(|| format!("call_{}", uuid::Uuid::new_v4().simple()))
+                                .clone();
+
                             output.push_str(&openai_sse_chunk(
                                 &chunk_id,
                                 model,
                                 json!({"tool_calls": [{
-                                    "index": 0,
-                                    "id": format!("call_{}", uuid::Uuid::new_v4().simple()),
+                                    "index": tool_index,
+                                    "id": tool_id,
                                     "type": "function",
                                     "function": {"name": name, "arguments": args}
                                 }]}),
                                 None,
                             ));
+
+                            // Increment counter for next tool call
+                            tool_call_counter += 1;
                         }
                     }
                 }
