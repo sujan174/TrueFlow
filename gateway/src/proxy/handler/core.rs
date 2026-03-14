@@ -1700,11 +1700,11 @@ pub async fn proxy_handler(
             .ok_or_else(|| AppError::Upstream(format!("Service not found: {}", svc_name)))?;
 
         // Service may or may not have a credential — passthrough is allowed
-        (
+        Ok((
             service.credential_id,
             service.base_url.clone(),
             remaining_path.to_string(),
-        )
+        ))
     } else {
         // Loadbalancer: use weighted routing. Fallback to upstream_url if JSONB is empty.
         let mut lb_upstreams = proxy::loadbalancer::parse_upstreams(token.upstreams.as_ref());
@@ -1728,17 +1728,18 @@ pub async fn proxy_handler(
             tracing::info!(token_id = %token.id, selected_url = %target.url, "LB selected target");
             // Use target-specific credential if set, otherwise token default
             let effective_cred_id = target.credential_id.or(token.credential_id);
-            (effective_cred_id, target.url.clone(), path.clone())
+            Ok((effective_cred_id, target.url.clone(), path.clone()))
         } else {
-            // All upstreams unhealthy — fall back to primary as last resort
-            tracing::error!("all upstreams unhealthy, falling back to primary");
-            (
-                token.credential_id,
-                token.upstream_url.clone(),
-                path.clone(),
-            )
+            // All upstreams unhealthy — return error instead of flooding a broken upstream
+            tracing::error!(token_id = %token.id, "all upstreams unhealthy, circuit breaker open");
+            Err(AppError::AllUpstreamsExhausted {
+                details: Some(serde_json::json!({
+                    "reason": "all_upstreams_unhealthy",
+                    "token_id": token.id,
+                })),
+            })
         }
-    };
+    }?;
 
     // -- 4.1 Credential injection vs passthrough --
     // If credential_id is Some, decrypt from vault and inject.

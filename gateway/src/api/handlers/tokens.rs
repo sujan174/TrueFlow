@@ -154,6 +154,8 @@ pub async fn revoke_token(
         })?;
 
     if revoked {
+        // Clean up load balancer state to prevent memory leaks
+        state.lb.cleanup_token(&id);
         Ok(StatusCode::NO_CONTENT)
     } else {
         Err(StatusCode::NOT_FOUND)

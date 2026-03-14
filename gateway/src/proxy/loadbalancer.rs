@@ -3,7 +3,7 @@ use redis::aio::ConnectionManager;
 use redis::AsyncCommands;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
 use uuid::Uuid;
@@ -82,7 +82,6 @@ impl Default for CircuitBreakerConfig {
 }
 
 /// Health state for a single upstream endpoint.
-#[derive(Debug)]
 struct UpstreamHealth {
     url: String,
     is_healthy: bool,
@@ -90,11 +89,25 @@ struct UpstreamHealth {
     last_failure: Option<Instant>,
     /// Number of requests allowed through in the current half-open window.
     /// Reset when the circuit closes (mark_healthy) or re-opens (mark_failed).
-    half_open_attempts: u32,
+    /// Uses AtomicU32 for thread-safe increment during selection.
+    half_open_attempts: AtomicU32,
     /// Rolling window for rate-based circuit breaking.
     /// Stores recent request outcomes: true = success, false = failure.
     /// Bounded to max(min_sample_size, 100) entries.
     outcome_window: std::collections::VecDeque<bool>,
+}
+
+impl std::fmt::Debug for UpstreamHealth {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("UpstreamHealth")
+            .field("url", &self.url)
+            .field("is_healthy", &self.is_healthy)
+            .field("failure_count", &self.failure_count)
+            .field("last_failure", &self.last_failure)
+            .field("half_open_attempts", &self.half_open_attempts.load(Ordering::Relaxed))
+            .field("outcome_window_len", &self.outcome_window.len())
+            .finish()
+    }
 }
 
 /// In-memory loadbalancer with circuit-breaker health tracking.
@@ -169,6 +182,7 @@ impl LoadBalancer {
                 .counters
                 .entry(token_id.to_string())
                 .or_insert_with(|| Arc::new(AtomicU64::new(0)));
+            // Note: Counter wraps on overflow at 2^64 requests (intentional behavior)
             let idx = counter.fetch_add(1, Ordering::Relaxed) as usize % upstreams.len();
             return Some(idx);
         }
@@ -217,6 +231,7 @@ impl LoadBalancer {
             }
 
             // Weighted round-robin among candidates
+            // Note: Counter wraps on overflow at 2^64 requests (intentional behavior)
             let counter = self
                 .counters
                 .entry(token_id.to_string())
@@ -284,7 +299,7 @@ impl LoadBalancer {
                         let rate = failures as f64 / h.outcome_window.len() as f64;
                         if rate >= rate_threshold && h.is_healthy {
                             h.is_healthy = false;
-                            h.half_open_attempts = 0;
+                            h.half_open_attempts.store(0, Ordering::Release);
                             tracing::warn!(
                                 token_id = token_id,
                                 url = url,
@@ -298,7 +313,7 @@ impl LoadBalancer {
                 } else if h.failure_count >= config.failure_threshold {
                     // Count-based tripping (original logic)
                     h.is_healthy = false;
-                    h.half_open_attempts = 0;
+                    h.half_open_attempts.store(0, Ordering::Release);
                     tracing::warn!(
                         token_id = token_id,
                         url = url,
@@ -361,6 +376,12 @@ impl LoadBalancer {
 
     /// Query Redis for the distributed failure count.
     /// Returns the Redis count if available, or the local count as fallback.
+    ///
+    /// **Note:** Distributed failure counts are currently written to Redis for external
+    /// monitoring (e.g., dashboards, alerts) but are NOT read during selection.
+    /// Each gateway instance uses only its local health state for circuit breaking.
+    /// Full distributed circuit breaking with async health checks is planned for
+    /// a future implementation.
     pub async fn get_distributed_failure_count(&self, token_id: &str, url: &str) -> u32 {
         if let Some(redis) = &self.redis {
             let mut conn = redis.clone();
@@ -403,7 +424,7 @@ impl LoadBalancer {
                 h.is_healthy = true;
                 h.failure_count = 0;
                 h.last_failure = None;
-                h.half_open_attempts = 0;
+                h.half_open_attempts.store(0, Ordering::Release);
                 h.outcome_window.clear();
             }
         }
@@ -446,7 +467,7 @@ impl LoadBalancer {
                     is_healthy: true,
                     failure_count: 0,
                     last_failure: None,
-                    half_open_attempts: 0,
+                    half_open_attempts: AtomicU32::new(0),
                     outcome_window: std::collections::VecDeque::new(),
                 })
                 .collect()
@@ -456,6 +477,9 @@ impl LoadBalancer {
     /// Check if an upstream at a given index is considered healthy.
     /// `half_open_max` limits the number of probe requests allowed through
     /// during the half-open recovery window.
+    ///
+    /// For half-open state, atomically increments the counter to prevent
+    /// race conditions where multiple concurrent requests could exceed the limit.
     fn is_healthy_at(
         &self,
         health_vec: Option<&Vec<UpstreamHealth>>,
@@ -472,10 +496,14 @@ impl LoadBalancer {
                 // Check if cooldown has passed (half-open state)
                 if let Some(last) = h.last_failure {
                     if last.elapsed().as_secs() >= cooldown_secs {
-                        // B9-1 FIX: enforce half_open_max_requests limit
-                        if h.half_open_attempts < half_open_max {
-                            return true; // allow probe (half-open, under limit)
+                        // Atomically increment and check limit to prevent race conditions
+                        // B9-1 FIX: enforce half_open_max_requests limit with atomic increment
+                        let current = h.half_open_attempts.fetch_add(1, Ordering::AcqRel);
+                        if current < half_open_max {
+                            return true; // we got a slot, allow probe
                         }
+                        // We exceeded the limit, undo the increment
+                        h.half_open_attempts.fetch_sub(1, Ordering::AcqRel);
                         return false; // half-open limit reached
                     }
                 }
@@ -521,18 +549,6 @@ impl LoadBalancer {
 
     // ── In-Flight Request Tracking (for LeastBusy routing) ───────
 
-    /// Increment the half-open attempt counter for an upstream.
-    /// Called by the handler when a request is routed to a half-open upstream.
-    pub fn increment_half_open(&self, token_id: &str, url: &str) {
-        if let Some(mut healths) = self.health.get_mut(token_id) {
-            if let Some(h) = healths.iter_mut().find(|h| h.url == url) {
-                if !h.is_healthy {
-                    h.half_open_attempts += 1;
-                }
-            }
-        }
-    }
-
     /// Increment the in-flight counter for an upstream URL.
     /// Call at the start of a proxy request.
     pub fn increment_in_flight(&self, url: &str) {
@@ -563,6 +579,13 @@ impl LoadBalancer {
             .get(url)
             .map(|c| c.load(Ordering::Relaxed))
             .unwrap_or(0)
+    }
+
+    /// Clean up all state for a token (called when token is revoked).
+    /// Prevents memory leaks from accumulating health/counters state for revoked tokens.
+    pub fn cleanup_token(&self, token_id: &str) {
+        self.health.remove(token_id);
+        self.counters.remove(token_id);
     }
 }
 

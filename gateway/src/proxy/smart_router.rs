@@ -8,9 +8,18 @@ use crate::models::policy::{RouteTarget, RoutingStrategy};
 use crate::models::pricing_cache::PricingCache;
 use crate::proxy::loadbalancer::LoadBalancer;
 use rust_decimal::prelude::ToPrimitive;
+use std::cell::RefCell;
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use uuid::Uuid;
+
+// Thread-local cache for compiled regex patterns to avoid recompilation overhead.
+// Bounded at 64 entries with simple eviction when exceeded.
+thread_local! {
+    static ROUTE_REGEX_CACHE: RefCell<HashMap<String, Option<regex::Regex>>> =
+        RefCell::new(HashMap::with_capacity(64));
+}
 
 /// The outcome of a dynamic routing decision.
 #[derive(Debug, Clone)]
@@ -69,14 +78,27 @@ pub async fn select_route(
             token_id,
             "dynamic_route: all pool targets unhealthy, trying fallback"
         );
-        // Fall back to single fallback target if configured
-        return fallback.map(|fb| RouteDecision {
-            model: fb.model.clone(),
-            upstream_url: fb.upstream_url.clone(),
-            credential_id: fb.credential_id,
-            strategy_used: "fallback".to_string(),
-            reason: "all pool targets unhealthy".to_string(),
-        });
+        // Check if fallback is healthy before using it
+        if let Some(fb) = fallback {
+            let fallback_state = lb.get_circuit_state(token_id, &fb.upstream_url, cb_cooldown_secs);
+            if fallback_state != "open" {
+                return Some(RouteDecision {
+                    model: fb.model.clone(),
+                    upstream_url: fb.upstream_url.clone(),
+                    credential_id: fb.credential_id,
+                    strategy_used: "fallback".to_string(),
+                    reason: "all pool targets unhealthy".to_string(),
+                });
+            }
+            // Fallback is also unhealthy
+            tracing::warn!(
+                token_id,
+                fallback_url = %fb.upstream_url,
+                "dynamic_route: fallback target also unhealthy"
+            );
+        }
+        // All targets including fallback are unhealthy — return None
+        return None;
     } else {
         healthy
     };
@@ -312,15 +334,40 @@ fn evaluate_route_condition(
         "regex" => {
             let Some(val) = actual else { return false };
             let pattern = cond.value.as_str().unwrap_or("");
-            // B12-2 FIX: compile with size limit to prevent ReDoS
-            // (matches the 1MB limit used in engine.rs check_regex)
-            match regex::RegexBuilder::new(pattern)
-                .size_limit(1 << 20)
-                .build()
-            {
-                Ok(re) => re.is_match(val.as_str().unwrap_or("")),
-                Err(_) => false,
-            }
+
+            ROUTE_REGEX_CACHE.with(|cache| {
+                let mut cache = cache.borrow_mut();
+
+                // Check cache first
+                if let Some(cached) = cache.get(pattern) {
+                    return cached.as_ref().is_some_and(|re| {
+                        re.is_match(val.as_str().unwrap_or(""))
+                    });
+                }
+
+                // Compile and cache
+                let result = regex::RegexBuilder::new(pattern)
+                    .size_limit(1 << 20) // ReDoS protection
+                    .build()
+                    .ok();
+
+                let is_match = result.as_ref().is_some_and(|re| {
+                    re.is_match(val.as_str().unwrap_or(""))
+                });
+
+                // Cache the result (even None for invalid patterns)
+                cache.insert(pattern.to_string(), result);
+
+                // Simple eviction: clear half if cache exceeds capacity
+                if cache.len() > 64 {
+                    let keys: Vec<_> = cache.keys().take(32).cloned().collect();
+                    for k in keys {
+                        cache.remove(&k);
+                    }
+                }
+
+                is_match
+            })
         }
         _ => {
             tracing::warn!(op = op, "conditional_route: unknown operator");
