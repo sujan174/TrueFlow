@@ -1,6 +1,134 @@
 # TrueFlow Changelog
 
-## [Unreleased] — 2026-03-06
+## [Unreleased] — 2026-03-14
+
+### Security
+
+**SEC-FIX-6 — Load Balancer: Memory Leak on Token Revocation**
+
+When tokens were revoked, the `LoadBalancer`'s `health` and `counters` DashMaps were
+never cleaned up, causing unbounded memory growth proportional to token churn.
+
+Fix: Added `LoadBalancer::cleanup_token(token_id)` method and called it from the
+token revoke handler to remove entries from both DashMaps.
+
+Affected files:
+- `gateway/src/proxy/loadbalancer.rs` — added `cleanup_token()` method
+- `gateway/src/api/handlers/tokens.rs` — call cleanup on token revocation
+
+---
+
+**SEC-FIX-7 — Circuit Breaker: Race Condition in Half-Open Counter**
+
+The `half_open_attempts` counter was checked during `select()` but incremented
+afterwards in a separate call, allowing concurrent requests to exceed the
+`half_open_max_requests` limit during recovery probing.
+
+Fix: Changed `half_open_attempts` from `u32` to `AtomicU32` and incremented it
+atomically within `is_healthy_at()` using fetch_add with compare-and-swap pattern.
+
+Affected files:
+- `gateway/src/proxy/loadbalancer.rs` — atomic half_open_attempts
+- `gateway/src/proxy/handler/core.rs` — removed separate increment_half_open call
+
+---
+
+**SEC-FIX-8 — Stream Accumulator: Unbounded Memory (DoS Vector)**
+
+`StreamAccumulator` accumulated content without size limits. Malicious or
+misconfigured upstream LLM providers could send extremely large streaming
+responses, causing memory exhaustion.
+
+Fix: Added `MAX_ACCUMULATED_CONTENT` constant (10MB) and stop accumulating
+when exceeded. Added `accumulation_truncated` flag to track this state.
+
+Also fixed unbounded `tool_call_deltas` vector growth by adding
+`MAX_TOOL_CALLS` limit (100) with index validation.
+
+Affected files:
+- `gateway/src/proxy/stream.rs` — added size limits and validation
+
+---
+
+**SEC-FIX-9 — Dynamic Routing: Fallback Bypasses Health Check**
+
+When all pool targets were unhealthy, `dynamic_route()` returned the fallback
+target without checking if its circuit breaker was also open, potentially
+routing requests to a known-failing endpoint.
+
+Fix: Added circuit state check for fallback target before using it.
+
+Affected files:
+- `gateway/src/proxy/smart_router.rs` — check fallback health
+
+---
+
+### Fixed
+
+**FIX-1 — Circuit Breaker: Fallback to Unhealthy Upstream**
+
+When all upstreams were unhealthy, the proxy handler fell back to the primary
+URL regardless of circuit state, defeating the purpose of the circuit breaker.
+
+Fix: Return `AppError::AllUpstreamsExhausted` error instead of falling back
+to a potentially broken upstream.
+
+Affected files:
+- `gateway/src/proxy/handler/core.rs` — return error on all unhealthy
+- `gateway/src/errors.rs` — `AllUpstreamsExhausted` error variant
+
+---
+
+**FIX-2 — Chunk Counter: Potential Overflow**
+
+`chunk_count` was incremented with `+= 1` which could panic on overflow in debug
+mode or wrap in release mode after 4+ billion chunks.
+
+Fix: Changed to `saturating_add(1)` for safe handling.
+
+Affected files:
+- `gateway/src/proxy/stream.rs` — use saturating_add
+
+---
+
+**FIX-3 — Round-Robin Counter: Document Overflow Behavior**
+
+The `AtomicU64` counter for round-robin selection wraps at 2^64 requests.
+
+Fix: Added comment documenting this intentional behavior.
+
+Affected files:
+- `gateway/src/proxy/loadbalancer.rs` — document overflow
+
+---
+
+**FIX-4 — Redis Circuit Breaker: Document Limitation**
+
+`get_distributed_failure_count()` writes to Redis but is never read during
+selection, making distributed circuit breaking effectively local-only.
+
+Fix: Added documentation comment explaining the limitation.
+
+Affected files:
+- `gateway/src/proxy/loadbalancer.rs` — document Redis CB limitation
+
+---
+
+**FIX-5 — Model Router: Security Hardening**
+
+Improved input validation and error handling across model router components
+for provider-specific request/response handling.
+
+Affected files:
+- `gateway/src/proxy/model_router/bedrock.rs`
+- `gateway/src/proxy/model_router/request.rs`
+- `gateway/src/proxy/model_router/streaming.rs`
+- `gateway/src/proxy/model_router/url_rewrite.rs`
+- `gateway/src/proxy/model_router/tests.rs`
+
+---
+
+## [2026-03-06]
 
 ### Security
 
