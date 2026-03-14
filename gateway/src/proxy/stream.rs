@@ -8,6 +8,12 @@ use crate::models::llm::ToolCallInfo;
 use serde_json::Value;
 use std::time::Instant;
 
+/// Maximum accumulated content size (10MB) to prevent DoS from malicious upstreams.
+const MAX_ACCUMULATED_CONTENT: usize = 10 * 1024 * 1024;
+
+/// Maximum number of tool calls to accumulate to prevent memory exhaustion.
+const MAX_TOOL_CALLS: usize = 100;
+
 /// Result of accumulating a complete SSE stream.
 #[derive(Debug)]
 pub struct StreamResult {
@@ -48,6 +54,8 @@ pub struct StreamAccumulator {
     first_chunk_at: Option<Instant>,
     /// Total chunks processed
     chunk_count: u32,
+    /// Whether accumulation was truncated due to size limit
+    accumulation_truncated: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -71,6 +79,7 @@ impl StreamAccumulator {
             start_time: Instant::now(),
             first_chunk_at: None,
             chunk_count: 0,
+            accumulation_truncated: false,
         }
     }
 
@@ -130,7 +139,8 @@ impl StreamAccumulator {
         };
 
         // FIX M-3: Only count successfully parsed chunks
-        self.chunk_count += 1;
+        // Use saturating_add to prevent overflow on extreme streams
+        self.chunk_count = self.chunk_count.saturating_add(1);
 
         // Extract model (usually in first chunk)
         if self.model.is_none() {
@@ -172,13 +182,35 @@ impl StreamAccumulator {
                     if self.first_chunk_at.is_none() && !content.is_empty() {
                         self.first_chunk_at = Some(Instant::now());
                     }
-                    self.content.push_str(content);
+                    // Check size limit before appending
+                    if !self.accumulation_truncated
+                        && self.content.len() + content.len() <= MAX_ACCUMULATED_CONTENT
+                    {
+                        self.content.push_str(content);
+                    } else if !self.accumulation_truncated {
+                        tracing::warn!(
+                            accumulated = self.content.len(),
+                            max = MAX_ACCUMULATED_CONTENT,
+                            "Stream content exceeded maximum, stopping accumulation"
+                        );
+                        self.accumulation_truncated = true;
+                    }
                 }
 
                 // Extract tool call deltas (OpenAI sends these incrementally)
                 if let Some(tool_calls) = delta.get("tool_calls").and_then(|tc| tc.as_array()) {
                     for tc in tool_calls {
                         let index = tc.get("index").and_then(|i| i.as_u64()).unwrap_or(0) as usize;
+
+                        // Validate index to prevent unbounded memory allocation
+                        if index >= MAX_TOOL_CALLS {
+                            tracing::warn!(
+                                index,
+                                max = MAX_TOOL_CALLS,
+                                "Tool call index exceeds maximum, skipping"
+                            );
+                            continue;
+                        }
 
                         // Find or create the delta entry for this index
                         while self.tool_call_deltas.len() <= index {
@@ -239,20 +271,30 @@ impl StreamAccumulator {
                             .map(|s| s.to_string());
                         let index =
                             json.get("index").and_then(|i| i.as_u64()).unwrap_or(0) as usize;
-                        while self.tool_call_deltas.len() <= index {
-                            self.tool_call_deltas.push(ToolCallDelta {
-                                index: self.tool_call_deltas.len(),
-                                call_id: None,
-                                name: String::new(),
+
+                        // Validate index to prevent unbounded memory allocation
+                        if index >= MAX_TOOL_CALLS {
+                            tracing::warn!(
+                                index,
+                                max = MAX_TOOL_CALLS,
+                                "Tool call index exceeds maximum, skipping"
+                            );
+                        } else {
+                            while self.tool_call_deltas.len() <= index {
+                                self.tool_call_deltas.push(ToolCallDelta {
+                                    index: self.tool_call_deltas.len(),
+                                    call_id: None,
+                                    name: String::new(),
+                                    arguments: String::new(),
+                                });
+                            }
+                            self.tool_call_deltas[index] = ToolCallDelta {
+                                index,
+                                call_id,
+                                name,
                                 arguments: String::new(),
-                            });
+                            };
                         }
-                        self.tool_call_deltas[index] = ToolCallDelta {
-                            index,
-                            call_id,
-                            name,
-                            arguments: String::new(),
-                        };
                     }
                 }
             }
@@ -263,13 +305,25 @@ impl StreamAccumulator {
                         if self.first_chunk_at.is_none() && !text.is_empty() {
                             self.first_chunk_at = Some(Instant::now());
                         }
-                        self.content.push_str(text);
+                        // Check size limit before appending
+                        if !self.accumulation_truncated
+                            && self.content.len() + text.len() <= MAX_ACCUMULATED_CONTENT
+                        {
+                            self.content.push_str(text);
+                        } else if !self.accumulation_truncated {
+                            tracing::warn!(
+                                accumulated = self.content.len(),
+                                max = MAX_ACCUMULATED_CONTENT,
+                                "Stream content exceeded maximum, stopping accumulation"
+                            );
+                            self.accumulation_truncated = true;
+                        }
                     }
                     // Tool input delta
                     if let Some(partial) = delta.get("partial_json").and_then(|p| p.as_str()) {
                         let index =
                             json.get("index").and_then(|i| i.as_u64()).unwrap_or(0) as usize;
-                        if index < self.tool_call_deltas.len() {
+                        if index < MAX_TOOL_CALLS && index < self.tool_call_deltas.len() {
                             self.tool_call_deltas[index].arguments.push_str(partial);
                         }
                         if self.first_chunk_at.is_none() {
