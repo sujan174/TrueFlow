@@ -10,4 +10,5 @@ pub mod middleware;
 pub mod models;
 pub mod notification;
 pub mod store;
+pub mod utils;
 pub mod vault;

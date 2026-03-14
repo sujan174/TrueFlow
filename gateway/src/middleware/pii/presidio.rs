@@ -13,6 +13,7 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 
 use super::{PiiDetector, PiiEntity, PiiError};
+use crate::utils::is_safe_webhook_url;
 
 /// Presidio Analyzer HTTP client.
 pub struct PresidioDetector {
@@ -93,6 +94,13 @@ impl PiiDetector for PresidioDetector {
         let lang = language.unwrap_or(&self.default_language);
         let url = format!("{}/analyze", self.endpoint);
 
+        // SEC: SSRF protection - validate endpoint before making HTTP request
+        if !is_safe_webhook_url(&url).await {
+            return Err(PiiError::Unavailable(
+                "Presidio endpoint blocked by SSRF protection".to_string()
+            ));
+        }
+
         let request = AnalyzeRequest {
             text,
             language: lang,
@@ -126,12 +134,20 @@ impl PiiDetector for PresidioDetector {
         Ok(entities
             .into_iter()
             .filter_map(|e| {
-                // Extract the matched text from the original input
-                let entity_text = text.get(e.start..e.end)?;
+                // Convert character offsets to byte offsets for correct UTF-8 slicing.
+                // Presidio returns character offsets, but Rust strings use byte indices.
+                let byte_start = text.char_indices()
+                    .nth(e.start)
+                    .map(|(i, _)| i)?;
+                let byte_end = text.char_indices()
+                    .nth(e.end)
+                    .map(|(i, _)| i)?;
+
+                let entity_text = text.get(byte_start..byte_end)?;
                 Some(PiiEntity {
                     entity_type: e.entity_type,
-                    start: e.start,
-                    end: e.end,
+                    start: byte_start,
+                    end: byte_end,
                     score: e.score,
                     text: entity_text.to_string(),
                 })
@@ -158,6 +174,13 @@ pub async fn detect_with_entities(
 
     let lang = language.unwrap_or(&detector.default_language);
     let url = format!("{}/analyze", detector.endpoint);
+
+    // SEC: SSRF protection - validate endpoint before making HTTP request
+    if !is_safe_webhook_url(&url).await {
+        return Err(PiiError::Unavailable(
+            "Presidio endpoint blocked by SSRF protection".to_string()
+        ));
+    }
 
     let request = AnalyzeRequest {
         text,
@@ -193,11 +216,20 @@ pub async fn detect_with_entities(
     Ok(raw_entities
         .into_iter()
         .filter_map(|e| {
-            let entity_text = text.get(e.start..e.end)?;
+            // Convert character offsets to byte offsets for correct UTF-8 slicing.
+            // Presidio returns character offsets, but Rust strings use byte indices.
+            let byte_start = text.char_indices()
+                .nth(e.start)
+                .map(|(i, _)| i)?;
+            let byte_end = text.char_indices()
+                .nth(e.end)
+                .map(|(i, _)| i)?;
+
+            let entity_text = text.get(byte_start..byte_end)?;
             Some(PiiEntity {
                 entity_type: e.entity_type,
-                start: e.start,
-                end: e.end,
+                start: byte_start,
+                end: byte_end,
                 score: e.score,
                 text: entity_text.to_string(),
             })

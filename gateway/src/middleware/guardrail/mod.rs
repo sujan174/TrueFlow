@@ -283,11 +283,15 @@ pub fn check_content(body: &Value, action: &Action) -> GuardrailResult {
     }
 
     // 12. Topic allowlist — if set, block anything NOT in the allowlist
+    // FIX: Use word-boundary matching (same as denylist) to prevent false
+    // allows from substring matching (e.g., allowlist ["ai"] matching "main").
     if !topic_allowlist.is_empty() {
-        let text_lower = text.to_lowercase();
-        let any_allowed = topic_allowlist
-            .iter()
-            .any(|t| text_lower.contains(&t.to_lowercase()));
+        let any_allowed = topic_allowlist.iter().any(|t| {
+            let pattern = format!(r"(?i)\b{}\b", regex::escape(t));
+            regex::Regex::new(&pattern)
+                .map(|re| re.is_match(&text))
+                .unwrap_or_else(|_| text.to_lowercase().contains(&t.to_lowercase()))
+        });
         if !any_allowed {
             matched_patterns.push("topic_allowlist_violation".to_string());
             risk_score = (risk_score + 0.6).min(1.0);

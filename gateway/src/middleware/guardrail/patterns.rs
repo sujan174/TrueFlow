@@ -192,6 +192,7 @@ pub(super) static GIBBERISH_SET: Lazy<RegexSet> =
 
 /// Detect contact information exposure: physical addresses, phone numbers
 /// in various formats, URLs with authentication tokens, email addresses in output.
+/// NOTE: ZIP codes removed due to high false positive rate on order IDs, etc.
 static CONTACT_INFO_PATTERNS: &[&str] = &[
     // US phone numbers (various formats)
     r"\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b",
@@ -203,8 +204,6 @@ static CONTACT_INFO_PATTERNS: &[&str] = &[
     r"(?i)https?://[^\s]+[?&](api_key|token|secret|password|auth|key|access_token)=[^\s&]+",
     // Email addresses
     r"(?i)\b[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}\b",
-    // ZIP codes (US 5-digit or 5+4)
-    r"\b\d{5}(-\d{4})?\b",
     // UK postcodes
     r"(?i)\b[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}\b",
     // Social media handles (potential doxxing)
