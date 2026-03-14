@@ -30,7 +30,7 @@ impl PgStore {
 
     pub async fn get_token(&self, token_id: &str) -> anyhow::Result<Option<TokenRow>> {
         let row = sqlx::query_as::<_, TokenRow>(
-            "SELECT id, project_id, name, credential_id, upstream_url, scopes, policy_ids, is_active, expires_at, created_at, COALESCE(log_level, 1::SMALLINT) as log_level, upstreams, circuit_breaker, allowed_models, allowed_model_group_ids, team_id, tags, mcp_allowed_tools, mcp_blocked_tools FROM tokens WHERE id = $1"
+            "SELECT id, project_id, name, credential_id, upstream_url, scopes, policy_ids, is_active, expires_at, created_at, COALESCE(log_level, 1::SMALLINT) as log_level, upstreams, circuit_breaker, allowed_models, allowed_model_group_ids, team_id, tags, mcp_allowed_tools, mcp_blocked_tools, guardrail_header_mode FROM tokens WHERE id = $1"
         )
         .bind(token_id)
         .fetch_optional(&self.pool)
@@ -47,7 +47,7 @@ impl PgStore {
     ) -> anyhow::Result<Vec<TokenRow>> {
         let limit = limit.clamp(1, 1000); // Cap at 1000, minimum 1
         let rows = sqlx::query_as::<_, TokenRow>(
-            "SELECT id, project_id, name, credential_id, upstream_url, scopes, policy_ids, is_active, expires_at, created_at, COALESCE(log_level, 1::SMALLINT) as log_level, upstreams, circuit_breaker, allowed_models, allowed_model_group_ids, team_id, tags, mcp_allowed_tools, mcp_blocked_tools FROM tokens WHERE project_id = $1 AND is_active = true ORDER BY created_at DESC LIMIT $2 OFFSET $3"
+            "SELECT id, project_id, name, credential_id, upstream_url, scopes, policy_ids, is_active, expires_at, created_at, COALESCE(log_level, 1::SMALLINT) as log_level, upstreams, circuit_breaker, allowed_models, allowed_model_group_ids, team_id, tags, mcp_allowed_tools, mcp_blocked_tools, guardrail_header_mode FROM tokens WHERE project_id = $1 AND is_active = true ORDER BY created_at DESC LIMIT $2 OFFSET $3"
         )
         .bind(project_id)
         .bind(limit)

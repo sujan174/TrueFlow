@@ -12,7 +12,8 @@ use super::fields::RequestContext;
 use self::actions::action_name;
 pub use self::actions::{evaluate_tool_scope, extract_tool_names};
 pub use self::evaluate::evaluate_condition;
-pub(crate) use self::operators::glob_match;
+#[allow(unused_imports)] // Used by binary crate (smart_router.rs)
+pub(crate) use self::operators::{compile_cached_regex, glob_match};
 
 /// Evaluate all policies against a request context.
 ///

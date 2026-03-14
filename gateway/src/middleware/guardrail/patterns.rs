@@ -37,6 +37,30 @@ static JAILBREAK_PATTERNS: &[&str] = &[
     r"(?i)do\s+anything\s+now",
     r"(?i)you\s+have\s+been\s+(freed|liberated|unchained)",
     r"(?i)no\s+longer\s+bound\s+by\s+(rules|guidelines|restrictions|ethics)",
+    // Known jailbreak variants (AIM, OIGN, AntiGPT, KEVIN)
+    r"(?i)\bAIM\b\s*(mode|jailbreak)?",
+    r"(?i)\bOIGN\b",
+    r"(?i)\bAntiGPT\b",
+    r"(?i)\bKEVIN\b\s*(mode|jailbreak)?",
+    // Simulation/roleplay framing
+    r"(?i)simulate\s+(a\s+)?(conversation|scenario|situation)",
+    r"(?i)in\s+a\s+hypothetical\s+(scenario|situation|world)",
+    r"(?i)let'?s?\s+(pretend|roleplay|imagine)",
+    r"(?i)roleplay\s+(as|that)",
+    r"(?i)pretend\s+(to\s+be|you\s+are)\s+(an?\s+)?(AI|assistant|character)",
+    // Academic/test framing
+    r"(?i)(for\s+)?(testing|security|audit|research)\s+purposes",
+    r"(?i)this\s+is\s+(a\s+)?(test|experiment)",
+    r"(?i)red\s+team\s+(test|exercise)",
+    // Instruction replacement
+    r"(?i)(overwrite|replace)\s+(your|the)\s+(system\s+)?(prompt|instructions)",
+    r"(?i)new\s+(instructions?|rules?):?\s*$",
+    // Emotional manipulation / social engineering
+    r"(?i)my\s+(grandmother|grandma|grandfather|grandpa)\s+(used\s+to\s+|would\s+|always\s+)?(tell|read|say)",
+    r"(?i)I\s+am\s+(disabled|blind|deaf|in\s+need)",
+    r"(?i)please\s+(help|I\s+need)",
+    // Translation-based attacks
+    r"(?i)translate\s+.*(then|and)\s+(ignore|disregard|follow)",
 ];
 
 pub(super) static JAILBREAK_SET: Lazy<RegexSet> =
@@ -170,10 +194,10 @@ pub(super) static SENSITIVE_TOPIC_SET: Lazy<RegexSet> = Lazy::new(|| {
 /// Detect content that looks like encoding attacks, gibberish, or smuggling
 /// attempts (long base64 blocks, hex dumps, repeated characters).
 static GIBBERISH_PATTERNS: &[&str] = &[
-    // Large base64 blocks (60+ chars of base64 alphabet)
-    r"[A-Za-z0-9+/=]{60,}",
-    // Long hex dumps (40+ hex chars in a row)
-    r"(?i)(?:0x)?[0-9a-f]{40,}",
+    // Large base64 blocks (80+ chars to avoid matching JWTs, short API keys)
+    r"[A-Za-z0-9+/=]{80,}",
+    // Long hex dumps (80+ hex chars - avoids matching SHA-1/SHA-256 hashes which are 40-64 chars)
+    r"(?i)(?:0x)?[0-9a-f]{80,}",
     // Unicode escape sequences (smuggling)
     r"(?:\\u[0-9a-fA-F]{4}){6,}",
     // Repeated characters (20+ of the same char — gibberish padding)
@@ -192,6 +216,7 @@ pub(super) static GIBBERISH_SET: Lazy<RegexSet> =
 
 /// Detect contact information exposure: physical addresses, phone numbers
 /// in various formats, URLs with authentication tokens, email addresses in output.
+/// NOTE: ZIP codes removed due to high false positive rate on order IDs, etc.
 static CONTACT_INFO_PATTERNS: &[&str] = &[
     // US phone numbers (various formats)
     r"\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b",
@@ -203,12 +228,11 @@ static CONTACT_INFO_PATTERNS: &[&str] = &[
     r"(?i)https?://[^\s]+[?&](api_key|token|secret|password|auth|key|access_token)=[^\s&]+",
     // Email addresses
     r"(?i)\b[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}\b",
-    // ZIP codes (US 5-digit or 5+4)
-    r"\b\d{5}(-\d{4})?\b",
     // UK postcodes
     r"(?i)\b[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}\b",
     // Social media handles (potential doxxing)
-    r"(?i)@[a-z0-9_]{3,30}\b",
+    // Match @username patterns - be conservative to avoid false positives on emails
+    r"(?i)@[a-z0-9_]{3,15}\b",
 ];
 
 pub(super) static CONTACT_INFO_SET: Lazy<RegexSet> = Lazy::new(|| {

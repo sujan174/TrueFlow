@@ -7,7 +7,32 @@ use super::operators::{
 };
 use crate::models::policy::{Condition, Operator};
 
+/// Maximum recursion depth for nested conditions (All/Any/Not).
+/// Prevents stack overflow from deeply nested or malicious policy definitions.
+const MAX_RECURSION_DEPTH: u32 = 100;
+
+/// Evaluate a condition against the request context.
+/// Public entry point that starts with depth 0.
 pub fn evaluate_condition(condition: &Condition, ctx: &RequestContext<'_>) -> bool {
+    evaluate_condition_recursive(condition, ctx, 0)
+}
+
+/// Internal recursive evaluation with depth tracking.
+fn evaluate_condition_recursive(
+    condition: &Condition,
+    ctx: &RequestContext<'_>,
+    depth: u32,
+) -> bool {
+    // Check recursion depth to prevent stack overflow
+    if depth > MAX_RECURSION_DEPTH {
+        tracing::warn!(
+            depth = depth,
+            max_depth = MAX_RECURSION_DEPTH,
+            "Policy condition recursion depth exceeded, returning false"
+        );
+        return false;
+    }
+
     match condition {
         Condition::Always { always } => *always,
 
@@ -25,7 +50,7 @@ pub fn evaluate_condition(condition: &Condition, ctx: &RequestContext<'_>) -> bo
                     "Policy condition has empty 'all' array — this always matches (likely a configuration error)"
                 );
             }
-            all.iter().all(|c| evaluate_condition(c, ctx))
+            all.iter().all(|c| evaluate_condition_recursive(c, ctx, depth + 1))
         }
 
         Condition::Any { any } => {
@@ -34,10 +59,10 @@ pub fn evaluate_condition(condition: &Condition, ctx: &RequestContext<'_>) -> bo
                     "Policy condition has empty 'any' array — this never matches (likely a configuration error)"
                 );
             }
-            any.iter().any(|c| evaluate_condition(c, ctx))
+            any.iter().any(|c| evaluate_condition_recursive(c, ctx, depth + 1))
         }
 
-        Condition::Not { not } => !evaluate_condition(not, ctx),
+        Condition::Not { not } => !evaluate_condition_recursive(not, ctx, depth + 1),
     }
 }
 
@@ -65,7 +90,12 @@ fn evaluate_operator(op: &Operator, resolved: Option<&Value>, expected: &Value) 
                 Operator::Contains => check_contains(actual, expected),
                 Operator::StartsWith => check_starts_with(actual, expected),
                 Operator::EndsWith => check_ends_with(actual, expected),
-                Operator::Exists => unreachable!(),
+                // This branch should be unreachable (handled in outer match),
+                // but provide graceful fallback instead of panic for robustness.
+                Operator::Exists => {
+                    tracing::error!("Operator::Exists should have been handled in outer match");
+                    resolved.is_some()
+                }
             }
         }
     }

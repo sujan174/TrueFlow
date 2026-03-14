@@ -241,6 +241,7 @@ pub async fn execute_post_flight_actions(
                 api_key_env,
                 threshold,
                 on_fail,
+                on_error,
             } => {
                 let text = live_body
                     .as_ref()
@@ -279,8 +280,17 @@ pub async fn execute_post_flight_actions(
                             policy = %triggered.policy_name,
                             vendor = ?vendor,
                             error = %e,
-                            "ExternalGuardrail: post-flight vendor call failed (fail-open)"
+                            on_error = %on_error,
+                            "ExternalGuardrail: post-flight vendor call failed"
                         );
+                        // SECURITY: Support fail-closed mode for security-sensitive deployments
+                        if on_error == "deny" {
+                            return Err(AppError::PolicyDenied {
+                                policy: triggered.policy_name.clone(),
+                                reason: format!("external guardrail vendor error: {}", e),
+                            });
+                        }
+                        // Default: fail-open (on_error == "allow") — log and continue
                     }
                 }
             }

@@ -43,6 +43,26 @@ pub enum Provider {
     Unknown,
 }
 
+impl Provider {
+    /// Convert provider to lowercase string for cost calculation and logging.
+    /// Returns the same format used by the pricing module's match statements.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Provider::OpenAI => "openai",
+            Provider::AzureOpenAI => "azure",
+            Provider::Anthropic => "anthropic",
+            Provider::Gemini => "google",
+            Provider::Groq => "groq",
+            Provider::Mistral => "mistral",
+            Provider::TogetherAI => "together",
+            Provider::Cohere => "cohere",
+            Provider::Ollama => "ollama",
+            Provider::Bedrock => "bedrock",
+            Provider::Unknown => "unknown",
+        }
+    }
+}
+
 /// Detect the provider from the model name or upstream URL.
 ///
 /// Fast path: dispatch on the first ASCII byte of the model name (zero

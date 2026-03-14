@@ -195,13 +195,16 @@ impl AppError {
                 message.clone(),
                 None,
             ),
-            AppError::Upstream(e) => (
-                StatusCode::BAD_GATEWAY,
-                "upstream_error",
-                "upstream_failed",
-                e.clone(),
-                None,
-            ),
+            AppError::Upstream(e) => {
+                tracing::error!(error = %e, "Upstream error");
+                (
+                    StatusCode::BAD_GATEWAY,
+                    "upstream_error",
+                    "upstream_failed",
+                    "The upstream service is unavailable. Please try again.".to_string(),
+                    None,
+                )
+            }
             AppError::Database(e) => {
                 tracing::error!(error = %e, "Database error");
                 (

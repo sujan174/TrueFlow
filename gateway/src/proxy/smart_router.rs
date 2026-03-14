@@ -8,18 +8,9 @@ use crate::models::policy::{RouteTarget, RoutingStrategy};
 use crate::models::pricing_cache::PricingCache;
 use crate::proxy::loadbalancer::LoadBalancer;
 use rust_decimal::prelude::ToPrimitive;
-use std::cell::RefCell;
-use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use uuid::Uuid;
-
-// Thread-local cache for compiled regex patterns to avoid recompilation overhead.
-// Bounded at 64 entries with simple eviction when exceeded.
-thread_local! {
-    static ROUTE_REGEX_CACHE: RefCell<HashMap<String, Option<regex::Regex>>> =
-        RefCell::new(HashMap::with_capacity(64));
-}
 
 /// The outcome of a dynamic routing decision.
 #[derive(Debug, Clone)]
@@ -41,6 +32,12 @@ pub struct RouteDecision {
 /// Using a LazyLock + DashMap so we don't need to thread it through AppState.
 static RR_COUNTERS: std::sync::LazyLock<dashmap::DashMap<String, Arc<AtomicU64>>> =
     std::sync::LazyLock::new(dashmap::DashMap::new);
+
+/// Remove the round-robin counter for a token (call when token is revoked/deleted).
+/// This prevents memory leaks from accumulating entries for deleted tokens.
+pub fn cleanup_round_robin_counter(token_id: &str) {
+    RR_COUNTERS.remove(token_id);
+}
 
 /// Select the best route from `pool` given the strategy.
 ///
@@ -256,20 +253,52 @@ fn select_weighted_random(candidates: Vec<&RouteTarget>) -> Option<RouteDecision
         });
     }
 
-    // FIX 4F-1: Use rand::thread_rng() instead of SystemTime::now().as_nanos().
-    // The nanosecond approach was biased (modular bias) and predictable
-    // (concurrent requests got the same selection).
     use rand::Rng;
-    let total = candidates.len();
-    let idx = rand::thread_rng().gen_range(0..total);
-    let target = candidates[idx];
 
-    Some(RouteDecision {
-        model: target.model.clone(),
-        upstream_url: target.upstream_url.clone(),
-        credential_id: target.credential_id,
+    // Calculate total weight
+    let total_weight: u64 = candidates.iter().map(|t| t.weight as u64).sum();
+
+    // If all weights are 0, fall back to uniform random
+    if total_weight == 0 {
+        let idx = rand::thread_rng().gen_range(0..candidates.len());
+        let target = candidates[idx];
+        return Some(RouteDecision {
+            model: target.model.clone(),
+            upstream_url: target.upstream_url.clone(),
+            credential_id: target.credential_id,
+            strategy_used: "weighted_random".to_string(),
+            reason: "uniform (all weights zero)".to_string(),
+        });
+    }
+
+    // Weighted random selection: pick a random number in [0, total_weight)
+    // and find which candidate's cumulative weight bucket it falls into
+    let pick = rand::thread_rng().gen_range(0..total_weight);
+    let mut cumulative: u64 = 0;
+
+    for target in &candidates {
+        cumulative += target.weight as u64;
+        if pick < cumulative {
+            return Some(RouteDecision {
+                model: target.model.clone(),
+                upstream_url: target.upstream_url.clone(),
+                credential_id: target.credential_id,
+                strategy_used: "weighted_random".to_string(),
+                reason: format!(
+                    "weighted pick {}/{} (weight={})",
+                    pick, total_weight, target.weight
+                ),
+            });
+        }
+    }
+
+    // Fallback (should never reach here if logic is correct)
+    candidates.first().map(|t| RouteDecision {
+        model: t.model.clone(),
+        upstream_url: t.upstream_url.clone(),
+        credential_id: t.credential_id,
         strategy_used: "weighted_random".to_string(),
-        reason: format!("random slot {}/{}", idx, total),
+        reason: "fallback".to_string(),
     })
 }
 
@@ -310,10 +339,9 @@ fn evaluate_route_condition(
             values_equal(&val, &cond.value)
         }
         "neq" => {
-            match actual {
-                None => true, // field doesn't exist → not equal
-                Some(val) => !values_equal(&val, &cond.value),
-            }
+            let Some(val) = actual else { return false };
+            // Consistent with policy engine: missing field fails all non-Exists operators
+            !values_equal(&val, &cond.value)
         }
         "contains" => {
             let Some(val) = actual else { return false };
@@ -334,40 +362,10 @@ fn evaluate_route_condition(
         "regex" => {
             let Some(val) = actual else { return false };
             let pattern = cond.value.as_str().unwrap_or("");
-
-            ROUTE_REGEX_CACHE.with(|cache| {
-                let mut cache = cache.borrow_mut();
-
-                // Check cache first
-                if let Some(cached) = cache.get(pattern) {
-                    return cached.as_ref().is_some_and(|re| {
-                        re.is_match(val.as_str().unwrap_or(""))
-                    });
-                }
-
-                // Compile and cache
-                let result = regex::RegexBuilder::new(pattern)
-                    .size_limit(1 << 20) // ReDoS protection
-                    .build()
-                    .ok();
-
-                let is_match = result.as_ref().is_some_and(|re| {
-                    re.is_match(val.as_str().unwrap_or(""))
-                });
-
-                // Cache the result (even None for invalid patterns)
-                cache.insert(pattern.to_string(), result);
-
-                // Simple eviction: clear half if cache exceeds capacity
-                if cache.len() > 64 {
-                    let keys: Vec<_> = cache.keys().take(32).cloned().collect();
-                    for k in keys {
-                        cache.remove(&k);
-                    }
-                }
-
-                is_match
-            })
+            // Use cached regex compilation from policy engine for performance
+            crate::middleware::engine::compile_cached_regex(pattern)
+                .map(|re| re.is_match(val.as_str().unwrap_or("")))
+                .unwrap_or(false)
         }
         _ => {
             tracing::warn!(op = op, "conditional_route: unknown operator");
@@ -426,13 +424,14 @@ fn values_equal(a: &serde_json::Value, b: &serde_json::Value) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::policy::RouteTarget;
+    use crate::models::policy::{RouteBranch, RouteCondition, RouteTarget};
 
     fn target(model: &str, url: &str) -> RouteTarget {
         RouteTarget {
             model: model.to_string(),
             upstream_url: url.to_string(),
             credential_id: None,
+            weight: 100,
         }
     }
 
@@ -463,5 +462,159 @@ mod tests {
     fn test_round_robin_empty_returns_none() {
         let result = select_round_robin(vec![], "tok_empty");
         assert!(result.is_none());
+    }
+
+    // ── Conditional Routing Tests ───────────────────────────────────
+
+    #[test]
+    fn test_neq_on_missing_field_returns_false() {
+        // Consistent with policy engine: missing field fails all non-Exists operators
+        let body = serde_json::json!({});
+        let headers = hyper::HeaderMap::new();
+        let cond = RouteCondition {
+            field: "body.model".to_string(),
+            op: "neq".to_string(),
+            value: serde_json::json!("gpt-4"),
+        };
+        let result = evaluate_route_condition(&cond, &body, &headers);
+        assert!(!result, "neq on missing field should return false (consistent with policy engine)");
+    }
+
+    #[test]
+    fn test_neq_on_existing_mismatched_field_returns_true() {
+        let body = serde_json::json!({"model": "claude-3"});
+        let headers = hyper::HeaderMap::new();
+        let cond = RouteCondition {
+            field: "body.model".to_string(),
+            op: "neq".to_string(),
+            value: serde_json::json!("gpt-4"),
+        };
+        let result = evaluate_route_condition(&cond, &body, &headers);
+        assert!(result, "neq on different value should return true");
+    }
+
+    #[test]
+    fn test_neq_on_existing_matched_field_returns_false() {
+        let body = serde_json::json!({"model": "gpt-4"});
+        let headers = hyper::HeaderMap::new();
+        let cond = RouteCondition {
+            field: "body.model".to_string(),
+            op: "neq".to_string(),
+            value: serde_json::json!("gpt-4"),
+        };
+        let result = evaluate_route_condition(&cond, &body, &headers);
+        assert!(!result, "neq on equal value should return false");
+    }
+
+    #[test]
+    fn test_exists_on_missing_field_returns_false() {
+        let body = serde_json::json!({});
+        let headers = hyper::HeaderMap::new();
+        let cond = RouteCondition {
+            field: "body.model".to_string(),
+            op: "exists".to_string(),
+            value: serde_json::Value::Null,
+        };
+        let result = evaluate_route_condition(&cond, &body, &headers);
+        assert!(!result, "exists on missing field should return false");
+    }
+
+    #[test]
+    fn test_exists_on_present_field_returns_true() {
+        let body = serde_json::json!({"model": "gpt-4"});
+        let headers = hyper::HeaderMap::new();
+        let cond = RouteCondition {
+            field: "body.model".to_string(),
+            op: "exists".to_string(),
+            value: serde_json::Value::Null,
+        };
+        let result = evaluate_route_condition(&cond, &body, &headers);
+        assert!(result, "exists on present field should return true");
+    }
+
+    #[test]
+    fn test_conditional_route_branches_selects_first_match() {
+        let branches = vec![
+            RouteBranch {
+                condition: RouteCondition {
+                    field: "body.model".to_string(),
+                    op: "eq".to_string(),
+                    value: serde_json::json!("gpt-4"),
+                },
+                target: target("gpt-4o", "https://api.openai.com"),
+            },
+            RouteBranch {
+                condition: RouteCondition {
+                    field: "body.model".to_string(),
+                    op: "eq".to_string(),
+                    value: serde_json::json!("claude-3"),
+                },
+                target: target("claude-3-opus", "https://api.anthropic.com"),
+            },
+        ];
+
+        let body = serde_json::json!({"model": "gpt-4"});
+        let headers = hyper::HeaderMap::new();
+        let result = evaluate_conditional_route_branches(&branches, &body, &headers);
+        assert!(result.is_some());
+        assert_eq!(result.unwrap().model, "gpt-4o");
+    }
+
+    #[test]
+    fn test_conditional_route_branches_returns_none_on_no_match() {
+        let branches = vec![
+            RouteBranch {
+                condition: RouteCondition {
+                    field: "body.model".to_string(),
+                    op: "eq".to_string(),
+                    value: serde_json::json!("gpt-4"),
+                },
+                target: target("gpt-4o", "https://api.openai.com"),
+            },
+        ];
+
+        let body = serde_json::json!({"model": "claude-3"});
+        let headers = hyper::HeaderMap::new();
+        let result = evaluate_conditional_route_branches(&branches, &body, &headers);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_regex_operator_matches_pattern() {
+        let body = serde_json::json!({"model": "gpt-4o-mini"});
+        let headers = hyper::HeaderMap::new();
+        let cond = RouteCondition {
+            field: "body.model".to_string(),
+            op: "regex".to_string(),
+            value: serde_json::json!("gpt-4.*"),
+        };
+        let result = evaluate_route_condition(&cond, &body, &headers);
+        assert!(result, "regex should match gpt-4o-mini");
+    }
+
+    #[test]
+    fn test_regex_operator_no_match_returns_false() {
+        let body = serde_json::json!({"model": "claude-3-opus"});
+        let headers = hyper::HeaderMap::new();
+        let cond = RouteCondition {
+            field: "body.model".to_string(),
+            op: "regex".to_string(),
+            value: serde_json::json!("gpt-.*"),
+        };
+        let result = evaluate_route_condition(&cond, &body, &headers);
+        assert!(!result, "regex should not match claude-3-opus");
+    }
+
+    #[test]
+    fn test_regex_on_missing_field_returns_false() {
+        let body = serde_json::json!({});
+        let headers = hyper::HeaderMap::new();
+        let cond = RouteCondition {
+            field: "body.model".to_string(),
+            op: "regex".to_string(),
+            value: serde_json::json!("gpt-.*"),
+        };
+        let result = evaluate_route_condition(&cond, &body, &headers);
+        assert!(!result, "regex on missing field should return false");
     }
 }

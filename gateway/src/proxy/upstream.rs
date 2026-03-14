@@ -34,7 +34,6 @@ impl UpstreamClient {
         crate::proxy::retry::robust_request(&self.client, method, url, headers, body, retry_config)
             .await
             .map_err(|e| {
-                eprintln!("DEBUG upstream error: url={} err={:?}", url, e);
                 tracing::warn!("Upstream request failed: {}", e);
                 crate::errors::AppError::Upstream(e.to_string())
             })

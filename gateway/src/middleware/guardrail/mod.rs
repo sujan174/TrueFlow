@@ -156,7 +156,7 @@ pub fn check_content(body: &Value, action: &Action) -> GuardrailResult {
                 .iter()
                 .map(|i| format!("code_injection_{}", i))
                 .collect();
-            risk_score = (code_matches.len() as f32 * 0.5).min(1.0);
+            risk_score = (risk_score + code_matches.len() as f32 * 0.5).min(1.0);
             matched_patterns.extend(pattern_names);
         }
     }
@@ -373,12 +373,13 @@ pub fn check_content(body: &Value, action: &Action) -> GuardrailResult {
 // ── Text Extraction ───────────────────────────────────────────
 
 /// Extract all user-visible text from a request body.
-/// Handles OpenAI chat format (`messages[].content`) and raw string bodies.
+/// Handles OpenAI chat format (`messages[].content`), tool calls, and raw string bodies.
 fn extract_text_content(body: &Value) -> String {
     let mut parts: Vec<String> = Vec::new();
 
     if let Some(messages) = body.get("messages").and_then(|m| m.as_array()) {
         for msg in messages {
+            // 1. Extract message content
             if let Some(content) = msg.get("content") {
                 match content {
                     Value::String(s) => parts.push(s.clone()),
@@ -394,6 +395,29 @@ fn extract_text_content(body: &Value) -> String {
                     }
                     _ => {}
                 }
+            }
+
+            // 2. Extract tool_calls[].function.arguments (OpenAI format)
+            if let Some(tool_calls) = msg.get("tool_calls").and_then(|t| t.as_array()) {
+                for tc in tool_calls {
+                    if let Some(args) = tc.pointer("/function/arguments").and_then(|a| a.as_str()) {
+                        parts.push(args.to_string());
+                    }
+                }
+            }
+
+            // 3. Extract function_call.arguments (legacy format)
+            if let Some(args) = msg.pointer("/function_call/arguments").and_then(|a| a.as_str()) {
+                parts.push(args.to_string());
+            }
+        }
+    }
+
+    // 4. Extract tools[].function.description (tool definitions)
+    if let Some(tools) = body.get("tools").and_then(|t| t.as_array()) {
+        for tool in tools {
+            if let Some(desc) = tool.pointer("/function/description").and_then(|d| d.as_str()) {
+                parts.push(desc.to_string());
             }
         }
     }

@@ -68,7 +68,9 @@ pub async fn check_spend_cap(cache: &TieredCache, db: &sqlx::PgPool, token_id: &
             .unwrap_or(None)
             .and_then(|s| s.parse::<f64>().ok())
             .unwrap_or(0.0);
-        if current >= daily_limit {
+        // Use > not >= to match atomic Lua script behavior
+        // Spending exactly your budget is allowed
+        if current > daily_limit {
             anyhow::bail!(
                 "daily spend cap of ${:.2} exceeded (current: ${:.4})",
                 daily_limit,
@@ -86,7 +88,8 @@ pub async fn check_spend_cap(cache: &TieredCache, db: &sqlx::PgPool, token_id: &
             .unwrap_or(None)
             .and_then(|s| s.parse::<f64>().ok())
             .unwrap_or(0.0);
-        if current >= monthly_limit {
+        // Use > not >= to match atomic Lua script behavior
+        if current > monthly_limit {
             anyhow::bail!(
                 "monthly spend cap of ${:.2} exceeded (current: ${:.4})",
                 monthly_limit,
@@ -104,7 +107,8 @@ pub async fn check_spend_cap(cache: &TieredCache, db: &sqlx::PgPool, token_id: &
             .unwrap_or(None)
             .and_then(|s| s.parse::<f64>().ok())
             .unwrap_or(0.0);
-        if current >= lifetime_limit {
+        // Use > not >= to match atomic Lua script behavior
+        if current > lifetime_limit {
             anyhow::bail!(
                 "lifetime spend cap of ${:.2} exceeded (current: ${:.4})",
                 lifetime_limit,
@@ -739,14 +743,16 @@ mod tests {
 
     // ── Cap enforcement logic (pure function extraction) ──────
 
-    /// Verify cap comparison logic: spend >= limit should fail
+    /// Verify cap comparison logic: spend > limit should fail
+    /// (Note: spending exactly your budget is allowed - matches Lua behavior)
     #[test]
     fn test_cap_exceeded_when_at_limit() {
         let limit = 10.0_f64;
         let current = 10.0_f64;
+        // With > semantics, current == limit is NOT exceeded
         assert!(
-            current >= limit,
-            "Current == limit should be considered exceeded"
+            !(current > limit),
+            "Current == limit should NOT be considered exceeded (spending exactly your budget is allowed)"
         );
     }
 
@@ -754,7 +760,7 @@ mod tests {
     fn test_cap_exceeded_when_above_limit() {
         let limit = 10.0_f64;
         let current = 10.0001_f64;
-        assert!(current >= limit, "Current > limit should be exceeded");
+        assert!(current > limit, "Current > limit should be exceeded");
     }
 
     #[test]

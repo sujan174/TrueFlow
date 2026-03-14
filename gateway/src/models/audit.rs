@@ -81,6 +81,10 @@ pub struct AuditEntry {
     /// Object store URL when request/response bodies were offloaded from Postgres.
     /// When set, fetch bodies from PayloadStore::get(url) instead of audit_log_bodies.
     pub payload_url: Option<String>,
+    /// Whether this request exceeded the spend cap due to a race condition.
+    /// The upstream API call was made before the cap was checked, so the cost was incurred
+    /// but not tracked. This is a billing anomaly that requires attention.
+    pub spend_cap_overrun: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

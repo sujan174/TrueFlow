@@ -22,6 +22,7 @@ mod notification;
 mod proxy;
 mod rotation;
 mod store;
+mod utils;
 mod vault;
 
 use cache::TieredCache;

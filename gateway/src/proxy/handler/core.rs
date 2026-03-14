@@ -309,87 +309,119 @@ pub async fn proxy_handler(
     // ctx is now dropped — parsed_body can be mutated
 
     // -- X-TrueFlow-Guardrails header opt-in (per-request guardrails, no policy config needed) --
-    // Header format:  X-TrueFlow-Guardrails: pii_redaction,prompt_injection
-    // Each recognised preset injects synthetic TriggeredAction entries at the front of the queue.
+    // SECURITY: Header processing is controlled by token.guardrail_header_mode:
+    // - "disabled" (default): Header is ignored — prevents unauthorized guardrail injection
+    // - "append": Header actions are added to configured policies
+    // - "override": Header actions replace all configured policies
     let mut outcome_actions = outcome_actions;
-    if let Some(guardrail_header) = headers
-        .get("x-trueflow-guardrails")
-        .and_then(|v| v.to_str().ok())
-    {
-        let mut header_actions: Vec<TriggeredAction> = Vec::new();
-        for preset in guardrail_header
-            .split(',')
-            .map(str::trim)
-            .filter(|s| !s.is_empty())
+    let header_mode = token.guardrail_header_mode.as_deref().unwrap_or("disabled");
+    if header_mode != "disabled" {
+        if let Some(guardrail_header) = headers
+            .get("x-trueflow-guardrails")
+            .and_then(|v| v.to_str().ok())
         {
-            let action = match preset {
-                "pii_redaction" => Some(Action::Redact {
-                    direction: RedactDirection::Both,
-                    patterns: [
-                        "ssn",
-                        "email",
-                        "credit_card",
-                        "phone",
-                        "api_key",
-                        "iban",
-                        "dob",
-                        "ipv4",
-                    ]
-                    .iter()
-                    .map(|s| s.to_string())
-                    .collect(),
-                    fields: vec![],
-                    on_match: RedactOnMatch::Redact,
-                    nlp_backend: None,
-                }),
-                "pii_block" => Some(Action::Redact {
-                    direction: RedactDirection::Request,
-                    patterns: ["ssn", "email", "credit_card", "phone"]
+            let mut header_actions: Vec<TriggeredAction> = Vec::new();
+            for preset in guardrail_header
+                .split(',')
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+            {
+                let action = match preset {
+                    "pii_redaction" => Some(Action::Redact {
+                        direction: RedactDirection::Both,
+                        patterns: [
+                            "ssn",
+                            "email",
+                            "credit_card",
+                            "phone",
+                            "api_key",
+                            "iban",
+                            "dob",
+                            "ipv4",
+                        ]
                         .iter()
                         .map(|s| s.to_string())
                         .collect(),
-                    fields: vec![],
-                    on_match: RedactOnMatch::Block,
-                    nlp_backend: None,
-                }),
-                "prompt_injection" => Some(Action::ContentFilter {
-                    block_jailbreak: true,
-                    block_harmful: true,
-                    block_code_injection: true,
-                    block_profanity: false,
-                    block_bias: false,
-                    block_competitor_mention: false,
-                    block_sensitive_topics: false,
-                    block_gibberish: false,
-                    block_contact_info: false,
-                    block_ip_leakage: false,
-                    competitor_names: vec![],
-                    topic_allowlist: vec![],
-                    topic_denylist: vec![],
-                    custom_patterns: vec![],
-                    risk_threshold: 0.3,
-                    max_content_length: 0,
-                }),
-                other => {
-                    tracing::warn!(
-                        preset = other,
-                        "X-TrueFlow-Guardrails: unrecognised preset, ignoring"
-                    );
-                    None
+                        fields: vec![],
+                        on_match: RedactOnMatch::Redact,
+                        nlp_backend: None,
+                    }),
+                    "pii_block" => Some(Action::Redact {
+                        direction: RedactDirection::Request,
+                        patterns: ["ssn", "email", "credit_card", "phone"]
+                            .iter()
+                            .map(|s| s.to_string())
+                            .collect(),
+                        fields: vec![],
+                        on_match: RedactOnMatch::Block,
+                        nlp_backend: None,
+                    }),
+                    "prompt_injection" => Some(Action::ContentFilter {
+                        block_jailbreak: true,
+                        block_harmful: true,
+                        block_code_injection: true,
+                        block_profanity: false,
+                        block_bias: false,
+                        block_competitor_mention: false,
+                        block_sensitive_topics: false,
+                        block_gibberish: false,
+                        block_contact_info: false,
+                        block_ip_leakage: false,
+                        competitor_names: vec![],
+                        topic_allowlist: vec![],
+                        topic_denylist: vec![],
+                        custom_patterns: vec![],
+                        risk_threshold: 0.3,
+                        max_content_length: 0,
+                    }),
+                    other => {
+                        tracing::warn!(
+                            preset = other,
+                            token_id = %token.id,
+                            "X-TrueFlow-Guardrails: unrecognised preset, ignoring"
+                        );
+                        None
+                    }
+                };
+                if let Some(a) = action {
+                    header_actions.push(TriggeredAction {
+                        policy_id: uuid::Uuid::nil(),
+                        policy_name: format!("header-guardrail:{}", preset),
+                        rule_index: 0,
+                        action: a,
+                    });
                 }
-            };
-            if let Some(a) = action {
-                header_actions.push(TriggeredAction {
-                    policy_id: uuid::Uuid::nil(),
-                    policy_name: format!("header-guardrail:{}", preset),
-                    rule_index: 0,
-                    action: a,
-                });
+            }
+            // Apply header actions based on mode
+            if header_mode == "override" {
+                // Override mode: replace all policies with header actions
+                if !header_actions.is_empty() {
+                    tracing::info!(
+                        token_id = %token.id,
+                        presets = ?header_actions.iter().map(|a| &a.policy_name).collect::<Vec<_>>(),
+                        "X-TrueFlow-Guardrails: override mode — replacing policies with header actions"
+                    );
+                    outcome_actions = header_actions;
+                }
+            } else {
+                // Append mode (default): prepend header actions so they run first
+                if !header_actions.is_empty() {
+                    tracing::debug!(
+                        token_id = %token.id,
+                        presets = ?header_actions.iter().map(|a| &a.policy_name).collect::<Vec<_>>(),
+                        "X-TrueFlow-Guardrails: append mode — adding header actions"
+                    );
+                    header_actions.extend(outcome_actions);
+                    outcome_actions = header_actions;
+                }
             }
         }
-        // Prepend header actions so they run before any configured policies
-        header_actions.extend(outcome_actions);
-        outcome_actions = header_actions;
+    } else if headers.get("x-trueflow-guardrails").is_some() {
+        // Header present but disabled — log for security audit
+        tracing::warn!(
+            token_id = %token.id,
+            "X-TrueFlow-Guardrails header present but ignored (guardrail_header_mode=disabled)"
+        );
     }
 
     let mut shadow_violations = shadow_violations;
@@ -968,6 +1000,7 @@ pub async fn proxy_handler(
                 api_key_env,
                 threshold,
                 on_fail,
+                on_error,
             } => {
                 let text = parsed_body
                     .as_ref()
@@ -975,7 +1008,7 @@ pub async fn proxy_handler(
                     .unwrap_or_default();
                 // check_with_timeout wraps the vendor call in a tokio::time::timeout (default 5s,
                 // configurable via TRUEFLOW_GUARDRAIL_TIMEOUT_SECS). On expiry it returns Err(...)
-                // which falls through to the fail-open branch below — capping worst-case latency.
+                // which falls through to the error branch below — capping worst-case latency.
                 match middleware::external_guardrail::check_with_timeout(
                     vendor,
                     endpoint,
@@ -1034,8 +1067,45 @@ pub async fn proxy_handler(
                             policy = %triggered.policy_name,
                             vendor = ?vendor,
                             error = %e,
-                            "ExternalGuardrail: vendor call failed (fail-open)"
+                            on_error = %on_error,
+                            "ExternalGuardrail: vendor call failed"
                         );
+                        // SECURITY: Support fail-closed mode for security-sensitive deployments
+                        if on_error == "deny" {
+                            let mut audit = base_audit(
+                                request_id,
+                                token.project_id,
+                                &token.id,
+                                agent_name,
+                                method.as_str(),
+                                &path,
+                                &token.upstream_url,
+                                &policies,
+                                false,
+                                None,
+                                None,
+                                user_id.clone(),
+                                tenant_id.clone(),
+                                external_request_id.clone(),
+                                session_id.clone(),
+                                parent_span_id.clone(),
+                                custom_properties.clone(),
+                            );
+                            audit.policy_result = Some(crate::models::audit::PolicyResult::Deny {
+                                policy: triggered.policy_name.clone(),
+                                reason: format!(
+                                    "external_guardrail({:?}) error: {}",
+                                    vendor, e
+                                ),
+                            });
+                            audit.response_latency_ms = start.elapsed().as_millis() as u64;
+                            audit.emit(&state);
+                            return Err(AppError::PolicyDenied {
+                                policy: triggered.policy_name.clone(),
+                                reason: format!("external guardrail vendor error: {}", e),
+                            });
+                        }
+                        // Default: fail-open (on_error == "allow") — log and continue
                     }
                 }
             }
@@ -1282,12 +1352,16 @@ pub async fn proxy_handler(
                 }
             }
             Err(e) => {
-                // Fail open: log error but don't block the request
-                tracing::warn!(
+                // Fail closed: cannot verify session state, reject request
+                tracing::error!(
                     session_id = %sid,
                     error = %e,
-                    "Session upsert failed (fail-open)"
+                    "Session upsert failed (fail-closed)"
                 );
+                return Err(AppError::Internal(anyhow::anyhow!(
+                    "Session validation failed for '{}'. Please retry.",
+                    sid
+                )));
             }
         }
     }
@@ -2344,6 +2418,8 @@ pub async fn proxy_handler(
                 })),
             });
         }
+        // Note: half_open_attempts is now incremented atomically during selection
+        // in LoadBalancer::is_healthy_at() to prevent race conditions
     }
 
     // Save upstream headers for potential MCP tool loop continuation requests
@@ -2445,6 +2521,8 @@ pub async fn proxy_handler(
                         .lb
                         .mark_failed(&token.id, &final_upstream_url, &cb_config);
                 } else {
+                    // Track success for rate-based circuit breaking
+                    state.lb.record_success(&token.id, &final_upstream_url, &cb_config);
                     state.lb.mark_healthy(&token.id, &final_upstream_url);
                 }
                 state.lb.decrement_in_flight(&final_upstream_url);
@@ -2537,6 +2615,8 @@ pub async fn proxy_handler(
                         .lb
                         .mark_failed(&token.id, &final_upstream_url, &cb_config);
                 } else {
+                    // Track success for rate-based circuit breaking
+                    state.lb.record_success(&token.id, &final_upstream_url, &cb_config);
                     state.lb.mark_healthy(&token.id, &final_upstream_url);
                 }
                 state.lb.decrement_in_flight(&final_upstream_url);
@@ -2733,36 +2813,14 @@ pub async fn proxy_handler(
 
             // Cost tracking — BUG-2 FIX: use DB-backed pricing cache (with hardcoded fallback)
             let mut estimated_cost_usd: Option<rust_decimal::Decimal> = None;
+            let mut spend_cap_overrun = false;
             if let (Some(inp), Some(out)) = (prompt_tokens, completion_tokens) {
-                // GAP-1 FIX: detect all supported providers, not just openai/anthropic
-                let provider = if token_bg_upstream_url.contains("anthropic")
-                    && !token_bg_upstream_url.contains("bedrock")
-                {
-                    "anthropic"
-                } else if token_bg_upstream_url.contains("generativelanguage")
-                    || token_bg_upstream_url.contains("googleapis")
-                {
-                    "google"
-                } else if token_bg_upstream_url.contains("mistral") {
-                    "mistral"
-                } else if token_bg_upstream_url.contains("bedrock") {
-                    "bedrock"
-                } else if token_bg_upstream_url.contains("groq") {
-                    "groq"
-                } else if token_bg_upstream_url.contains("cohere") {
-                    "cohere"
-                } else if token_bg_upstream_url.contains("together") {
-                    "together"
-                } else if token_bg_upstream_url.contains("localhost:11434")
-                    || token_bg_upstream_url.contains("ollama")
-                {
-                    "ollama"
-                } else {
-                    "openai"
-                };
+                // Use robust provider detection from model_router
                 let model = model_name.as_deref().unwrap_or("unknown");
+                let provider = proxy::model_router::detect_provider(model, &token_bg_upstream_url);
+                let provider_str = provider.as_str();
                 let final_cost =
-                    cost::calculate_cost_with_cache(&state_bg.pricing, provider, model, inp, out)
+                    cost::calculate_cost_with_cache(&state_bg.pricing, provider_str, model, inp, out)
                         .await;
                 if !final_cost.is_zero() {
                     estimated_cost_usd = Some(final_cost);
@@ -2776,6 +2834,7 @@ pub async fn proxy_handler(
                     .await
                     {
                         tracing::error!("Streaming: spend cap exceeded or tracking failed: {}", e);
+                        spend_cap_overrun = true;
                     }
                 }
             }
@@ -2836,6 +2895,7 @@ pub async fn proxy_handler(
             } else {
                 Some(shadow_violations_bg)
             };
+            audit.spend_cap_overrun = spend_cap_overrun;
             audit.emit(&state_bg);
 
             // -- Session spend increment (streaming) --
@@ -3134,6 +3194,9 @@ pub async fn proxy_handler(
     let mut audit_prompt_tokens: Option<u32> = None;
     let mut audit_completion_tokens: Option<u32> = None;
     let mut audit_model: Option<String> = None;
+    // Track spend cap overruns: when concurrent requests race past the cap,
+    // the API cost was incurred but spend tracking failed
+    let mut spend_cap_overrun = false;
 
     // TEST HOOK: Allow forcing cost/tokens via header for deterministic testing
     if let Some((p, c)) = test_tokens_override {
@@ -3166,34 +3229,12 @@ pub async fn proxy_handler(
                 audit_completion_tokens = Some(output);
                 let model = extract_model(&sanitized_body).unwrap_or("unknown".to_string());
                 audit_model = Some(model.clone());
-                let provider = if token.upstream_url.contains("anthropic")
-                    && !token.upstream_url.contains("bedrock")
-                {
-                    "anthropic"
-                } else if token.upstream_url.contains("generativelanguage")
-                    || token.upstream_url.contains("googleapis")
-                {
-                    "google"
-                } else if token.upstream_url.contains("mistral") {
-                    "mistral"
-                } else if token.upstream_url.contains("bedrock") {
-                    "bedrock"
-                } else if token.upstream_url.contains("groq") {
-                    "groq"
-                } else if token.upstream_url.contains("cohere") {
-                    "cohere"
-                } else if token.upstream_url.contains("together") {
-                    "together"
-                } else if token.upstream_url.contains("localhost:11434")
-                    || token.upstream_url.contains("ollama")
-                {
-                    "ollama"
-                } else {
-                    "openai"
-                };
+                // Use robust provider detection from model_router
+                let provider = proxy::model_router::detect_provider(&model, &token.upstream_url);
+                let provider_str = provider.as_str();
                 let final_cost = cost::calculate_cost_with_cache(
                     &state.pricing,
-                    provider,
+                    provider_str,
                     &model,
                     input,
                     output,
@@ -3212,6 +3253,7 @@ pub async fn proxy_handler(
                     .await
                     {
                         tracing::error!("Spend cap exceeded or tracking failed: {}", e);
+                        spend_cap_overrun = true;
                     }
                 }
             }
@@ -3496,6 +3538,7 @@ pub async fn proxy_handler(
                     api_key_env,
                     threshold,
                     on_fail,
+                    on_error,
                 } => {
                     let text = parsed_resp_body
                         .as_ref()
@@ -3534,8 +3577,17 @@ pub async fn proxy_handler(
                                 policy = %triggered.policy_name,
                                 vendor = ?vendor,
                                 error = %e,
-                                "ExternalGuardrail: post-flight vendor call failed (fail-open)"
+                                on_error = %on_error,
+                                "ExternalGuardrail: post-flight vendor call failed"
                             );
+                            // SECURITY: Support fail-closed mode for security-sensitive deployments
+                            if on_error == "deny" {
+                                return Err(AppError::PolicyDenied {
+                                    policy: triggered.policy_name.clone(),
+                                    reason: format!("external guardrail vendor error: {}", e),
+                                });
+                            }
+                            // Default: fail-open (on_error == "allow") — log and continue
                         }
                     }
                 }
@@ -3678,6 +3730,7 @@ pub async fn proxy_handler(
     audit.cache_hit = false; // not a cache hit — we went to upstream
     audit.experiment_name = experiment_name;
     audit.variant_name = variant_name;
+    audit.spend_cap_overrun = spend_cap_overrun;
     let session_id_for_spend = audit.session_id.clone();
     audit.emit(&state);
 

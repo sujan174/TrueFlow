@@ -37,16 +37,17 @@ pub fn load() -> anyhow::Result<Config> {
         std::env::var("TRUEFLOW_MASTER_KEY").unwrap_or_else(|_| "CHANGE_ME_32_BYTE_HEX_KEY".into());
 
     if master_key == "CHANGE_ME_32_BYTE_HEX_KEY" {
-        let env_mode = std::env::var("TRUEFLOW_ENV")
-            .or_else(|_| std::env::var("RUST_ENV"))
-            .unwrap_or_default();
-        if env_mode == "production" {
+        // Require explicit opt-in to allow insecure key in any environment
+        if std::env::var("TRUEFLOW_ALLOW_INSECURE_KEY").is_err() {
             anyhow::bail!(
                 "TRUEFLOW_MASTER_KEY is still the insecure placeholder. \
-                 Set a proper 64-char hex key before running in production."
+                 Set a proper 64-char hex key, or set TRUEFLOW_ALLOW_INSECURE_KEY=1 \
+                 to explicitly allow the insecure key (NOT recommended for any environment with real data)."
             );
         }
-        eprintln!("⚠️  TRUEFLOW_MASTER_KEY is not set — using insecure placeholder. Set a 64-char hex key for production.");
+        eprintln!("⚠️  WARNING: TRUEFLOW_MASTER_KEY is using the insecure placeholder key. \
+                   This is NOT safe for any environment with real credentials. \
+                   Set a proper 64-char hex key for production.");
     } else if master_key.len() < 32 {
         anyhow::bail!(
             "TRUEFLOW_MASTER_KEY is too short ({} chars). \

@@ -66,6 +66,20 @@ pub async fn create_token(
         return Err(StatusCode::BAD_REQUEST);
     }
 
+    // SSRF protection: Block URLs that resolve to private/internal IPs
+    // unless explicitly allowed via environment variable (for dev/testing)
+    let allow_private_upstreams =
+        std::env::var("TRUEFLOW_ALLOW_PRIVATE_UPSTREAMS").is_ok();
+    if !allow_private_upstreams {
+        if !crate::utils::is_safe_webhook_url(&payload.upstream_url).await {
+            tracing::warn!(
+                "create_token: upstream URL blocked by SSRF protection: {}",
+                payload.upstream_url
+            );
+            return Err(StatusCode::BAD_REQUEST);
+        }
+    }
+
     // P1.4: Validate upstreams list if provided (weight > 0, no duplicate URLs)
     if let Some(ref upstreams) = payload.upstreams {
         // Check for zero/negative weights
@@ -156,6 +170,8 @@ pub async fn revoke_token(
     if revoked {
         // Clean up load balancer state to prevent memory leaks
         state.lb.cleanup_token(&id);
+        // Clean up round-robin counter to prevent memory leak
+        crate::proxy::smart_router::cleanup_round_robin_counter(&id);
         Ok(StatusCode::NO_CONTENT)
     } else {
         Err(StatusCode::NOT_FOUND)

@@ -362,6 +362,20 @@ async fn import_document(
         .collect();
 
     for token_export in &doc.tokens {
+        // SSRF protection: Validate upstream URL
+        let allow_private_upstreams =
+            std::env::var("TRUEFLOW_ALLOW_PRIVATE_UPSTREAMS").is_ok();
+        if !allow_private_upstreams {
+            if !crate::utils::is_safe_webhook_url(&token_export.upstream_url).await {
+                tracing::warn!(
+                    "config import: token '{}' upstream URL blocked by SSRF protection: {}",
+                    token_export.name,
+                    token_export.upstream_url
+                );
+                continue; // Skip this token, don't fail the entire import
+            }
+        }
+
         // Resolve policy names → IDs
         let policy_ids: Vec<Uuid> = token_export
             .policies

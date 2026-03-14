@@ -91,6 +91,9 @@ pub struct TokenRow {
     pub mcp_allowed_tools: Option<serde_json::Value>,
     /// MCP tool blocklist. Takes priority over allowlist. Supports glob patterns.
     pub mcp_blocked_tools: Option<serde_json::Value>,
+    /// SECURITY: Controls how X-TrueFlow-Guardrails header is processed.
+    /// Options: "disabled" (ignore, default for security), "append" (add to policies), "override" (replace policies)
+    pub guardrail_header_mode: Option<String>,
 }
 
 #[derive(Debug, sqlx::FromRow, Serialize, Deserialize)]

@@ -30,12 +30,19 @@ pub(super) fn compare_numeric(actual: &Value, expected: &Value, cmp: fn(f64, f64
     }
 }
 
+/// Maximum absolute value for numeric comparisons.
+/// This prevents overflow issues while accommodating legitimate use cases:
+/// - Token counts (even GPT-4's 128K context is well under 1e15)
+/// - Timestamps in milliseconds (year 5138 CE at 1e17ms, 1e15ms is year 2001)
+/// - Dollar amounts (1e15 = 1 quadrillion, covers enterprise billing)
+const NUMERIC_MAX_VALUE: f64 = 1e15;
+
 pub(super) fn to_f64(v: &Value) -> Option<f64> {
     match v {
         Value::Number(n) => {
             let val = n.as_f64()?;
             // Validate: reject NaN, Infinity, and extremely large values
-            if val.is_finite() && val.abs() < 1e9 {
+            if val.is_finite() && val.abs() < NUMERIC_MAX_VALUE {
                 Some(val)
             } else {
                 None
@@ -44,7 +51,7 @@ pub(super) fn to_f64(v: &Value) -> Option<f64> {
         Value::String(s) => {
             let val: f64 = s.parse().ok()?;
             // Validate: reject NaN, Infinity, and extremely large values
-            if val.is_finite() && val.abs() < 1e9 {
+            if val.is_finite() && val.abs() < NUMERIC_MAX_VALUE {
                 Some(val)
             } else {
                 None
@@ -72,7 +79,13 @@ pub(super) fn check_glob(actual: &Value, pattern: &Value) -> bool {
     }
 }
 
+/// Maximum iterations for glob matching to prevent DoS via backtracking.
+/// This is generous enough for patterns/texts up to ~10KB each with many wildcards,
+/// but prevents exponential blowup from pathological inputs.
+const GLOB_MAX_ITERATIONS: u64 = 100_000;
+
 /// Simple glob matching: `*` matches any sequence, `?` matches one char.
+/// SEC: bounded iteration prevents DoS via backtracking on pathological patterns.
 pub(crate) fn glob_match(pattern: &str, text: &str) -> bool {
     if pattern == "*" || pattern == "/*" {
         return true;
@@ -84,8 +97,19 @@ pub(crate) fn glob_match(pattern: &str, text: &str) -> bool {
         std::iter::Peekable<std::str::Chars>,
         std::iter::Peekable<std::str::Chars>,
     )> = Vec::new();
+    let mut iterations: u64 = 0;
 
     loop {
+        iterations += 1;
+        if iterations > GLOB_MAX_ITERATIONS {
+            tracing::warn!(
+                pattern = %pattern,
+                text_len = text.len(),
+                "glob_match: iteration limit exceeded, returning false"
+            );
+            return false;
+        }
+
         match (p_chars.peek(), t_chars.peek()) {
             (Some('*'), _) => {
                 p_chars.next();
@@ -125,6 +149,45 @@ pub(crate) fn glob_match(pattern: &str, text: &str) -> bool {
 /// PERF: compiled regexes are cached in a thread-local map (max 256 entries)
 ///       to avoid per-request recompilation.
 pub(super) fn check_regex(actual: &Value, pattern: &Value) -> bool {
+    let actual_str = value_as_str(actual);
+    let pattern_str = value_as_str(pattern);
+
+    match (actual_str, pattern_str) {
+        (Some(text), Some(pat)) => {
+            // For array values (from wildcard extraction), check any element
+            if let Value::Array(arr) = actual {
+                return arr.iter().any(|elem| {
+                    value_as_str(elem)
+                        .and_then(|s| compile_cached_regex(&pat).map(|re| re.is_match(&s)))
+                        .unwrap_or(false)
+                });
+            }
+            compile_cached_regex(&pat)
+                .map(|re| re.is_match(&text))
+                .unwrap_or(false)
+        }
+        _ => {
+            // Handle array actual with string pattern
+            if let Value::Array(arr) = actual {
+                if let Some(pat) = value_as_str(pattern) {
+                    return arr.iter().any(|elem| {
+                        value_as_str(elem)
+                            .and_then(|s| compile_cached_regex(&pat).map(|re| re.is_match(&s)))
+                            .unwrap_or(false)
+                    });
+                }
+            }
+            false
+        }
+    }
+}
+
+/// Compile a regex pattern with thread-local caching and size limit.
+/// SEC: patterns are compiled with a 1MB size limit to prevent ReDoS during compilation.
+/// PERF: compiled regexes are cached in a thread-local map (max 256 entries)
+///       to avoid per-request recompilation.
+/// Returns None if the pattern is invalid or too complex.
+pub(crate) fn compile_cached_regex(pattern: &str) -> Option<Regex> {
     use std::cell::RefCell;
     use std::collections::HashMap;
 
@@ -135,57 +198,22 @@ pub(super) fn check_regex(actual: &Value, pattern: &Value) -> bool {
             RefCell::new(HashMap::with_capacity(64));
     }
 
-    /// Compile a regex with caching and size limit.
-    fn compile_cached(pat: &str) -> Option<Regex> {
-        REGEX_CACHE.with(|cache| {
-            let mut cache = cache.borrow_mut();
-            if let Some(cached) = cache.get(pat) {
-                return cached.clone();
-            }
-            let compiled = regex::RegexBuilder::new(pat)
-                .size_limit(1_000_000) // 1MB limit prevents catastrophic backtracking
-                .build()
-                .ok();
-            // Bound cache size: clear if over limit (simple eviction strategy)
-            if cache.len() >= 256 {
-                cache.clear();
-            }
-            cache.insert(pat.to_string(), compiled.clone());
-            compiled
-        })
-    }
-
-    let actual_str = value_as_str(actual);
-    let pattern_str = value_as_str(pattern);
-
-    match (actual_str, pattern_str) {
-        (Some(text), Some(pat)) => {
-            // For array values (from wildcard extraction), check any element
-            if let Value::Array(arr) = actual {
-                return arr.iter().any(|elem| {
-                    value_as_str(elem)
-                        .and_then(|s| compile_cached(&pat).map(|re| re.is_match(&s)))
-                        .unwrap_or(false)
-                });
-            }
-            compile_cached(&pat)
-                .map(|re| re.is_match(&text))
-                .unwrap_or(false)
+    REGEX_CACHE.with(|cache| {
+        let mut cache = cache.borrow_mut();
+        if let Some(cached) = cache.get(pattern) {
+            return cached.clone();
         }
-        _ => {
-            // Handle array actual with string pattern
-            if let Value::Array(arr) = actual {
-                if let Some(pat) = value_as_str(pattern) {
-                    return arr.iter().any(|elem| {
-                        value_as_str(elem)
-                            .and_then(|s| compile_cached(&pat).map(|re| re.is_match(&s)))
-                            .unwrap_or(false)
-                    });
-                }
-            }
-            false
+        let compiled = regex::RegexBuilder::new(pattern)
+            .size_limit(1_000_000) // 1MB limit prevents catastrophic backtracking
+            .build()
+            .ok();
+        // Bound cache size: clear if over limit (simple eviction strategy)
+        if cache.len() >= 256 {
+            cache.clear();
         }
-    }
+        cache.insert(pattern.to_string(), compiled.clone());
+        compiled
+    })
 }
 
 /// Check if actual contains the expected value (substring or array membership).

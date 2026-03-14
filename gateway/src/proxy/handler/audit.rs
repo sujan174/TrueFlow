@@ -50,6 +50,8 @@ pub(crate) struct AuditBuilder {
     pub(super) variant_name: Option<String>,
     // Phase 6: Just Enough Observability
     pub(super) custom_properties: Option<serde_json::Value>,
+    // Spend tracking
+    pub(super) spend_cap_overrun: bool,
 }
 
 impl AuditBuilder {
@@ -101,6 +103,7 @@ impl AuditBuilder {
             variant_name: self.variant_name,
             custom_properties: self.custom_properties,
             payload_url: None, // set by audit middleware after potential offload
+            spend_cap_overrun: self.spend_cap_overrun,
         };
         // ── Observability Export ──────────────────────────────────────
         // Fan out to Prometheus, Langfuse, and DataDog (non-blocking).

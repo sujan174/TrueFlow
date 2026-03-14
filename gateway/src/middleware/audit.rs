@@ -139,7 +139,7 @@ async fn insert_audit_log(
             user_id, tenant_id, external_request_id, log_level,
             tool_calls, tool_call_count, finish_reason,
             session_id, parent_span_id, error_type, is_streaming,
-            cache_hit, custom_properties, payload_url
+            cache_hit, custom_properties, payload_url, spend_cap_overrun
         )
         VALUES (
             $1, $2, $3, $4, $5, $6, $7, $8,
@@ -150,7 +150,7 @@ async fn insert_audit_log(
             $27, $28, $29, $30,
             $31, $32, $33,
             $34, $35, $36, $37,
-            $38, $39, $40
+            $38, $39, $40, $41
         )
         "#,
     )
@@ -197,6 +197,8 @@ async fn insert_audit_log(
     // Phase 6 columns
     .bind(&entry.custom_properties)
     .bind(&payload_url)
+    // Spend cap overrun tracking
+    .bind(entry.spend_cap_overrun)
     .execute(pool)
     .await?;
 
@@ -336,6 +338,7 @@ mod tests {
             variant_name: None,
             custom_properties: None,
             payload_url: None,
+            spend_cap_overrun: false,
         }
     }
 

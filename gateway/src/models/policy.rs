@@ -445,6 +445,11 @@ pub enum Action {
         /// What to do when the vendor flags a violation: \"deny\" (default) or \"log\".
         #[serde(default = "default_fallback")]
         on_fail: String,
+        /// What to do when the vendor call fails (timeout, network error, parse error).
+        /// Options: \"allow\" (default, fail-open) or \"deny\" (fail-closed for security).
+        /// Security-sensitive deployments should use \"deny\" to prevent bypass via DoS.
+        #[serde(default = "default_on_error")]
+        on_error: String,
     },
 
     /// Tool-level RBAC — control which tools agents can invoke.
@@ -560,6 +565,14 @@ pub struct RouteTarget {
     /// Optional credential override for this target.
     #[serde(default)]
     pub credential_id: Option<Uuid>,
+    /// Weight for weighted random selection (default: 100).
+    /// Higher weights receive proportionally more traffic.
+    #[serde(default = "default_route_weight")]
+    pub weight: u32,
+}
+
+fn default_route_weight() -> u32 {
+    100
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -710,6 +723,9 @@ fn default_timeout() -> String {
 }
 fn default_fallback() -> String {
     "deny".to_string()
+}
+fn default_on_error() -> String {
+    "allow".to_string() // fail-open by default for backwards compatibility
 }
 fn default_log_level() -> String {
     "warn".to_string()
@@ -1313,12 +1329,14 @@ mod tests {
                 api_key_env,
                 threshold,
                 on_fail,
+                on_error,
             } => {
                 assert_eq!(vendor, ExternalVendor::AzureContentSafety);
                 assert_eq!(endpoint, "https://my-resource.cognitiveservices.azure.com");
                 assert_eq!(api_key_env, Some("AZURE_KEY".to_string()));
                 assert!((threshold - 4.0).abs() < 0.01);
                 assert_eq!(on_fail, "deny");
+                assert_eq!(on_error, "allow"); // default fail-open
             }
             _ => panic!("Expected ExternalGuardrail, got {:?}", action),
         }
@@ -1339,11 +1357,13 @@ mod tests {
                 vendor,
                 threshold,
                 on_fail,
+                on_error,
                 ..
             } => {
                 assert_eq!(vendor, ExternalVendor::AwsComprehend);
                 assert!((threshold - 0.8).abs() < 0.01);
                 assert_eq!(on_fail, "deny"); // default fallback
+                assert_eq!(on_error, "allow"); // default fail-open
             }
             _ => panic!("Expected ExternalGuardrail"),
         }
@@ -1365,6 +1385,7 @@ mod tests {
                 api_key_env,
                 threshold,
                 on_fail,
+                on_error,
             } => {
                 assert_eq!(vendor, ExternalVendor::LlamaGuard);
                 assert_eq!(endpoint, "http://localhost:11434");
@@ -1377,6 +1398,7 @@ mod tests {
                     "default threshold should be 0.5"
                 );
                 assert_eq!(on_fail, "log");
+                assert_eq!(on_error, "allow"); // default fail-open
             }
             _ => panic!("Expected ExternalGuardrail"),
         }
@@ -1395,6 +1417,7 @@ mod tests {
             Action::ExternalGuardrail {
                 threshold,
                 on_fail,
+                on_error,
                 api_key_env,
                 ..
             } => {
@@ -1403,6 +1426,7 @@ mod tests {
                     "default threshold should be 0.5"
                 );
                 assert_eq!(on_fail, "deny", "default on_fail should be 'deny'");
+                assert_eq!(on_error, "allow", "default on_error should be 'allow'");
                 assert!(api_key_env.is_none(), "api_key_env should default to None");
             }
             _ => panic!("Expected ExternalGuardrail"),
@@ -1471,6 +1495,7 @@ mod tests {
             api_key_env: None,
             threshold: 0.5,
             on_fail: "deny".to_string(),
+            on_error: "allow".to_string(),
         };
         // Just verify it doesn't panic — the actual name is tested in engine::tests
         let _ = format!("{:?}", action);
