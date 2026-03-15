@@ -515,6 +515,11 @@ pub async fn proxy_handler(
             }
 
             // ── Rate Limit ──
+            // HIGH-13: Counter increments BEFORE deny check for correct rate limiting.
+            // This means denied requests count toward the limit, which is intentional:
+            // - Prevents attackers from probing the rate limit without consuming quota
+            // - Ensures burst attacks can't exhaust resources before hitting limits
+            // For observability, we also emit a separate denied_request counter.
             Action::RateLimit {
                 window,
                 max_requests,
@@ -621,6 +626,12 @@ pub async fn proxy_handler(
                             )
                             .await;
                     });
+
+                    // HIGH-13: Emit separate denied request counter for observability
+                    let denied_key = format!("rl_denied:{}", rl_key);
+                    if let Err(e) = state.cache.increment_sliding_window(&denied_key, window_secs).await {
+                        tracing::debug!(error = %e, "Failed to increment denied request counter (non-critical)");
+                    }
 
                     return Err(AppError::RateLimitExceeded { retry_after_secs: window_secs });
                 }

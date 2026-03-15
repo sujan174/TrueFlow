@@ -137,6 +137,18 @@ pub async fn delete_credential(
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
 
+    // HIGH-11: Invalidate credential cache on delete
+    if deleted {
+        let cache_key = format!("credential:{}", id);
+        if let Err(e) = state.cache.invalidate(&cache_key).await {
+            tracing::warn!(
+                credential_id = %id,
+                error = %e,
+                "HIGH-11: Failed to invalidate credential cache on delete - cache will expire naturally"
+            );
+        }
+    }
+
     if !deleted {
         tracing::warn!(
             credential_id = %id,

@@ -5,6 +5,8 @@ use crate::vault::builtin::VaultCrypto;
 use sqlx::Row;
 use std::sync::Arc;
 use uuid::Uuid;
+// HIGH-12: Use Zeroizing wrapper for automatic zeroization on drop
+use zeroize::Zeroizing;
 
 /// Handles automatic rotation of upstream API keys.
 /// Runs as a background task, checking credentials with rotation enabled.
@@ -179,24 +181,35 @@ impl RotationScheduler {
     /// 5. Log the rotation
     async fn rotate_credential(&self, cred: &RotationCandidate) -> anyhow::Result<()> {
         // Step 1: Decrypt current secret
-        let plaintext_secret = self.vault.decrypt_string(
+        // HIGH-12: Wrap in Zeroizing for automatic zeroization on drop
+        let plaintext_secret = Zeroizing::new(self.vault.decrypt_string(
             &cred.encrypted_dek,
             &cred.dek_nonce,
             &cred.encrypted_secret,
             &cred.secret_nonce,
-        )?;
+        )?);
 
         // Step 2: Re-encrypt with fresh DEK
         let (new_encrypted_dek, new_dek_nonce, new_encrypted_secret, new_secret_nonce) =
             self.vault.encrypt_string(&plaintext_secret)?;
 
-        // FIX: Zeroize the plaintext secret immediately after re-encryption.
-        // This is consistent with the vault's use of zeroize for DEK cleanup.
-        use zeroize::Zeroize;
-        let mut plaintext_secret = plaintext_secret; // rebind as mutable
-        plaintext_secret.zeroize();
+        // HIGH-12: plaintext_secret is automatically zeroized when it goes out of scope
+        // No need for manual zeroize() call - Zeroizing<String> handles it on drop
 
         let new_version = cred.version + 1;
+
+        // HIGH-10: Invalidate cache BEFORE DB update to avoid race where
+        // concurrent requests read stale cached data after the update.
+        // This ensures the cache miss happens before the new data is written.
+        let cache_key = format!("credential:{}", cred.id);
+        if let Err(e) = self.cache.invalidate(&cache_key).await {
+            tracing::warn!(
+                credential_id = %cred.id,
+                error = %e,
+                "HIGH-10: Failed to invalidate Redis cache before rotation - continuing with local invalidation only"
+            );
+            self.cache.invalidate_local(&cache_key);
+        }
 
         // Step 3: Atomic DB update — version check prevents concurrent rotation
         let result = sqlx::query(
@@ -230,11 +243,7 @@ impl RotationScheduler {
             );
         }
 
-        // Step 4: Invalidate credential cache
-        let cache_key = format!("credential:{}", cred.id);
-        self.cache.invalidate_local(&cache_key);
-
-        // Step 5: Log the rotation
+        // Step 4: Log the rotation
         self.log_rotation(
             cred.id,
             cred.version,

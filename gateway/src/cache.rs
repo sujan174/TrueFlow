@@ -105,6 +105,19 @@ impl TieredCache {
         self.local.remove(key);
     }
 
+    /// HIGH-10: Invalidate both local and Redis cache.
+    /// Use this for credential rotation to ensure all instances see the update.
+    pub async fn invalidate(&self, key: &str) -> anyhow::Result<()> {
+        // Invalidate local cache first
+        self.local.remove(key);
+
+        // Invalidate Redis cache
+        let mut conn = self.redis.clone();
+        let _: () = conn.del(key).await?;
+
+        Ok(())
+    }
+
     /// Remove all locally-expired entries.  Call this periodically from a
     /// background task (e.g. every 60 s) to bound memory usage.
     pub fn evict_expired(&self) -> usize {
