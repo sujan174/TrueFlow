@@ -116,12 +116,17 @@ pub async fn delete_credential(
     State(state): State<Arc<AppState>>,
     Extension(auth): Extension<AuthContext>,
     Path(id_str): Path<String>,
+    Query(params): Query<PaginationParams>,
 ) -> Result<Json<DeleteResponse>, StatusCode> {
     auth.require_role("admin")?;
     auth.require_scope("credentials:write")
         .map_err(|_| StatusCode::FORBIDDEN)?;
     let id = Uuid::parse_str(&id_str).map_err(|_| StatusCode::BAD_REQUEST)?;
-    let project_id = auth.default_project_id();
+    let project_id = params
+        .project_id
+        .unwrap_or_else(|| auth.default_project_id());
+    // HIGH-2: Verify project ownership for explicit isolation
+    verify_project_ownership(&state, auth.org_id, project_id).await?;
 
     let deleted = state
         .db
@@ -131,6 +136,14 @@ pub async fn delete_credential(
             tracing::error!("delete_credential failed: {}", e);
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
+
+    if !deleted {
+        tracing::warn!(
+            credential_id = %id,
+            project_id = %project_id,
+            "HIGH-2: Credential deletion failed - not found or cross-project access attempt"
+        );
+    }
 
     Ok(Json(DeleteResponse { id, deleted }))
 }

@@ -137,13 +137,18 @@ pub async fn update_policy(
     State(state): State<Arc<AppState>>,
     Extension(auth): Extension<AuthContext>,
     Path(id_str): Path<String>,
+    Query(params): Query<PaginationParams>,
     Json(payload): Json<UpdatePolicyRequest>,
 ) -> Result<Json<PolicyResponse>, StatusCode> {
     auth.require_role("admin")?;
     auth.require_scope("policies:write")
         .map_err(|_| StatusCode::FORBIDDEN)?;
     let id = Uuid::parse_str(&id_str).map_err(|_| StatusCode::BAD_REQUEST)?;
-    let project_id = auth.default_project_id();
+    // HIGH-3: Accept explicit project_id from query params
+    let project_id = params
+        .project_id
+        .unwrap_or_else(|| auth.default_project_id());
+    verify_project_ownership(&state, auth.org_id, project_id).await?;
 
     // Validate mode if provided
     if let Some(ref mode) = payload.mode {
@@ -195,17 +200,30 @@ pub async fn delete_policy(
     State(state): State<Arc<AppState>>,
     Extension(auth): Extension<AuthContext>,
     Path(id_str): Path<String>,
+    Query(params): Query<PaginationParams>,
 ) -> Result<Json<DeleteResponse>, StatusCode> {
     auth.require_role("admin")?;
     auth.require_scope("policies:write")
         .map_err(|_| StatusCode::FORBIDDEN)?;
     let id = Uuid::parse_str(&id_str).map_err(|_| StatusCode::BAD_REQUEST)?;
-    let project_id = auth.default_project_id();
+    // HIGH-3: Accept explicit project_id from query params
+    let project_id = params
+        .project_id
+        .unwrap_or_else(|| auth.default_project_id());
+    verify_project_ownership(&state, auth.org_id, project_id).await?;
 
     let deleted = state.db.delete_policy(id, project_id).await.map_err(|e| {
         tracing::error!("delete_policy failed: {}", e);
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
+
+    if !deleted {
+        tracing::warn!(
+            policy_id = %id,
+            project_id = %project_id,
+            "HIGH-3: Policy deletion failed - not found or cross-project access attempt"
+        );
+    }
 
     Ok(Json(DeleteResponse { id, deleted }))
 }

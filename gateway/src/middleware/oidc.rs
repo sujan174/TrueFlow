@@ -422,15 +422,26 @@ async fn verify_with_jwks(
     if let Some(ref aud) = provider.audience {
         validation.set_audience(&[aud]);
     } else {
-        // SEC-08: Audience validation is disabled - this is a security risk
-        // Tokens issued for other clients could be accepted
-        tracing::warn!(
-            provider_id = %provider.id,
-            issuer = %provider.issuer_url,
-            "SEC-08: OIDC provider has no audience configured - audience validation DISABLED. \
-             This allows potential token replay attacks. Set 'audience' in provider config."
-        );
-        validation.validate_aud = false;
+        // HIGH-1: Require explicit opt-in for disabled audience validation
+        // Tokens issued for other clients could be accepted without this
+        if std::env::var("TRUEFLOW_ALLOW_EMPTY_AUDIENCE")
+            .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+            .unwrap_or(false)
+        {
+            tracing::warn!(
+                provider_id = %provider.id,
+                issuer = %provider.issuer_url,
+                "HIGH-1: OIDC provider has no audience configured - audience validation DISABLED via TRUEFLOW_ALLOW_EMPTY_AUDIENCE. \
+                 This allows potential token replay attacks. Configure 'audience' in provider config."
+            );
+            validation.validate_aud = false;
+        } else {
+            return Err(anyhow::anyhow!(
+                "HIGH-1: OIDC provider {} has no audience configured. Audience validation is REQUIRED for security. \
+                 Set 'audience' in provider config or set TRUEFLOW_ALLOW_EMPTY_AUDIENCE=1 to opt-in to this risk.",
+                provider.id
+            ));
+        }
     }
     validation.validate_exp = true;
 
