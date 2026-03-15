@@ -41,14 +41,18 @@ fn evaluate_condition_recursive(
             evaluate_operator(op, resolved.as_ref(), value)
         }
 
-        // FIX: Empty 'all' array evaluates to true (vacuous truth in Rust's .all()).
-        // This is mathematically correct but almost certainly a configuration error.
-        // Log a warning to alert operators. Empty 'any' evaluates to false, also warn.
+        // MED-5: Empty 'all' array is a configuration error that should deny (return false).
+        // Previously this used vacuous truth (empty all = true) which is mathematically
+        // correct but dangerous in a security context - an empty condition could allow
+        // all requests. We now treat empty conditions as a denial for safety.
+        // Empty 'any' also returns false, which is the safer default.
         Condition::All { all } => {
             if all.is_empty() {
                 tracing::warn!(
-                    "Policy condition has empty 'all' array — this always matches (likely a configuration error)"
+                    "MED-5: Policy condition has empty 'all' array — treating as denial (false) for safety. \
+                     Empty conditions are likely a configuration error. Please add at least one condition."
                 );
+                return false; // Safe default: deny on empty condition
             }
             all.iter().all(|c| evaluate_condition_recursive(c, ctx, depth + 1))
         }
@@ -56,8 +60,10 @@ fn evaluate_condition_recursive(
         Condition::Any { any } => {
             if any.is_empty() {
                 tracing::warn!(
-                    "Policy condition has empty 'any' array — this never matches (likely a configuration error)"
+                    "MED-5: Policy condition has empty 'any' array — treating as denial (false) for safety. \
+                     Empty conditions are likely a configuration error. Please add at least one condition."
                 );
+                return false; // Safe default: deny on empty condition
             }
             any.iter().any(|c| evaluate_condition_recursive(c, ctx, depth + 1))
         }

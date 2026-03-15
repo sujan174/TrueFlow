@@ -22,6 +22,36 @@ pub(crate) use self::operators::{compile_cached_regex, glob_match};
 /// - `async_triggered` — async rules (rule.async_check=true) to run after responding
 /// - `shadow_violations` — shadow-mode matches (logged, not enforced)
 ///
+/// # Action Ordering and Priority (MED-6)
+///
+/// Actions are evaluated and collected in a specific order with the following rules:
+///
+/// 1. **Rule Order**: Rules are processed in the order they appear in each policy's `rules` array.
+///    Earlier rules are evaluated before later ones.
+///
+/// 2. **Action Order**: Within a single rule, actions in `then` are collected in the order
+///    specified. This matters when multiple actions modify the request (e.g., redact + route).
+///
+/// 3. **Policy Order**: Policies are processed in the order they appear in the `policies` array.
+///    Actions from multiple policies can accumulate.
+///
+/// 4. **Deny Short-Circuit**: When a `Deny` action is encountered, processing stops immediately
+///    after collecting that rule's actions. No further rules or policies are evaluated.
+///    This ensures deny is applied efficiently and prevents unnecessary processing.
+///
+/// 5. **Shadow Mode**: In shadow mode, actions are logged but not executed. All rules are
+///    evaluated (no short-circuit) to provide complete visibility.
+///
+/// ## Example Evaluation Order
+///
+/// ```text
+/// Policy A, Rule 1: [Redact, Route]  → collected
+/// Policy A, Rule 2: [Deny]            → collected, then short-circuit
+/// Policy B, Rule 1: [RateLimit]       → NOT evaluated (after deny)
+/// ```
+///
+/// The final action list would be: [Redact, Route, Deny]
+///
 /// HIGH-4: Short-circuits when a deny action is triggered to avoid processing
 /// unnecessary rules. This ensures deny is applied immediately and efficiently.
 pub fn evaluate_policies(
