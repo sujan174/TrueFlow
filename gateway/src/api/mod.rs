@@ -461,6 +461,18 @@ async fn admin_auth(
     // SEC-08: Refuse insecure default key in non-dev environments
     let insecure_default = expected_env_key == "CHANGE_ME_INSECURE_DEFAULT";
 
+    // MED-4: Warn if admin key has weak entropy (less than 32 chars)
+    // This is a security best practice - short keys are easier to brute force
+    let key_len = expected_env_key.trim().len();
+    if !empty_key && !insecure_default && key_len < 32 {
+        tracing::warn!(
+            key_len = key_len,
+            "MED-4: TRUEFLOW_ADMIN_KEY is shorter than recommended (32 chars). \
+             Consider using a longer key for better security. \
+             Generate with: openssl rand -hex 32"
+        );
+    }
+
     // Block SuperAdmin access if key is empty or insecure
     let superadmin_disabled = empty_key || insecure_default;
 

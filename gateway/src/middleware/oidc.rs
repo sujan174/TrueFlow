@@ -260,6 +260,7 @@ pub async fn discover(issuer_url: &str) -> anyhow::Result<OidcDiscovery> {
 
 /// Decode a JWT token (header only — for kid extraction).
 /// Returns the key ID (kid) from the JWT header.
+/// MED-3: Validates kid format to prevent injection attacks.
 pub fn extract_kid(token: &str) -> Option<String> {
     let parts: Vec<&str> = token.split('.').collect();
     if parts.len() != 3 {
@@ -271,7 +272,46 @@ pub fn extract_kid(token: &str) -> Option<String> {
     let engine = base64::engine::general_purpose::URL_SAFE_NO_PAD;
     let header_bytes = engine.decode(parts[0]).ok()?;
     let header: serde_json::Value = serde_json::from_slice(&header_bytes).ok()?;
-    header.get("kid").and_then(|v| v.as_str()).map(String::from)
+    let kid = header.get("kid").and_then(|v| v.as_str()).map(String::from)?;
+
+    // MED-3: Validate kid format - alphanumeric, dashes, underscores only, max 128 chars
+    // This prevents SQL injection, path traversal, and other injection attacks via kid
+    if kid.len() > 128 {
+        tracing::warn!(
+            kid_len = kid.len(),
+            "MED-3: JWT kid exceeds maximum length (128), rejecting"
+        );
+        return None;
+    }
+
+    // Allow alphanumeric, dashes, and underscores only
+    if !kid.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_') {
+        tracing::warn!(
+            kid = %kid,
+            "MED-3: JWT kid contains invalid characters, rejecting"
+        );
+        return None;
+    }
+
+    // Check for common injection patterns
+    let lower_kid = kid.to_lowercase();
+    let suspicious_patterns = [
+        "select ", "insert ", "update ", "delete ", "drop ", "union ",
+        "../", "..\\", "http://", "https://", "file://",
+        "<script", "javascript:", "onerror=", "onload=",
+    ];
+    for pattern in suspicious_patterns {
+        if lower_kid.contains(pattern) {
+            tracing::warn!(
+                kid = %kid,
+                pattern = pattern,
+                "MED-3: JWT kid contains suspicious pattern, rejecting"
+            );
+            return None;
+        }
+    }
+
+    Some(kid)
 }
 
 /// Extract the `alg` field from the JWT header.

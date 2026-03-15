@@ -50,7 +50,16 @@ pub async fn create_api_key(
         auth.role,
         crate::api::ApiKeyRole::SuperAdmin | crate::api::ApiKeyRole::Admin
     );
+    // MED-2: Reject "superadmin" role in API requests - only env var can grant this
     let target_is_admin = matches!(payload.role.as_str(), "admin" | "superadmin");
+    if payload.role.as_str() == "superadmin" {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(
+                json!({ "error": { "code": "invalid_role", "message": "The 'superadmin' role cannot be set via API. SuperAdmin access is only granted via the TRUEFLOW_ADMIN_KEY environment variable." } }),
+            ),
+        ));
+    }
     if target_is_admin && !caller_is_admin {
         return Err((
             StatusCode::FORBIDDEN,

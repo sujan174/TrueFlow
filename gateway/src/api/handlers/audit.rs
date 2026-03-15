@@ -76,7 +76,7 @@ pub async fn stream_audit_logs(
     Extension(auth): Extension<AuthContext>,
     Query(params): Query<PaginationParams>,
 ) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
-    // SEC: scope check (SSE handler can't return Result, so we filter silently on auth failure)
+    // MED-1: Check auth before streaming
     let has_scope = auth.require_scope("audit:read").is_ok();
     let project_id = params
         .project_id
@@ -86,24 +86,42 @@ pub async fn stream_audit_logs(
         .is_ok();
     let authorized = has_scope && project_ok;
 
+    // MED-1: Use an enum to track stream state - send error event then end if unauthorized
+    enum StreamState {
+        Unauthorized,      // Need to send error event
+        UnauthorizedDone,  // Error sent, end stream
+        Active,            // Normal operation
+    }
+
     let stream = stream::unfold(
         (
             state,
             project_id,
             None::<chrono::DateTime<chrono::Utc>>,
-            authorized,
+            if authorized { StreamState::Active } else { StreamState::Unauthorized },
         ),
-        |(state, project_id, last_seen, authorized)| async move {
+        |(state, project_id, last_seen, stream_state)| async move {
+            // MED-1: Handle unauthorized case - send single error event then end
+            match stream_state {
+                StreamState::Unauthorized => {
+                    let error_event = Event::default()
+                        .event("error")
+                        .data(r#"{"error": "unauthorized", "message": "Authentication failed or insufficient permissions"}"#);
+                    // Return error event and transition to done state
+                    return Some((
+                        Ok(error_event),
+                        (state, project_id, last_seen, StreamState::UnauthorizedDone),
+                    ));
+                }
+                StreamState::UnauthorizedDone => {
+                    // End the stream by returning None
+                    return None;
+                }
+                StreamState::Active => {}
+            }
+
             // Poll every 2 seconds
             tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-
-            // If not authorized, just send heartbeats (no data)
-            if !authorized {
-                return Some((
-                    Ok(Event::default().comment("heartbeat")),
-                    (state, project_id, last_seen, authorized),
-                ));
-            }
 
             let rows = state
                 .db
@@ -125,13 +143,13 @@ pub async fn stream_audit_logs(
                 // Send a heartbeat comment to keep connection alive
                 Some((
                     Ok(Event::default().comment("heartbeat")),
-                    (state, project_id, next_cursor, authorized),
+                    (state, project_id, next_cursor, StreamState::Active),
                 ))
             } else {
                 let data = serde_json::to_string(&new_rows).unwrap_or_default();
                 Some((
                     Ok(Event::default().data(data).event("audit")),
-                    (state, project_id, next_cursor, authorized),
+                    (state, project_id, next_cursor, StreamState::Active),
                 ))
             }
         },

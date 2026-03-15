@@ -6,6 +6,11 @@
 # Keep this separate from the shipping compose file.
 
 services:
+  # Enable test mode for gateway - allow localhost/private IPs for testing
+  gateway:
+    environment:
+      - TRUEFLOW_TEST_ALLOW_LOCAL_WEBHOOKS=1
+
   mock-upstream:
     build:
       context: ./tests/mock-upstream
