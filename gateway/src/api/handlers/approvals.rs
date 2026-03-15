@@ -66,6 +66,10 @@ pub async fn decide_approval(
     let project_id = params
         .project_id
         .unwrap_or_else(|| auth.default_project_id());
+
+    // SEC-09: Verify project ownership before making decision
+    verify_project_ownership(&state, auth.org_id, project_id).await?;
+
     tracing::info!(
         "decide_approval: properties id={}, project_id={}, status={:?}",
         id,

@@ -19,6 +19,35 @@ pub mod handlers;
 pub mod mcp_handlers;
 pub mod prompt_handlers;
 
+// ── Scope Checking ─────────────────────────────────────────────
+
+/// SEC-14: Check if a scope is granted by the user's scopes, supporting wildcards.
+/// - "*" grants all access
+/// - "resource:*" grants all actions on a resource
+/// - Exact match required otherwise
+fn check_scope_with_wildcards(granted_scopes: &[String], required_scope: &str) -> bool {
+    // Wildcard scope grants all access
+    if granted_scopes.iter().any(|s| s == "*") {
+        return true;
+    }
+
+    // Direct match
+    if granted_scopes.iter().any(|s| s == required_scope) {
+        return true;
+    }
+
+    // Resource wildcard (e.g., "tokens:*" matches "tokens:write")
+    let parts: Vec<&str> = required_scope.split(':').collect();
+    if parts.len() == 2 {
+        let resource_wildcard = format!("{}:*", parts[0]);
+        if granted_scopes.iter().any(|s| s == &resource_wildcard) {
+            return true;
+        }
+    }
+
+    false
+}
+
 // ── Auth Context ─────────────────────────────────────────────
 
 #[derive(Clone, Debug, PartialEq)]
@@ -41,18 +70,29 @@ pub struct AuthContext {
 
 impl AuthContext {
     /// Returns the default project ID for the current context.
-    /// For MVP, this is still the hardcoded default Project ID until meaningful project switching is added.
+    /// SEC-04: WARNING - This is a hardcoded default that breaks multi-tenancy isolation.
+    /// All users share the same default project, which may cause data leakage between orgs.
+    /// TODO: Implement proper project selection based on user context or request parameters.
     pub fn default_project_id(&self) -> Uuid {
+        // Log a warning about multi-tenancy limitation
+        tracing::warn!(
+            org_id = %self.org_id,
+            "SEC-04: Using hardcoded default_project_id - multi-tenancy not fully enforced"
+        );
         // In the future, this could be user.default_project_id or similar.
         // For now, we stick to the known default.
         Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap()
     }
 
     /// Check if the context has the required scope (or is SuperAdmin/Admin).
+    /// SEC-14: Supports wildcard scopes:
+    /// - "*" grants all access
+    /// - "resource:*" grants all actions on a resource (e.g., "tokens:*" matches "tokens:read", "tokens:write")
+    /// - Exact match (e.g., "tokens:read" only matches "tokens:read")
     pub fn has_scope(&self, scope: &str) -> bool {
         match self.role {
             ApiKeyRole::SuperAdmin | ApiKeyRole::Admin => true,
-            _ => self.scopes.iter().any(|s| s == scope),
+            _ => check_scope_with_wildcards(&self.scopes, scope),
         }
     }
 
@@ -74,9 +114,14 @@ impl AuthContext {
                 ApiKeyRole::SuperAdmin => Ok(()),
                 _ => Err(StatusCode::FORBIDDEN),
             },
-            _ => {
-                tracing::error!("Unknown role required: {}", role);
-                Err(StatusCode::INTERNAL_SERVER_ERROR)
+            // SEC-15: Return FORBIDDEN for unknown roles instead of INTERNAL_SERVER_ERROR
+            // Unknown roles are a client/access issue, not a server error
+            unknown => {
+                tracing::warn!(
+                    requested_role = unknown,
+                    "SEC-15: Unknown role string requested, returning FORBIDDEN"
+                );
+                Err(StatusCode::FORBIDDEN)
             }
         }
     }
@@ -392,8 +437,17 @@ async fn admin_auth(
         .or_else(|_| std::env::var("TRUEFLOW_MASTER_KEY"))
         .unwrap_or_else(|_| "CHANGE_ME_INSECURE_DEFAULT".to_string());
 
+    // SEC-06: Reject empty or whitespace-only admin key
+    let empty_key = expected_env_key.trim().is_empty();
+    if empty_key {
+        tracing::error!("SEC-06: TRUEFLOW_ADMIN_KEY is empty or whitespace-only - rejecting all SuperAdmin access");
+    }
+
     // SEC-08: Refuse insecure default key in non-dev environments
     let insecure_default = expected_env_key == "CHANGE_ME_INSECURE_DEFAULT";
+
+    // Block SuperAdmin access if key is empty or insecure
+    let superadmin_disabled = empty_key || insecure_default;
 
     // SEC-07: constant-time comparison for admin key
     // Uses SHA-256 to normalize both values to fixed length before comparison,
@@ -408,7 +462,7 @@ async fn admin_auth(
 
     // ── Path A: SuperAdmin (Env Key) ─────────────────────────────
     if let Some(k) = provided_key_header {
-        if !insecure_default && ct_eq(k, &expected_env_key) {
+        if !superadmin_disabled && ct_eq(k, &expected_env_key) {
             let ctx = AuthContext {
                 org_id: Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap(), // Default Org
                 user_id: None,
@@ -422,7 +476,7 @@ async fn admin_auth(
     }
 
     if let Some(k) = bearer_token {
-        if !insecure_default && ct_eq(k, &expected_env_key) {
+        if !superadmin_disabled && ct_eq(k, &expected_env_key) {
             let ctx = AuthContext {
                 org_id: Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap(),
                 user_id: None,
@@ -477,9 +531,19 @@ async fn admin_auth(
                         //         (JWKS fetch → signature verify → claims extract → RBAC map)
                         match oidc::validate_jwt(k, &provider).await {
                             Ok(auth_result) => {
-                                // Map OIDC role string → ApiKeyRole
+                                // SEC-01: Map OIDC role string → ApiKeyRole
+                                // IMPORTANT: OIDC can NEVER grant SuperAdmin role.
+                                // SuperAdmin is only available via environment admin key.
+                                // Any "superadmin" claim from OIDC is capped at Admin.
                                 let role = match auth_result.role.as_str() {
-                                    "superadmin" => ApiKeyRole::SuperAdmin,
+                                    "superadmin" => {
+                                        tracing::warn!(
+                                            user = %auth_result.user_id,
+                                            provider = %provider.name,
+                                            "SEC-01: OIDC attempted to grant SuperAdmin, capping at Admin"
+                                        );
+                                        ApiKeyRole::Admin // Cap at Admin - SuperAdmin not allowed via OIDC
+                                    }
                                     "admin" => ApiKeyRole::Admin,
                                     "member" => ApiKeyRole::Member,
                                     "readonly" => ApiKeyRole::ReadOnly,

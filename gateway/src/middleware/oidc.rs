@@ -112,8 +112,77 @@ static JWKS_CACHE: Lazy<DashMap<String, CachedJwks>> = Lazy::new(DashMap::new);
 
 const JWKS_CACHE_TTL_SECS: i64 = 3600; // 1 hour
 
+/// SEC-02: Validate OIDC URL to prevent SSRF attacks.
+/// Blocks private IPs, loopback, link-local, and cloud metadata endpoints.
+fn validate_oidc_url(url_str: &str) -> anyhow::Result<()> {
+    let parsed = url::Url::parse(url_str).map_err(|e| {
+        anyhow::anyhow!("SEC-02: Invalid OIDC URL '{}': {}", url_str, e)
+    })?;
+
+    // Must be HTTPS (allow HTTP only for localhost in development)
+    match parsed.scheme() {
+        "https" => {}
+        "http" => {
+            let host = parsed.host_str().unwrap_or("");
+            if host != "localhost" && host != "127.0.0.1" && host != "[::1]" {
+                return Err(anyhow::anyhow!(
+                    "SEC-02: OIDC URL must use HTTPS (got '{}')",
+                    url_str
+                ));
+            }
+        }
+        _ => {
+            return Err(anyhow::anyhow!(
+                "SEC-02: OIDC URL has unsupported scheme: {}",
+                parsed.scheme()
+            ));
+        }
+    }
+
+    // Block cloud metadata endpoints and known dangerous hosts
+    let host = parsed.host_str().unwrap_or("");
+    let blocked_hosts = [
+        "169.254.169.254",      // AWS/GCP/Azure metadata
+        "metadata.google.internal",
+        "metadata.internal",
+        "0.0.0.0",
+        "localhost",            // Block localhost for HTTPS (only allow via HTTP check above)
+    ];
+    if blocked_hosts.contains(&host) {
+        return Err(anyhow::anyhow!(
+            "SEC-02: OIDC URL targets blocked host '{}'",
+            host
+        ));
+    }
+
+    // Block private/reserved IP ranges
+    if let Ok(ip) = host.parse::<std::net::IpAddr>() {
+        let is_private = match ip {
+            std::net::IpAddr::V4(v4) => {
+                v4.is_loopback()
+                    || v4.is_private()
+                    || v4.is_link_local()
+                    || (v4.octets()[0] == 169 && v4.octets()[1] == 254) // link-local
+                    || v4.octets()[0] == 127 // loopback
+            }
+            std::net::IpAddr::V6(v6) => v6.is_loopback(),
+        };
+        if is_private {
+            return Err(anyhow::anyhow!(
+                "SEC-02: OIDC URL targets private/reserved IP '{}'",
+                ip
+            ));
+        }
+    }
+
+    Ok(())
+}
+
 /// Fetch JWKS keys for a provider, with caching.
 pub async fn get_jwks(jwks_uri: &str) -> anyhow::Result<Jwks> {
+    // SEC-02: Validate URL before fetching to prevent SSRF
+    validate_oidc_url(jwks_uri)?;
+
     // Check cache
     if let Some(cached) = JWKS_CACHE.get(jwks_uri) {
         let age = Utc::now() - cached.fetched_at;
@@ -138,12 +207,49 @@ pub async fn get_jwks(jwks_uri: &str) -> anyhow::Result<Jwks> {
     Ok(jwks)
 }
 
+/// SEC-12: Invalidate JWKS cache for a given URI.
+/// Called when signature verification fails to force a fresh key fetch on next attempt.
+pub fn invalidate_jwks_cache(jwks_uri: &str) {
+    if JWKS_CACHE.remove(jwks_uri).is_some() {
+        tracing::info!(jwks_uri = %jwks_uri, "SEC-12: Invalidated JWKS cache entry");
+    }
+}
+
+/// Fetch JWKS keys, bypassing the cache.
+/// SEC-12: Used when signature verification fails to force a fresh key fetch.
+pub async fn get_jwks_force_refresh(jwks_uri: &str) -> anyhow::Result<Jwks> {
+    // SEC-02: Validate URL before fetching to prevent SSRF
+    validate_oidc_url(jwks_uri)?;
+
+    // Invalidate cache first
+    invalidate_jwks_cache(jwks_uri);
+
+    // Fetch fresh
+    tracing::info!(jwks_uri = %jwks_uri, "SEC-12: Force-refreshing JWKS keys");
+    let resp = reqwest::get(jwks_uri).await?;
+    let jwks: Jwks = resp.json().await?;
+
+    JWKS_CACHE.insert(
+        jwks_uri.to_string(),
+        CachedJwks {
+            jwks: jwks.clone(),
+            fetched_at: Utc::now(),
+        },
+    );
+
+    Ok(jwks)
+}
+
 /// Discover OIDC configuration from issuer URL.
 pub async fn discover(issuer_url: &str) -> anyhow::Result<OidcDiscovery> {
     let url = format!(
         "{}/.well-known/openid-configuration",
         issuer_url.trim_end_matches('/')
     );
+
+    // SEC-02: Validate URL before fetching to prevent SSRF
+    validate_oidc_url(&url)?;
+
     tracing::info!(url = %url, "OIDC discovery");
     let resp = reqwest::get(&url).await?;
     let discovery: OidcDiscovery = resp.json().await?;
@@ -230,6 +336,7 @@ fn alg_from_str(alg: &str) -> anyhow::Result<jsonwebtoken::Algorithm> {
 /// then extract and validate claims (exp, iss, aud).
 ///
 /// This is the **primary entry point** for secure JWT validation.
+/// SEC-12: Implements cache invalidation on signature failure to support key rotation.
 pub async fn verify_jwt_signature(
     token: &str,
     provider: &OidcProvider,
@@ -243,51 +350,99 @@ pub async fn verify_jwt_signature(
         }
     };
 
-    // 2. Get (cached) JWKS
-    let jwks = get_jwks(&jwks_uri).await?;
-
-    // 3. Extract kid + alg from JWT header
+    // 2. Extract kid + alg from JWT header (needed for key selection)
     let kid = extract_kid(token);
     let alg_str =
         extract_alg(token).ok_or_else(|| anyhow::anyhow!("JWT header missing 'alg' field"))?;
     let algorithm = alg_from_str(&alg_str)?;
 
-    // 4. Find the matching JWK
-    let jwk = if let Some(ref kid_val) = kid {
-        jwks.keys
-            .iter()
-            .find(|k| k.kid.as_deref() == Some(kid_val))
-            .ok_or_else(|| anyhow::anyhow!("No JWK found with kid='{}'", kid_val))?
-    } else {
-        // No kid in header — use the first key that matches the algorithm & use=sig
-        jwks.keys
-            .iter()
-            .find(|k| {
-                k.key_use.as_deref() != Some("enc") && k.alg.as_deref().is_none_or(|a| a == alg_str)
-            })
-            .ok_or_else(|| anyhow::anyhow!("No suitable JWK found in JWKS"))?
-    };
+    // SEC-11: Require exact kid match - no fallback to first key
+    let kid_val = kid.as_ref().ok_or_else(|| {
+        anyhow::anyhow!("SEC-11: JWT header missing 'kid' field - key selection requires explicit key ID")
+    })?;
 
-    // 5. Build DecodingKey
+    // 3. First attempt: use cached JWKS
+    let jwks = get_jwks(&jwks_uri).await?;
+
+    match verify_with_jwks(token, provider, &jwks, kid_val, algorithm).await {
+        Ok(claims) => Ok(claims),
+        Err(e) => {
+            // SEC-12: Signature verification failed - try with fresh keys
+            // This handles key rotation where the IdP has new keys we haven't cached yet
+            tracing::warn!(
+                error = %e,
+                jwks_uri = %jwks_uri,
+                "SEC-12: JWT verification failed with cached keys, attempting cache refresh"
+            );
+
+            // Force refresh JWKS
+            let fresh_jwks = get_jwks_force_refresh(&jwks_uri).await?;
+
+            match verify_with_jwks(token, provider, &fresh_jwks, kid_val, algorithm).await {
+                Ok(claims) => {
+                    tracing::info!(
+                        jwks_uri = %jwks_uri,
+                        "SEC-12: JWT verification succeeded after cache refresh"
+                    );
+                    Ok(claims)
+                }
+                Err(refresh_error) => {
+                    // Still failed after refresh - return the original error with context
+                    Err(anyhow::anyhow!(
+                        "JWT verification failed even after cache refresh: {} (original: {})",
+                        refresh_error, e
+                    ))
+                }
+            }
+        }
+    }
+}
+
+/// Helper function to verify JWT with specific JWKS
+async fn verify_with_jwks(
+    token: &str,
+    provider: &OidcProvider,
+    jwks: &Jwks,
+    kid_val: &str,
+    algorithm: jsonwebtoken::Algorithm,
+) -> anyhow::Result<OidcClaims> {
+    // Find the matching JWK
+    let jwk = jwks
+        .keys
+        .iter()
+        .find(|k| k.kid.as_deref() == Some(kid_val))
+        .ok_or_else(|| anyhow::anyhow!("SEC-11: No JWK found with kid='{}'", kid_val))?;
+
+    // Build DecodingKey
     let decoding_key = decoding_key_from_jwk(jwk)?;
 
-    // 6. Build Validation
+    // Build Validation
     let mut validation = jsonwebtoken::Validation::new(algorithm);
     validation.set_issuer(&[&provider.issuer_url]);
     if let Some(ref aud) = provider.audience {
         validation.set_audience(&[aud]);
     } else {
+        // SEC-08: Audience validation is disabled - this is a security risk
+        // Tokens issued for other clients could be accepted
+        tracing::warn!(
+            provider_id = %provider.id,
+            issuer = %provider.issuer_url,
+            "SEC-08: OIDC provider has no audience configured - audience validation DISABLED. \
+             This allows potential token replay attacks. Set 'audience' in provider config."
+        );
         validation.validate_aud = false;
     }
     validation.validate_exp = true;
 
-    // 7. Decode + verify
+    // Decode + verify
     let token_data = jsonwebtoken::decode::<serde_json::Value>(token, &decoding_key, &validation)
         .map_err(|e| anyhow::anyhow!("JWT signature verification failed: {}", e))?;
 
-    let raw = token_data.claims;
+    extract_claims_from_token(token_data.claims)
+}
 
-    // 8. Extract standard claims
+/// Extract standard claims from a decoded JWT payload.
+fn extract_claims_from_token(raw: serde_json::Value) -> anyhow::Result<OidcClaims> {
     let sub = raw
         .get("sub")
         .and_then(|v| v.as_str())
@@ -387,13 +542,42 @@ pub fn map_claims_to_rbac(claims: &OidcClaims, provider: &OidcProvider) -> OidcA
     let mapping = &provider.claim_mapping;
 
     // Extract role from mapped claim, fall back to provider default
-    let role = mapping
+    let raw_role = mapping
         .get("role")
         .and_then(|v| v.as_str())
         .and_then(|claim_path| claims.raw.get(claim_path))
         .and_then(|v| v.as_str())
-        .unwrap_or(&provider.default_role)
-        .to_string();
+        .unwrap_or(&provider.default_role);
+
+    // SEC-07: Sanitize role to prevent injection attacks
+    // Only allow known valid role values. "superadmin" is capped to "admin"
+    // because SuperAdmin should only come from environment key, not OIDC.
+    let role = match raw_role.to_lowercase().as_str() {
+        "superadmin" => {
+            tracing::warn!(
+                sub = %claims.sub,
+                "SEC-07: OIDC claim attempted 'superadmin' role, capping at 'admin'"
+            );
+            "admin".to_string()
+        }
+        "admin" => "admin".to_string(),
+        "member" => "member".to_string(),
+        "readonly" | "viewer" | "read_only" | "read-only" => "readonly".to_string(),
+        _ => {
+            tracing::warn!(
+                sub = %claims.sub,
+                raw_role = %raw_role,
+                "SEC-07: OIDC claim had invalid role, falling back to provider default"
+            );
+            // Fall back to provider default, also sanitize it
+            match provider.default_role.to_lowercase().as_str() {
+                "admin" => "admin".to_string(),
+                "member" => "member".to_string(),
+                "readonly" | "viewer" => "readonly".to_string(),
+                _ => "readonly".to_string(), // Safe default
+            }
+        }
+    };
 
     // Extract scopes from mapped claim, fall back to provider defaults
     let scopes = mapping
@@ -527,7 +711,8 @@ mod tests {
         let claims = decode_claims(&token).unwrap();
         let result = map_claims_to_rbac(&claims, &provider);
 
-        assert_eq!(result.role, "viewer"); // default
+        // SEC-07: "viewer" is normalized to "readonly"
+        assert_eq!(result.role, "readonly"); // default (normalized from "viewer")
         assert_eq!(result.scopes, vec!["audit:read"]); // default
     }
 

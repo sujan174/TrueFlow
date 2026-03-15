@@ -16,6 +16,9 @@ mod tokens;
 pub mod types;
 mod usage;
 
+// SEC-10: Export LastAdminError for use in API handlers
+pub use api_keys::LastAdminError;
+
 #[cfg(test)]
 mod tests;
 
