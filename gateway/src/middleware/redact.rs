@@ -24,14 +24,39 @@ static EMAIL_RE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"(?i)[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}").unwrap());
 
 static SSN_RE: Lazy<Regex> = Lazy::new(|| {
-    // SEC 3C-4 FIX: Match both common SSN formats:
-    //   Format 1: 123-45-6789 (dashed — standard)
-    //   Format 2: 123456789   (9 contiguous digits — common in raw exports, forms, databases)
-    // NOTE: The Rust `regex` crate does not support lookaheads, so the no-dash
-    // alternative is a plain \b\d{9}\b. This will produce more false positives
-    // than a lookahead-validated pattern, but the dashed format is the primary match.
-    Regex::new(r"\b\d{3}-\d{2}-\d{4}\b|\b\d{9}\b").unwrap()
+    // MED-14: Only match the dashed SSN format (XXX-XX-XXXX).
+    // The undashed format (\d{9}) was removed because it produces too many false positives
+    // (phone numbers, account IDs, timestamps, random 9-digit numbers).
+    // The dashed format is the standard SSN representation and provides high accuracy.
+    // If you need to detect undashed SSNs, enable TRUEFLOW_REDACT_UNDASHED_SSN=1
+    // but be aware this will significantly increase false positives.
+    Regex::new(r"\b\d{3}-\d{2}-\d{4}\b").unwrap()
 });
+
+/// MED-15: Luhn algorithm for credit card validation.
+/// Returns true if the number passes the Luhn checksum.
+/// This helps reduce false positives from random 15-16 digit numbers.
+fn luhn_check(digits: &str) -> bool {
+    let digits: Vec<u32> = digits.chars().filter_map(|c| c.to_digit(10)).collect();
+    if digits.len() < 13 || digits.len() > 19 {
+        return false;
+    }
+
+    let mut sum = 0;
+    let mut alternate = false;
+    for &d in digits.iter().rev() {
+        let mut n = d;
+        if alternate {
+            n *= 2;
+            if n > 9 {
+                n -= 9;
+            }
+        }
+        sum += n;
+        alternate = !alternate;
+    }
+    sum % 10 == 0
+}
 
 static CREDIT_CARD_RE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"\b(?:\d{4}[ -]){3}\d{1,7}\b|\b\d{15,16}\b").unwrap());
@@ -225,14 +250,35 @@ fn compile_patterns(patterns: &[String]) -> Vec<(Regex, String, String)> {
 }
 
 /// Recursively walk a JSON value and apply pattern-based redaction to strings.
+/// MED-15: For credit card patterns, applies Luhn validation to reduce false positives.
 fn redact_value(v: &mut Value, patterns: &[(Regex, String, String)], matched: &mut Vec<String>) {
     match v {
         Value::String(s) => {
             for (re, replacement, name) in patterns {
                 if re.is_match(s) {
-                    *s = re.replace_all(s, replacement.as_str()).to_string();
-                    if !matched.contains(name) {
-                        matched.push(name.clone());
+                    // MED-15: For credit card patterns, validate with Luhn algorithm
+                    // to reduce false positives from random 15-16 digit numbers
+                    if name == "credit_card" {
+                        let mut modified = false;
+                        *s = re.replace_all(s, |caps: &regex::Captures| {
+                            let matched = caps.get(0).unwrap().as_str();
+                            // Extract digits only for Luhn check
+                            let digits: String = matched.chars().filter(|c| c.is_ascii_digit()).collect();
+                            if luhn_check(&digits) {
+                                modified = true;
+                                replacement.clone()
+                            } else {
+                                matched.to_string() // Keep original if Luhn fails
+                            }
+                        }).to_string();
+                        if modified && !matched.contains(name) {
+                            matched.push(name.clone());
+                        }
+                    } else {
+                        *s = re.replace_all(s, replacement.as_str()).to_string();
+                        if !matched.contains(name) {
+                            matched.push(name.clone());
+                        }
                     }
                 }
             }
