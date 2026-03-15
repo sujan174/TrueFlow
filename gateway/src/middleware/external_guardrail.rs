@@ -44,6 +44,9 @@ pub fn guardrail_timeout() -> Duration {
 /// Wraps [`check`] in a [`tokio::time::timeout`]. On expiry, returns
 /// `Err("external_guardrail timed out after Xs")` — the caller decides
 /// whether to fail-open or fail-closed based on the policy's `on_fail` field.
+///
+/// MED-13: Validates threshold is in range [0.0, 1.0]. Values outside this range
+/// are clamped and a warning is logged, as they indicate a policy misconfiguration.
 pub async fn check_with_timeout(
     vendor: &ExternalVendor,
     endpoint: &str,
@@ -51,6 +54,20 @@ pub async fn check_with_timeout(
     threshold: f32,
     text: &str,
 ) -> Result<ExternalGuardrailResult, String> {
+    // MED-13: Validate and clamp threshold to valid range
+    let threshold = if threshold < 0.0 || threshold > 1.0 {
+        let clamped = threshold.clamp(0.0, 1.0);
+        tracing::warn!(
+            vendor = ?vendor,
+            original_threshold = threshold,
+            clamped_threshold = clamped,
+            "MED-13: ExternalGuardrail threshold out of range [0.0, 1.0], clamping to valid value"
+        );
+        clamped
+    } else {
+        threshold
+    };
+
     let timeout = guardrail_timeout();
     tokio::time::timeout(
         timeout,

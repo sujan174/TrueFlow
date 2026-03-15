@@ -32,6 +32,10 @@ macro_rules! spawn_logged {
     }};
 }
 
+/// MED-12: Maximum residual buffer size (4KB) to prevent unbounded memory growth.
+/// This prevents malicious or corrupted streams from consuming excessive memory.
+const MAX_UTF8_RESIDUAL_SIZE: usize = 4 * 1024;
+
 /// A shared slot that will be populated with the stream result once the
 /// SSE stream completes. The background task writes to this; the caller
 /// can await it after the response has been sent to the client.
@@ -74,6 +78,7 @@ pub fn tee_sse_stream(
         // B3-2 FIX: Buffer for incomplete UTF-8 sequences split across TCP chunks.
         // SSE is text-based, so a multi-byte char can be sliced at a chunk boundary.
         // We hold trailing incomplete bytes and prepend them to the next chunk.
+        // MED-12: Limit residual buffer size to prevent unbounded memory growth.
         let mut utf8_residual: Vec<u8> = Vec::new();
 
         while let Some(chunk_result) = byte_stream.next().await {
@@ -111,7 +116,19 @@ pub fn tee_sse_stream(
                             (s, &combined[valid_up_to..])
                         }
                     };
-                    utf8_residual = leftover.to_vec();
+                    // MED-12: Check residual buffer size to prevent unbounded growth
+                    if leftover.len() > MAX_UTF8_RESIDUAL_SIZE {
+                        tracing::warn!(
+                            residual_size = leftover.len(),
+                            max_size = MAX_UTF8_RESIDUAL_SIZE,
+                            "MED-12: UTF-8 residual buffer overflow, truncating. \
+                             This may indicate a corrupted or malicious stream."
+                        );
+                        // Truncate to max size to prevent memory exhaustion
+                        utf8_residual = leftover[..MAX_UTF8_RESIDUAL_SIZE].to_vec();
+                    } else {
+                        utf8_residual = leftover.to_vec();
+                    }
 
                     // Feed each SSE line to the accumulator
                     let mut done = false;
@@ -272,7 +289,18 @@ where
                             (&combined[..valid_up_to], &combined[valid_up_to..])
                         }
                     };
-                    utf8_residual = leftover.to_vec();
+                    // MED-12: Check residual buffer size to prevent unbounded growth
+                    if leftover.len() > MAX_UTF8_RESIDUAL_SIZE {
+                        tracing::warn!(
+                            residual_size = leftover.len(),
+                            max_size = MAX_UTF8_RESIDUAL_SIZE,
+                            "MED-12: UTF-8 residual buffer overflow, truncating (translated stream). \
+                             This may indicate a corrupted or malicious stream."
+                        );
+                        utf8_residual = leftover[..MAX_UTF8_RESIDUAL_SIZE].to_vec();
+                    } else {
+                        utf8_residual = leftover.to_vec();
+                    }
 
                     if valid_bytes.is_empty() {
                         drop(acc_guard);
