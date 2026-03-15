@@ -196,14 +196,18 @@ impl PgStore {
     pub async fn list_policy_versions(
         &self,
         policy_id: Uuid,
+        project_id: Uuid,
     ) -> anyhow::Result<Vec<PolicyVersionRow>> {
+        // SEC-03: Join with policies table to enforce project isolation
         let rows = sqlx::query_as::<_, PolicyVersionRow>(
-            r#"SELECT id, policy_id, version, name, mode, phase, rules, retry, changed_by, created_at
-               FROM policy_versions
-               WHERE policy_id = $1
-               ORDER BY version DESC"#,
+            r#"SELECT pv.id, pv.policy_id, pv.version, pv.name, pv.mode, pv.phase, pv.rules, pv.retry, pv.changed_by, pv.created_at
+               FROM policy_versions pv
+               JOIN policies p ON pv.policy_id = p.id
+               WHERE pv.policy_id = $1 AND p.project_id = $2
+               ORDER BY pv.version DESC"#,
         )
         .bind(policy_id)
+        .bind(project_id)
         .fetch_all(&self.pool)
         .await?;
         Ok(rows)

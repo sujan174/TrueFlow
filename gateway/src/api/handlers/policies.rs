@@ -220,7 +220,11 @@ pub async fn list_policy_versions(
         .map_err(|_| StatusCode::FORBIDDEN)?;
     let id = Uuid::parse_str(&id_str).map_err(|_| StatusCode::BAD_REQUEST)?;
 
-    let versions = state.db.list_policy_versions(id).await.map_err(|e| {
+    // SEC-03: Enforce project isolation
+    let project_id = auth.default_project_id();
+    verify_project_ownership(&state, auth.org_id, project_id).await?;
+
+    let versions = state.db.list_policy_versions(id, project_id).await.map_err(|e| {
         tracing::error!("list_policy_versions failed: {}", e);
         StatusCode::INTERNAL_SERVER_ERROR
     })?;

@@ -10,6 +10,7 @@ use uuid::Uuid;
 
 use super::dtos::{CreateApiKeyRequest, CreateApiKeyResponse, WhoAmIResponse};
 use crate::api::AuthContext;
+use crate::store::postgres::LastAdminError;
 use crate::store::postgres::ApiKeyRow;
 use crate::AppState;
 
@@ -120,37 +121,27 @@ pub async fn revoke_api_key(
         (StatusCode::FORBIDDEN, Json(json!({ "error": { "code": "forbidden", "message": "Insufficient permissions: requires scope 'keys:manage'" } })))
     })?;
 
-    // P1.11: Last admin key guard — prevent revoking the last admin key
-    let all_keys = state.db.list_api_keys(auth.org_id).await.map_err(|e| {
-        tracing::error!("revoke_api_key: list_api_keys failed: {}", e);
-        (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": { "code": "internal_server_error", "message": "Failed to check admin key count" } })))
-    })?;
-    let admin_keys: Vec<_> = all_keys
-        .iter()
-        .filter(|k| k.role == "admin" && k.is_active)
-        .collect();
-    let is_revoking_admin = admin_keys.iter().any(|k| k.id == id);
-    if is_revoking_admin && admin_keys.len() <= 1 {
-        return Err((
+    // SEC-10: Use atomic revocation to prevent TOCTOU race condition
+    // This replaces the previous separate check-and-revoke pattern
+    match state.db.revoke_api_key_atomic(id, auth.org_id).await {
+        Ok(Ok(true)) => Ok(StatusCode::NO_CONTENT),
+        Ok(Ok(false)) => Err((
+            StatusCode::NOT_FOUND,
+            Json(json!({ "error": { "code": "not_found", "message": "API key not found" } })),
+        )),
+        Ok(Err(LastAdminError)) => Err((
             StatusCode::UNPROCESSABLE_ENTITY,
             Json(
                 json!({ "error": { "code": "last_admin_key", "message": "Cannot revoke the last admin key. Create another admin key first to avoid losing access." } }),
             ),
-        ));
-    }
-
-    let found = state.db.revoke_api_key(id, auth.org_id).await.map_err(|e| {
-        tracing::error!("revoke_api_key failed: {}", e);
-        (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": { "code": "internal_server_error", "message": "Failed to revoke API key" } })))
-    })?;
-
-    if found {
-        Ok(StatusCode::NO_CONTENT)
-    } else {
-        Err((
-            StatusCode::NOT_FOUND,
-            Json(json!({ "error": { "code": "not_found", "message": "API key not found" } })),
-        ))
+        )),
+        Err(e) => {
+            tracing::error!("revoke_api_key failed: {}", e);
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": { "code": "internal_server_error", "message": "Failed to revoke API key" } }))
+            ))
+        }
     }
 }
 

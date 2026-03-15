@@ -7,8 +7,9 @@ use crate::api::AuthContext;
 use crate::AppState;
 
 /// Verify that `project_id` belongs to `org_id`.
-/// Returns `Err(FORBIDDEN)` if the project doesn't belong to the org,
-/// or `Err(INTERNAL_SERVER_ERROR)` on DB failure.
+/// SEC-05: Returns `Err(NOT_FOUND)` instead of FORBIDDEN to prevent ID enumeration attacks.
+/// Attackers should not be able to distinguish between "project doesn't exist" and
+/// "project belongs to another org" - both cases should return NOT_FOUND.
 pub async fn verify_project_ownership(
     state: &crate::AppState,
     org_id: Uuid,
@@ -26,9 +27,10 @@ pub async fn verify_project_ownership(
         tracing::warn!(
             org_id = %org_id,
             project_id = %project_id,
-            "project isolation: project does not belong to org"
+            "SEC-05: project isolation - project not found or does not belong to org"
         );
-        return Err(StatusCode::FORBIDDEN);
+        // Return NOT_FOUND to prevent ID enumeration attacks
+        return Err(StatusCode::NOT_FOUND);
     }
     Ok(())
 }
