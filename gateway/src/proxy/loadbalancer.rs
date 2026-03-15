@@ -30,6 +30,23 @@ fn default_priority() -> u32 {
 
 /// Per-token circuit breaker configuration.
 /// Stored as JSONB on the `tokens` table. Missing fields use defaults.
+///
+/// # HIGH-9: Half-Open State Race Condition Limitation
+///
+/// The circuit breaker uses atomic operations (`AtomicU32`) to manage the half-open
+/// state counter, which prevents races **within a single gateway instance**. However,
+/// in a multi-instance deployment, the in-memory state is not shared:
+///
+/// - Instance A allows request through half-open window
+/// - Instance B also allows request through (has its own counter)
+/// - Total requests may exceed `half_open_max_requests` across instances
+///
+/// **Mitigation:** For distributed coordination, use Redis-based health tracking
+/// (enabled via `LoadBalancer::with_redis()`). This provides shared failure counters
+/// but the half-open probe limit remains instance-local.
+///
+/// **Recommendation:** Set `half_open_max_requests` conservatively (e.g., 1-3) and
+/// use health check endpoints to validate recovery before resuming full traffic.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CircuitBreakerConfig {
     /// Master toggle — when false, all health checks are skipped (simple round-robin).

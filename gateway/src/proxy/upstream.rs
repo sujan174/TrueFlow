@@ -41,7 +41,11 @@ impl UpstreamClient {
 
     /// Forward a request and return the raw response without consuming the body.
     /// Used for streaming (SSE) requests where we want to pipe bytes directly
-    /// to the client. Does NOT retry — SSE streams are not idempotent.
+    /// to the client.
+    ///
+    /// HIGH-8: Retries ONCE for connection-level failures (before any bytes received).
+    /// SSE streams are not idempotent once data starts flowing, but connection
+    /// failures before any data is received are safe to retry.
     pub async fn forward_raw(
         &self,
         method: reqwest::Method,
@@ -49,15 +53,45 @@ impl UpstreamClient {
         headers: reqwest::header::HeaderMap,
         body: bytes::Bytes,
     ) -> Result<reqwest::Response, crate::errors::AppError> {
-        self.client
-            .request(method, url)
-            .headers(headers)
-            .body(body)
-            .send()
-            .await
-            .map_err(|e| {
-                tracing::warn!("Upstream streaming request failed: {}", e);
-                crate::errors::AppError::Upstream(e.to_string())
-            })
+        // HIGH-8: Single retry for connection-level failures
+        for attempt in 0..2 {
+            match self
+                .client
+                .request(method.clone(), url)
+                .headers(headers.clone())
+                .body(body.clone())
+                .send()
+                .await
+            {
+                Ok(response) => return Ok(response),
+                Err(e) => {
+                    // Only retry on connection-level errors (no bytes received)
+                    // These are safe to retry because the server never started processing
+                    let error_str = e.to_string();
+                    let is_connection_error = e.is_connect()
+                        || e.is_timeout()
+                        || error_str.contains("connection reset")
+                        || error_str.contains("broken pipe");
+
+                    if attempt == 0 && is_connection_error {
+                        tracing::warn!(
+                            error = %error_str,
+                            attempt = attempt + 1,
+                            "HIGH-8: Connection-level failure for streaming request, retrying once"
+                        );
+                        // Small delay before retry
+                        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                        continue;
+                    }
+                    tracing::warn!("Upstream streaming request failed: {}", error_str);
+                    return Err(crate::errors::AppError::Upstream(error_str));
+                }
+            }
+        }
+
+        // Should not reach here
+        Err(crate::errors::AppError::Upstream(
+            "unexpected retry loop exit".to_string(),
+        ))
     }
 }

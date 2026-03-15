@@ -125,13 +125,15 @@ pub fn detect_provider(model: &str, upstream_url: &str) -> Provider {
                     return Provider::TogetherAI;
                 }
             }
-            // 'o' → o1-* / o3-* / o4-*
+            // 'o' → o1-* / o3-* / o4-* (HIGH-7: explicit prefix check to avoid false positives)
             b'o' => {
-                if model.len() >= 2 {
-                    let second = model.as_bytes()[1].to_ascii_lowercase();
-                    if matches!(second, b'1' | b'3' | b'4') {
-                        return Provider::OpenAI;
-                    }
+                // Use explicit prefix check to avoid matching other models that happen
+                // to start with 'o' followed by '1', '3', or '4'
+                if starts_with_ignore_ascii_case(model, "o1-")
+                    || starts_with_ignore_ascii_case(model, "o3-")
+                    || starts_with_ignore_ascii_case(model, "o4-")
+                {
+                    return Provider::OpenAI;
                 }
             }
             // 'q' → Qwen/* (Together)
