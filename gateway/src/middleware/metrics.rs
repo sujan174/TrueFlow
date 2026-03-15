@@ -18,6 +18,18 @@ const MAX_CARDINALITY: usize = 10_000;
 /// Tracks unique model names seen so far (cardinality guard).
 static SEEN_MODELS: Lazy<DashSet<String>> = Lazy::new(DashSet::new);
 
+/// HIGH-6: Counter for DB spend persistence failures (fire-and-forget spawns)
+static DB_SPEND_PERSIST_FAILURES: Lazy<prometheus::CounterVec> = Lazy::new(|| {
+    prometheus::register_counter_vec!(
+        opts!(
+            "trueflow_db_spend_persist_failures_total",
+            "Total failed DB spend persistence attempts"
+        ),
+        &["period"]
+    )
+    .expect("failed to register trueflow_db_spend_persist_failures_total")
+});
+
 /// Prometheus metrics recorder.
 /// All metrics are registered in the global default registry.
 pub struct PrometheusRecorder {
@@ -196,6 +208,14 @@ pub fn encode_metrics() -> String {
         .encode(&metric_families, &mut buffer)
         .unwrap_or_default();
     String::from_utf8(buffer).unwrap_or_default()
+}
+
+/// HIGH-6: Record a DB spend persistence failure.
+/// Called from fire-and-forget spawns in spend.rs.
+pub fn record_db_spend_persist_failure(period: &str) {
+    DB_SPEND_PERSIST_FAILURES
+        .with_label_values(&[period])
+        .inc();
 }
 
 // ── Tests ─────────────────────────────────────────────────────

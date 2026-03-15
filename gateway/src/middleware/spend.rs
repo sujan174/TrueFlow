@@ -37,6 +37,26 @@ pub struct SpendStatus {
 /// against the caps stored in the `spend_caps` DB table.
 ///
 /// Returns `Err` with a human-readable message if any cap is exceeded.
+///
+/// # HIGH-5: TOCTOU Race Condition Advisory
+///
+/// This is a **pre-flight check** that runs before the request is sent to the
+/// upstream provider. The actual cost is not known until after the response
+/// is received. There is an inherent Time-Of-Check-Time-Of-Use (TOCTOU) race:
+///
+/// 1. Request A checks spend: $9.50/$10 cap → allowed
+/// 2. Request B checks spend: $9.50/$10 cap → allowed
+/// 3. Both requests complete, actual spend becomes $12.00 → cap exceeded
+///
+/// **This is advisory-only.** The true enforcement happens in
+/// `check_and_increment_spend` after the response is received and the cost
+/// is known. We mitigate by:
+/// - Using a 95% headroom factor in pre-flight checks
+/// - Atomic Lua scripts for post-response enforcement
+/// - Allowing requests to complete even if cap is slightly exceeded
+///
+/// For strict enforcement, consider using a mutex/lock per token, but this
+/// would significantly impact throughput.
 #[tracing::instrument(skip(cache, db))]
 pub async fn check_spend_cap(cache: &TieredCache, db: &sqlx::PgPool, token_id: &str) -> Result<()> {
     // Load caps (Redis-cached, 5D-4 FIX)
@@ -522,6 +542,7 @@ pub async fn check_and_increment_spend(
     }
 
     // DB persistence (fire-and-forget, same as track_spend)
+    // HIGH-6: Emit metric on failure for observability
     let tid = token_id.to_string();
     let pool = db.clone();
     let cost_decimal =
@@ -530,6 +551,8 @@ pub async fn check_and_increment_spend(
         for period in &["daily", "monthly", "lifetime"] {
             if let Err(e) = update_db_spend(&pool, &tid, period, cost_decimal).await {
                 error!("Failed to persist {} spend to DB: {}", period, e);
+                // HIGH-6: Emit metric for observability
+                crate::middleware::metrics::record_db_spend_persist_failure(period);
             }
         }
     });
@@ -647,6 +670,7 @@ pub async fn track_spend(
     }
 
     // BUG-01 fix: DB Persistence for BOTH daily AND monthly (async spawn)
+    // HIGH-6: Emit metric on failure for observability
     let tid = token_id.to_string();
     let pool = db.clone();
     let cost_clone = cost;
@@ -655,6 +679,8 @@ pub async fn track_spend(
         for period in &["daily", "monthly"] {
             if let Err(e) = update_db_spend(&pool, &tid, period, cost_clone).await {
                 error!("Failed to persist {} spend to DB: {}", period, e);
+                // HIGH-6: Emit metric for observability
+                crate::middleware::metrics::record_db_spend_persist_failure(period);
             }
         }
     });
