@@ -1,15 +1,39 @@
 use crate::cache::TieredCache;
 use anyhow::{Context, Result};
 use chrono::{Datelike, Utc};
+use dashmap::DashMap;
+use once_cell::sync::Lazy;
 use redis::AsyncCommands;
 use rust_decimal::prelude::ToPrimitive;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+use tokio::sync::Mutex;
 use tracing::{error, info};
+
+// MED-8: Single-flight pattern for cache miss coalescing
+// Prevents thundering herd when multiple concurrent requests miss the cache
+// for the same token_id. Uses DashMap to track in-flight requests.
+static INFLIGHT_SPEND_CAPS: Lazy<DashMap<String, Arc<Mutex<()>>>> = Lazy::new(DashMap::new);
 
 // ── Spend Cap Config ──────────────────────────────────────────
 
 /// Spend cap configuration for a token (loaded from DB).
+///
+/// MED-7: Note on floating-point precision for USD amounts.
+/// We use `f64` for simplicity and performance, but be aware that floating-point
+/// arithmetic can have precision errors for very large or very small amounts.
+/// For typical spend cap values (up to millions of dollars), precision is adequate
+/// (about 15-16 significant digits).
+///
+/// **Recommendation for future**: Store amounts as integer cents (u64) to avoid
+/// any precision issues entirely. This would require:
+/// 1. Changing the DB schema to use integer columns
+/// 2. Multiplying by 100 when reading/writing
+/// 3. Dividing by 100 when displaying to users
+///
+/// Current precision is acceptable for the use case, but if you need exact
+/// arithmetic (e.g., for financial reporting), consider migrating to cents.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SpendCap {
     pub daily_limit_usd: Option<f64>,
@@ -598,6 +622,10 @@ async fn load_spend_caps(db: &sqlx::PgPool, token_id: &str) -> Result<SpendCap> 
 /// 5D-4 FIX: Redis-cached variant of `load_spend_caps` for hot-path use.
 /// Caches serialized SpendCap in Redis for 60 seconds to avoid a DB
 /// round-trip on every `check_and_increment_spend` call.
+///
+/// MED-8: Implements single-flight pattern to coalesce concurrent cache misses.
+/// When multiple requests for the same token_id miss the cache simultaneously,
+/// only one will query the database while others wait for the result.
 async fn load_spend_caps_cached(
     cache: &TieredCache,
     db: &sqlx::PgPool,
@@ -607,6 +635,22 @@ async fn load_spend_caps_cached(
     let mut conn = cache.redis();
 
     // Try Redis first
+    if let Ok(Some(cached)) = conn.get::<_, Option<String>>(&cache_key).await {
+        if let Ok(caps) = serde_json::from_str::<SpendCap>(&cached) {
+            return Ok(caps);
+        }
+    }
+
+    // MED-8: Single-flight pattern - acquire lock for this token_id
+    // to prevent multiple concurrent DB queries for the same data
+    let lock = INFLIGHT_SPEND_CAPS
+        .entry(token_id.to_string())
+        .or_insert_with(|| Arc::new(Mutex::new(())))
+        .clone();
+
+    let _guard = lock.lock().await;
+
+    // Double-check cache after acquiring lock (another request may have populated it)
     if let Ok(Some(cached)) = conn.get::<_, Option<String>>(&cache_key).await {
         if let Ok(caps) = serde_json::from_str::<SpendCap>(&cached) {
             return Ok(caps);
@@ -699,20 +743,6 @@ pub async fn upsert_spend_cap(
     period: &str,
     limit_usd: Decimal,
 ) -> Result<()> {
-    // FIX: Invalidate cache BEFORE DB write to prevent stale reads.
-    // If Redis fails, the next read will fetch fresh data from DB.
-    // If DB write fails, cache is already invalidated so we're consistent.
-    let cache_key = format!("spend_caps:{}", token_id);
-    let mut conn = cache.redis();
-    if let Err(e) = conn.del::<_, ()>(&cache_key).await {
-        // Log warning but continue - cache will expire naturally in 60s
-        tracing::warn!(
-            token_id = %token_id,
-            error = %e,
-            "Failed to invalidate spend cap cache (will expire in 60s)"
-        );
-    }
-
     let reset_at = next_reset_at(period);
     sqlx::query(
         r#"
@@ -731,6 +761,19 @@ pub async fn upsert_spend_cap(
     .await
     .context("failed to upsert spend cap")?;
 
+    // MED-9: Invalidate cache AFTER successful DB write
+    // This ensures cache consistency - no stale reads between invalidation and write
+    let cache_key = format!("spend_caps:{}", token_id);
+    let mut conn = cache.redis();
+    if let Err(e) = conn.del::<_, ()>(&cache_key).await {
+        // Log warning but continue - cache will expire naturally in 60s
+        tracing::warn!(
+            token_id = %token_id,
+            error = %e,
+            "Failed to invalidate spend cap cache after DB write (will expire in 60s)"
+        );
+    }
+
     info!(token_id, period, limit_usd = %limit_usd, "spend cap configured");
     Ok(())
 }
@@ -742,23 +785,23 @@ pub async fn delete_spend_cap(
     token_id: &str,
     period: &str,
 ) -> Result<()> {
-    // FIX: Invalidate cache BEFORE DB delete to prevent stale reads.
-    let cache_key = format!("spend_caps:{}", token_id);
-    let mut conn = cache.redis();
-    if let Err(e) = conn.del::<_, ()>(&cache_key).await {
-        tracing::warn!(
-            token_id = %token_id,
-            error = %e,
-            "Failed to invalidate spend cap cache on delete (will expire in 60s)"
-        );
-    }
-
     sqlx::query("DELETE FROM spend_caps WHERE token_id = $1 AND period = $2")
         .bind(token_id)
         .bind(period)
         .execute(db)
         .await
         .context("failed to delete spend cap")?;
+
+    // MED-9: Invalidate cache AFTER successful DB delete
+    let cache_key = format!("spend_caps:{}", token_id);
+    let mut conn = cache.redis();
+    if let Err(e) = conn.del::<_, ()>(&cache_key).await {
+        tracing::warn!(
+            token_id = %token_id,
+            error = %e,
+            "Failed to invalidate spend cap cache after delete (will expire in 60s)"
+        );
+    }
 
     Ok(())
 }
