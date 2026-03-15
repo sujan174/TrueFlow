@@ -69,19 +69,34 @@ pub struct AuthContext {
 }
 
 impl AuthContext {
-    /// Returns the default project ID for the current context.
-    /// SEC-04: WARNING - This is a hardcoded default that breaks multi-tenancy isolation.
-    /// All users share the same default project, which may cause data leakage between orgs.
-    /// TODO: Implement proper project selection based on user context or request parameters.
+    /// Returns the default project ID for the current organization context.
+    /// CRIT-1 FIX: Uses org-specific default instead of global shared UUID.
+    ///
+    /// This generates a deterministic UUID from the org_id, ensuring each org
+    /// gets its own default project rather than sharing a global one.
+    ///
+    /// For new deployments, we recommend requiring explicit project_id in all
+    /// API requests. Set TRUEFLOW_REQUIRE_EXPLICIT_PROJECT=1 to enforce this.
     pub fn default_project_id(&self) -> Uuid {
-        // Log a warning about multi-tenancy limitation
-        tracing::warn!(
-            org_id = %self.org_id,
-            "SEC-04: Using hardcoded default_project_id - multi-tenancy not fully enforced"
-        );
-        // In the future, this could be user.default_project_id or similar.
-        // For now, we stick to the known default.
-        Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap()
+        // Check if explicit project is required
+        if std::env::var("TRUEFLOW_REQUIRE_EXPLICIT_PROJECT")
+            .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+            .unwrap_or(false)
+        {
+            tracing::error!(
+                org_id = %self.org_id,
+                "CRIT-1: TRUEFLOW_REQUIRE_EXPLICIT_PROJECT is set but no project_id provided in request"
+            );
+            // Return a nil UUID to indicate error - callers should check for this
+            // and return a proper error to the client
+            return Uuid::nil();
+        }
+
+        // CRIT-1 FIX: Generate org-specific default project UUID
+        // This ensures each org gets its own default project, preventing cross-tenant data access
+        // We use a deterministic UUID v5 based on the org_id
+        let namespace = Uuid::parse_str("00000000-0000-0000-0000-000000000000").unwrap();
+        Uuid::new_v5(&namespace, self.org_id.as_bytes())
     }
 
     /// Check if the context has the required scope (or is SuperAdmin/Admin).

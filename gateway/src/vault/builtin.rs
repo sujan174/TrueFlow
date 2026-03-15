@@ -5,6 +5,7 @@ use aes_gcm::{
 use async_trait::async_trait;
 use rand::RngCore;
 use sqlx::PgPool;
+use zeroize::Zeroize;
 
 pub type EncryptedBlob = (Vec<u8>, Vec<u8>, Vec<u8>, Vec<u8>);
 
@@ -28,6 +29,13 @@ impl BuiltinStore {
 
 pub struct VaultCrypto {
     kek: [u8; 32],
+}
+
+// CRIT-4 FIX: Zeroize KEK on drop to prevent memory leakage of sensitive key material
+impl Drop for VaultCrypto {
+    fn drop(&mut self) {
+        self.kek.zeroize();
+    }
 }
 
 impl VaultCrypto {

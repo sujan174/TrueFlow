@@ -50,6 +50,12 @@ pub async fn check_spend_cap(cache: &TieredCache, db: &sqlx::PgPool, token_id: &
         return Ok(());
     }
 
+    // CRIT-2 FIX: Fail-closed by default when Redis is unavailable.
+    // Set TRUEFLOW_REDIS_FAIL_OPEN=1 to allow requests during Redis outages (dev/testing only).
+    let fail_open = std::env::var("TRUEFLOW_REDIS_FAIL_OPEN")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false);
+
     let mut conn = cache.redis();
     let now = Utc::now();
 
@@ -62,58 +68,98 @@ pub async fn check_spend_cap(cache: &TieredCache, db: &sqlx::PgPool, token_id: &
     if let Some(daily_limit) = caps.daily_limit_usd {
         let key = format!("spend:{}:daily:{}", token_id, now.format("%Y-%m-%d"));
         // INCRBYFLOAT stores values as bulk strings — parse as String first
-        let current: f64 = conn
-            .get::<_, Option<String>>(&key)
-            .await
-            .unwrap_or(None)
-            .and_then(|s| s.parse::<f64>().ok())
-            .unwrap_or(0.0);
-        // Use > not >= to match atomic Lua script behavior
-        // Spending exactly your budget is allowed
-        if current > daily_limit {
-            anyhow::bail!(
-                "daily spend cap of ${:.2} exceeded (current: ${:.4})",
-                daily_limit,
-                current
-            );
+        let current_result: redis::RedisResult<Option<String>> = conn.get(&key).await;
+        match current_result {
+            Ok(Some(s)) => {
+                let current: f64 = s.parse().unwrap_or(0.0);
+                // Use > not >= to match atomic Lua script behavior
+                // Spending exactly your budget is allowed
+                if current > daily_limit {
+                    anyhow::bail!(
+                        "daily spend cap of ${:.2} exceeded (current: ${:.4})",
+                        daily_limit,
+                        current
+                    );
+                }
+            }
+            Ok(None) => {
+                // Key doesn't exist yet - no spend recorded, allow
+            }
+            Err(e) => {
+                // CRIT-2 FIX: Redis failure - fail closed unless explicitly overridden
+                error!(token_id = %token_id, error = %e, "Redis failure during spend cap check");
+                if !fail_open {
+                    anyhow::bail!(
+                        "unable to verify spend cap: Redis unavailable. Set TRUEFLOW_REDIS_FAIL_OPEN=1 to allow requests during outages."
+                    );
+                }
+                // fail_open is true - log warning and allow
+                error!(token_id = %token_id, "FAIL-OPEN: Allowing request despite Redis failure");
+            }
         }
     }
 
     // Check monthly cap
     if let Some(monthly_limit) = caps.monthly_limit_usd {
         let key = format!("spend:{}:monthly:{}", token_id, now.format("%Y-%m"));
-        let current: f64 = conn
-            .get::<_, Option<String>>(&key)
-            .await
-            .unwrap_or(None)
-            .and_then(|s| s.parse::<f64>().ok())
-            .unwrap_or(0.0);
-        // Use > not >= to match atomic Lua script behavior
-        if current > monthly_limit {
-            anyhow::bail!(
-                "monthly spend cap of ${:.2} exceeded (current: ${:.4})",
-                monthly_limit,
-                current
-            );
+        let current_result: redis::RedisResult<Option<String>> = conn.get(&key).await;
+        match current_result {
+            Ok(Some(s)) => {
+                let current: f64 = s.parse().unwrap_or(0.0);
+                // Use > not >= to match atomic Lua script behavior
+                if current > monthly_limit {
+                    anyhow::bail!(
+                        "monthly spend cap of ${:.2} exceeded (current: ${:.4})",
+                        monthly_limit,
+                        current
+                    );
+                }
+            }
+            Ok(None) => {
+                // Key doesn't exist yet - no spend recorded, allow
+            }
+            Err(e) => {
+                // CRIT-2 FIX: Redis failure - fail closed unless explicitly overridden
+                error!(token_id = %token_id, error = %e, "Redis failure during monthly cap check");
+                if !fail_open {
+                    anyhow::bail!(
+                        "unable to verify spend cap: Redis unavailable. Set TRUEFLOW_REDIS_FAIL_OPEN=1 to allow requests during outages."
+                    );
+                }
+                error!(token_id = %token_id, "FAIL-OPEN: Allowing request despite Redis failure");
+            }
         }
     }
 
     // Check lifetime cap
     if let Some(lifetime_limit) = caps.lifetime_limit_usd {
         let key = format!("spend:{}:lifetime", token_id);
-        let current: f64 = conn
-            .get::<_, Option<String>>(&key)
-            .await
-            .unwrap_or(None)
-            .and_then(|s| s.parse::<f64>().ok())
-            .unwrap_or(0.0);
-        // Use > not >= to match atomic Lua script behavior
-        if current > lifetime_limit {
-            anyhow::bail!(
-                "lifetime spend cap of ${:.2} exceeded (current: ${:.4})",
-                lifetime_limit,
-                current
-            );
+        let current_result: redis::RedisResult<Option<String>> = conn.get(&key).await;
+        match current_result {
+            Ok(Some(s)) => {
+                let current: f64 = s.parse().unwrap_or(0.0);
+                // Use > not >= to match atomic Lua script behavior
+                if current > lifetime_limit {
+                    anyhow::bail!(
+                        "lifetime spend cap of ${:.2} exceeded (current: ${:.4})",
+                        lifetime_limit,
+                        current
+                    );
+                }
+            }
+            Ok(None) => {
+                // Key doesn't exist yet - no spend recorded, allow
+            }
+            Err(e) => {
+                // CRIT-2 FIX: Redis failure - fail closed unless explicitly overridden
+                error!(token_id = %token_id, error = %e, "Redis failure during lifetime cap check");
+                if !fail_open {
+                    anyhow::bail!(
+                        "unable to verify spend cap: Redis unavailable. Set TRUEFLOW_REDIS_FAIL_OPEN=1 to allow requests during outages."
+                    );
+                }
+                error!(token_id = %token_id, "FAIL-OPEN: Allowing request despite Redis failure");
+            }
         }
     }
 
@@ -303,11 +349,9 @@ pub async fn check_and_increment_spend(
     // ARGV[7] = lifetime TTL
     //
     // Returns: "OK" if allowed, "DAILY" if daily cap exceeded, "MONTHLY" if monthly exceeded, "LIFETIME" if lifetime exceeded
-    // FIX C-3: Check-first, then increment. Previously the Lua script incremented
-    // all counters before checking caps, so denied requests permanently consumed
-    // budget. Now we GET current values, check if current+cost would exceed any
-    // cap, and only INCRBYFLOAT if all caps pass. This matches the test mock
-    // semantics and prevents phantom spend on denied requests.
+    // CRIT-3 FIX: Only increment counters if request is ALLOWED.
+    // Previously the Lua script always incremented counters, causing "phantom spend"
+    // for denied requests. Now we check first, then only increment if all caps pass.
     let atomic_lua = r#"
         local cost = tonumber(ARGV[4])
 
@@ -336,32 +380,51 @@ pub async fn check_and_increment_spend(
         end
 
         -- Phase 2: Check if current + cost would exceed any cap
+        local daily_exceeded = false
+        local monthly_exceeded = false
+        local lifetime_exceeded = false
+
         if daily_limit >= 0 and (daily_cur + cost) > daily_limit then
-            return "DAILY"
+            daily_exceeded = true
         end
 
         if monthly_limit >= 0 and (monthly_cur + cost) > monthly_limit then
-            return "MONTHLY"
+            monthly_exceeded = true
         end
 
         if lifetime_limit >= 0 and (lifetime_cur + cost) > lifetime_limit then
+            lifetime_exceeded = true
+        end
+
+        -- Phase 3: CRIT-3 FIX - Only increment if NO caps exceeded
+        -- Denied requests do NOT consume budget
+        if not daily_exceeded and not monthly_exceeded and not lifetime_exceeded then
+            if daily_limit >= 0 and daily_key ~= "" then
+                redis.call('INCRBYFLOAT', daily_key, cost)
+                redis.call('EXPIRE', daily_key, ARGV[5])
+            end
+
+            if monthly_limit >= 0 and monthly_key ~= "" then
+                redis.call('INCRBYFLOAT', monthly_key, cost)
+                redis.call('EXPIRE', monthly_key, ARGV[6])
+            end
+
+            if lifetime_limit >= 0 and lifetime_key ~= "" then
+                redis.call('INCRBYFLOAT', lifetime_key, cost)
+                redis.call('EXPIRE', lifetime_key, ARGV[7])
+            end
+        end
+
+        -- Return which cap was exceeded (if any)
+        -- Priority: lifetime > monthly > daily
+        if lifetime_exceeded then
             return "LIFETIME"
         end
-
-        -- Phase 3: All caps pass — now atomically increment all counters
-        if daily_limit >= 0 and daily_key ~= "" then
-            redis.call('INCRBYFLOAT', daily_key, cost)
-            redis.call('EXPIRE', daily_key, ARGV[5])
+        if monthly_exceeded then
+            return "MONTHLY"
         end
-
-        if monthly_limit >= 0 and monthly_key ~= "" then
-            redis.call('INCRBYFLOAT', monthly_key, cost)
-            redis.call('EXPIRE', monthly_key, ARGV[6])
-        end
-
-        if lifetime_limit >= 0 and lifetime_key ~= "" then
-            redis.call('INCRBYFLOAT', lifetime_key, cost)
-            redis.call('EXPIRE', lifetime_key, ARGV[7])
+        if daily_exceeded then
+            return "DAILY"
         end
 
         return "OK"

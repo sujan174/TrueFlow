@@ -54,7 +54,7 @@ anyhow = "1"
 thiserror = "1"
 clap = { version = "4", features = ["derive", "env"] }
 chrono = { version = "0.4", features = ["serde"] }
-uuid = { version = "1", features = ["serde", "v4"] }
+uuid = { version = "1", features = ["serde", "v4", "v5"] }
 rust_decimal = { version = "1.33", features = ["db-postgres"] }
 async-trait = "0.1"
 dotenvy = "0.15"
