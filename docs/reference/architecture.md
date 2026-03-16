@@ -1,8 +1,8 @@
-# TrueFlow — System Architecture
+# TrueFlow - System Architecture
 
-> **Comprehensive Technical Reference**
+> Comprehensive Technical Reference
 >
-> This document details the internal architecture, data flows, and component design of TrueFlow. It is intended for core contributors and system architects.
+> This document details the internal architecture, data flows, and component design of TrueFlow. It is intended for core contributors, system architects, and advanced operators.
 
 ---
 
@@ -11,10 +11,24 @@
 TrueFlow is a high-performance, security-focused reverse proxy for LLM and API traffic. It sits between AI agents and upstream providers (OpenAI, Anthropic, internal APIs), acting as a centralized control plane for observability, security, and cost management.
 
 ### Core Philosophy
-1.  **Zero Trust**: No request passes without explicit token validation and policy evaluation.
-2.  **Streaming First**: usage of `Bytes` and streaming bodies to minimize memory footprint; buffering occurs only when policy inspection requires it.
-3.  **Hot Path Optimization**: Critical path metadata is cached in-memory (L1) and Redis (L2) to minimize database hits.
-4.  **Fail-Close**: Security failures (auth, policy errors) always block the request. Network failures (upstream) trigger circuit breaking.
+
+1. **Zero Trust**: No request passes without explicit token validation and policy evaluation.
+2. **Streaming First**: Usage of `Bytes` and streaming bodies to minimize memory footprint; buffering occurs only when policy inspection requires it.
+3. **Hot Path Optimization**: Critical path metadata is cached in-memory (L1) and Redis (L2) to minimize database hits.
+4. **Fail-Close**: Security failures (auth, policy errors) always block the request. Network failures (upstream) trigger circuit breaking.
+
+### Technology Stack
+
+| Component | Technology | Purpose |
+|-----------|------------|---------|
+| Language | Rust | Memory safety, performance, predictable latency |
+| Web Framework | Axum | Built on Tower/Hyper for composable middleware |
+| Async Runtime | Tokio | High-performance async I/O |
+| Database | PostgreSQL 16 | Persistent storage via `sqlx` with compile-time verified queries |
+| Cache | Redis 7 | L2 caching, rate limiting, distributed circuit breakers |
+| HTTP Client | `reqwest` | Upstream provider calls with connection pooling |
+| Tracing | OpenTelemetry | Distributed tracing via OTLP |
+| Metrics | Prometheus | `/metrics` endpoint for scraping |
 
 ---
 
@@ -31,27 +45,42 @@ graph TD
         M_Rate[Distributed Rate Limiter]
         M_Cache[Response Cache Check]
         M_Policy[Policy Engine]
-        
+
         subgraph "Proxy Pipeline"
             P_Router[Universal Model Router]
             P_LB[Load Balancer]
             P_Retry[Retry & Backoff]
             P_Transform[Protocol Translator]
         end
-        
+
         subgraph "Background & Async"
             J_Cleanup[Log Cleanup Job]
             J_Audit[Audit Logger]
             J_Notify[Webhook Dispatcher]
+            J_Budget[Budget Checker]
+            J_Session[Session Cleanup]
+            J_Latency[Latency Cache Refresh]
+        end
+
+        subgraph "MCP Layer"
+            MCP_Registry[MCP Registry]
+            MCP_Client[MCP Client]
+        end
+
+        subgraph "Prompt Layer"
+            Prompt_Store[Prompt Store]
+            Prompt_Render[Render Engine]
         end
     end
 
     Gateway -->|OTLP| Jaeger[Jaeger/OTel]
     Gateway -->|TCP| Postgres[(PostgreSQL 16)]
     Gateway -->|TCP| Redis[(Redis 7)]
-    
+
     P_Transform -->|HTTPS| OpenAi[OpenAI API]
     P_Transform -->|HTTPS| Anthropic[Anthropic API]
+    P_Transform -->|HTTPS| Gemini[Google Gemini]
+    P_Transform -->|HTTPS| Bedrock[AWS Bedrock]
     P_Transform -->|HTTPS| Private[Internal APIs]
 
     Redis -.->|Pub/Sub| Gateway
@@ -60,206 +89,655 @@ graph TD
 
 ---
 
-## 3. Component Deep Dive
+## 3. Request Lifecycle (Hot Path)
 
-### 3.1. The Proxy Pipeline (Hot Path)
+When a request hits the gateway (e.g., `POST /v1/chat/completions`), it flows through a structured pipeline:
 
-Requests flow through a stack of **Tower Middleware** layers. Each layer is isolated and composable.
+### 3.1 Ingress & Middleware Stack
 
-1.  **TLS Termination**: Handled by the intake layer (or external load balancer in clustered setups).
-2.  **Trace Layer**: Assigns an OpenTelemetry trace ID to the request.
-3.  **Security Headers**: Injects `Strict-Transport-Security`, `X-Content-Type-Options`, `X-Frame-Options` to prevent browser-based attacks.
-4.  **CORS**: Enforces `DASHBOARD_ORIGIN` for browser clients.
-5.  **Authentication**:
-    *   **Management API**: Validates `Authorization: Bearer <admin-key>` against `api_keys` table. Checks `role` (Admin/Editor/Viewer) and `scopes` (e.g., `tokens:write`).
-    *   **Proxy API**: Validates `Authorization: Bearer tf_v1_...`. Resolves Virtual Token ID to `project_id`.
-    *   **Dashboard Proxy**: Validates `DASHBOARD_SECRET` and `X-Dashboard-Token`.
-6.  **Rate Limiting (L1)**: Checks in-memory checks for DoS protection.
-7.  **Policy Engine (Pre-Flight)**:
-    *   Resolves `request.*`, `agent.*`, `usage.*` fields.
-    *   Evaluates JSON-logic rules.
-    *   Executes actions: `deny`, `rate_limit` (Redis-backed), `spend_cap` (DB-backed atomic check).
-8.  **Human-in-the-Loop (HITL)**: If triggered, suspends the request, notifies Slack/Dashboard via Redis Stream, and waits for `approval` or `rejection`.
-9.  **Response Cache (Read)**: Checks Redis for a semantic match (hash of model + messages + args). Returns immediately on hit. Bypassed if request has `x-trueflow-no-cache: true` and the token has the `cache:bypass` scope.
-10. **Load Balancer + Circuit Breaker**:
-    *   Reads per-token `CircuitBreakerConfig` from the resolved token (`circuit_breaker` JSONB).
-    *   Selects an upstream using **weighted round-robin within priority tiers**.
-    *   CB states are tracked **distributably in Redis** (`cb:state:{token_id}:{url}`), sharing failure metrics across multiple gateway instances.
-    *   Trips to `open` (blocked) after `failure_threshold` consecutive failures OR if the failure rate > `failure_rate_threshold` (using a rolling window of `min_sample_size`).
-    *   CB states: `closed` (healthy) → `open` (blocked) → `half_open` (cooldown elapsed) → `closed` (recovered).
-    *   When `enabled: false`, CB is bypassed entirely — all upstreams are always routable (useful for dev tokens).
-    *   Adds `X-TrueFlow-CB-State` and `X-TrueFlow-Upstream` response headers for client-side observability.
-11. **Model Router**:
-    *   **Detection**: Identifies provider (OpenAI, Anthropic, Gemini) via model prefix (e.g. `claude-3`).
-    *   **Translation**: Converts incoming OpenAI-format body to target provider format (e.g., specific JSON structure for Gemini).
-12. **Upstream Request**:
-    *   Injects the **Real API Key** (decrypted from Vault).
-    *   **MCP Tool Injection**: If `X-MCP-Servers` header is present, fetches cached tool schemas from `McpRegistry` and merges them into the request body's `tools[]` array.
-    *   Applies **Retries** with exponential backoff and Jitter.
-    *   Respects `Retry-After` headers.
-13. **Response Handling**:
-    *   **Stream Processing**: Captures chunks for audit logging.
-    *   **MCP Tool Execution Loop**: If response `finish_reason == "tool_calls"` and the called tool is an `mcp__*` namespace tool, executes via MCP server JSON-RPC, appends result message, and re-sends to LLM (up to 10 iterations).
-    *   **Translation (Reverse)**: Normalizes response back to OpenAI format.
-    *   **Policy Engine (Post-Flight)**: Redacts PII (`response.body.*`) or alerts on specific errors.
-    *   **Cache Write**: Stores successful LLM responses in Redis.
+Requests flow through Tower middleware layers in `src/main.rs`:
 
-### 3.2. Policy Engine
+1. **Request ID Middleware**: Generates unique `X-Request-Id` header for tracing
+2. **Security Headers Middleware**: Injects `Strict-Transport-Security`, `X-Content-Type-Options`, `X-Frame-Options`, `X-XSS-Protection`, `Cache-Control`, `Referrer-Policy`, `Permissions-Policy`
+3. **CORS Layer**: Enforces `DASHBOARD_ORIGIN` for browser clients
+4. **Body Limit**: 25MB max request body
+5. **Trace Layer**: OpenTelemetry span creation
 
-The heart of TrueFlow's control plane. Policies are JSON documents that bind **Conditions** to **Actions**.
+### 3.2 Proxy Handler Pipeline
 
-*   **Phases**:
-    *   `pre`: Before upstream request (Access Control, Limits).
-    *   `post`: After response received (Redaction, Auditing).
-*   **Modes**:
-    *   `enforce`: Blocks/modifies requests.
-    *   `shadow`: Logs violations but allows requests (for testing).
-*   **Field Resolution**: Uses `src/middleware/fields.rs` to extract data via dot-notation:
-    *   `request.body.messages[0].content`: JSON path extraction.
-    *   `usage.spend_today_usd`: Real-time Redis counter.
-    *   `context.time.hour`: UTC time.
-*   **Operators**: `eq`, `neq`, `gt`, `lt`, `in`, `contains`, `starts_with`, `regex`, `glob`.
-*   **Actions**:
-    *   `deny`: Returns 403/429.
-    *   `rate_limit`: Increments Redis sliding window counter.
-    *   `store_audit`: Forces audit log level.
-    *   `redact`: Scrubs sensitive patterns (SSN, API Key) from body.
-    *   `webhook`: Dispatches async event.
-    *   `transform`: Modifies headers/body (e.g., inject system prompt).
-    *   `tool_scope`: RBAC for LLM tool calls — `allowed_tools` whitelist + `blocked_tools` blacklist.
-    *   `content_filter`: Built-in pattern-based content filtering (used by guardrail presets).
-    *   `conditional_route`: Branch to different upstreams based on request properties.
-    *   `external_guardrail`: Delegate safety checks to Azure Content Safety, AWS Comprehend, or LlamaGuard.
+The main handler (`src/proxy/handler/core.rs`) orchestrates the request:
 
-### 3.3. Guardrails Engine
+**Step 1: Header Extraction**
+- Extract `Authorization: Bearer tf_v1_...` token
+- Extract attribution headers (`X-User-Id`, `X-Tenant-Id`, `X-Session-Id`)
+- Extract custom properties (`X-Properties` JSON)
+- Parse W3C trace context (`traceparent` header)
 
-Built-in safety layer with 100+ pre-built patterns across 22 preset categories.
+**Step 2: Token Resolution**
+- Look up virtual token in tiered cache (L1 DashMap + L2 Redis)
+- Validate token is active and not expired
+- Load attached policy IDs and circuit breaker config
 
-*   **Pattern Library**: PII (SSN, CC, email, phone, API keys), prompt injection, HIPAA, GDPR, jailbreak, code injection, competitor mentions, and more.
-*   **Vendors**: Azure Content Safety, AWS Comprehend, LlamaGuard, Palo Alto AIRS, Prompt Security.
-*   **Presets API**: Single `POST /guardrails/enable` call activates a bundle of rules for a token.
-*   **Drift Detection**: Tracks `source` (sdk vs dashboard) so you can detect unauthorized changes.
+**Step 3: Policy Engine (Pre-Flight)**
+- Evaluate policies with `phase: "pre"`
+- Actions: deny, rate_limit, redact, transform, require_approval, dynamic_route, split
+- Track triggered actions for execution
 
-### 3.4. MCP Integration (Model Context Protocol)
+**Step 4: Guardrail Header Processing**
+- Check `X-TrueFlow-Guardrails` header (if enabled per token)
+- Modes: `disabled`, `append`, `override`
 
-The gateway acts as a managed MCP client, bridging AI agents to external tool servers.
+**Step 5: Spend Cap Check**
+- Atomic Redis check for daily/monthly/lifetime caps
+- Block with 429 if exceeded
 
-*   **Registry** (`mcp/registry.rs`): In-memory `Arc<RwLock<HashMap>>` of connected MCP servers + cached tool schemas.
-*   **Client** (`mcp/client.rs`): JSON-RPC 2.0 over Streamable HTTP. Supports `initialize`, `tools/list` (paginated), `tools/call`.
-*   **Tool Namespacing**: Tools injected as `mcp__<server>__<tool>` to prevent collisions.
-*   **Execution Loop**: Gateway autonomously executes tool calls and re-submits to LLM (max 10 iterations).
+**Step 6: Load Balancer Selection**
+- Weighted round-robin within priority tiers
+- Circuit breaker health check
+- Redis-backed distributed failure tracking
 
-### 3.5. Identity & Security
+**Step 7: Model Router**
+- Detect provider from model name prefix
+- Translate request format (OpenAI to Anthropic/Gemini/Bedrock)
+- Inject decrypted credential
 
-*   **Virtual Tokens**: `tf_v1_...`. Randomly generated pointer to a configuration.
-    *   **Isolation**: Tokens belong to a `project_id`. Access across projects is blocked (IDOR protection).
-    *   **Capabilities**: Tokens are scoped to specific upstreams or services.
-*   **Secret Management (The Vault)**:
-    *   **Envelope Encryption**:
-        *   **Master Key (KEK)**: 32-byte key from `TRUEFLOW_MASTER_KEY` env var. Never stored in DB.
-        *   **Data Key (DEK)**: Unique 256-bit key per credential. Stored in DB encrypted by KEK.
-        *   **Ciphertext**: The actual API key, encrypted by DEK using **AES-256-GCM** with a unique 96-bit nonce.
-    *   **Lifecycle**: Decrypted only in memory, for the duration of the request context, then zeroed.
-*   **OIDC / SSO**:
-    *   Register external Identity Providers (Okta, Auth0, Entra ID) via `/oidc/providers`.
-    *   JWT tokens validated against OIDC discovery document. Claim-to-role mappings configurable.
-*   **RBAC**:
-    *   API keys have roles (`admin`, `member`, `read_only`) and fine-grained scopes (`tokens:write`, `policies:read`, etc.).
-    *   Model Access Groups restrict which LLM models a token can call.
-    *   Teams provide org-level grouping with per-team spend tracking.
-*   **SSRF Protection**:
-    *   Webhook dispatcher validates URLs.
-    *   Rejects private IP ranges (10.0.0.0/8, 192.168.0.0/16, etc.).
-    *   Rejects cloud metadata services (169.254.169.254).
-    *   Enforces HTTPS (except localhost in dev).
-*   **Timing Attack Mitigation**:
-    *   All key comparisons (Admin Key, Dashboard Secret) use `subtle::ConstantTimeEq`.
+**Step 8: Upstream Request**
+- Forward with retry logic (exponential backoff, jitter)
+- Respect `Retry-After` headers
+- Handle streaming vs non-streaming
 
-### 3.6. Observability & Auditing
-
-*   **Audit Logging**:
-    *   **Async Write**: Logs are pushed to a channel, batched, and written to `audit_logs` (PostgreSQL partition).
-    *   **Levels**:
-        *   `0`: Metadata only (tokens, latency, cost).
-        *   `1`: PII-scrubbed bodies.
-        *   `2`: Full capture (automatically expired/downgraded after 24h).
-    *   **Cost Tracking**: Calculates token usage and USD cost based on model pricing (configurable per model pattern).
-*   **Tracing**:
-    *   OpenTelemetry (OTLP) export to Jaeger/Tempo.
-    *   Spans for: `middleware`, `db_query`, `redis_op`, `upstream_request`, `policy_eval`.
-    *   W3C Trace Context (`traceparent`) propagated to upstreams.
-*   **Metrics**:
-    *   Request counts, Latency histograms, Error rates (Prometheus-compatible).
-*   **Observability Exporters** (`ObserverHub`):
-    *   **Langfuse**: LLM tracing with prompt/response capture.
-    *   **DataDog**: APM metrics and log forwarding.
-    *   **Prometheus**: `/metrics` endpoint for scraping.
-*   **Anomaly Detection**: Sigma-based statistical analysis — flags tokens with abnormal request velocity.
-
-### 3.7. Background Jobs
-
-*   **Cleanup (`jobs/cleanup.rs`)**:
-    *   Runs hourly.
-    *   Identifies Level 2 audit logs older than 24 hours.
-    *   **Downgrades**: Sets `log_level = 0`.
-    *   **Strips**: Updates `request_body` / `response_body` to `[EXPIRED]` to reclaim storage.
-*   **Key Rotation**:
-    *   Rotates upstream API keys based on policy schedules.
-*   **Latency Cache Refresh**:
-    *   Background task recomputes p50 latency per model every 5 minutes from audit logs.
+**Step 9: Response Processing**
+- Stream passthrough (SSE) or buffer
+- Model router response translation
+- Policy Engine (Post-Flight)
+- Cost calculation
+- Audit log write
 
 ---
 
-## 4. Data Architecture
+## 4. Component Deep Dive
 
-### 4.1. PostgreSQL (System of Record)
-*   **`tokens`**: Virtual identities, upstream config, policy attachment, log level, and `circuit_breaker` (JSONB) per-token CB config.
-*   **`credentials`**: Encrypted provider keys (envelope encrypted).
-*   **`policies`** + **`policy_versions`**: Rulesets (JSONB) with full version history.
-*   **`api_keys`**: Management API access (RBAC roles + scopes).
-*   **`audit_logs`**: Partitioned by month. High-volume write target.
-*   **`spend_caps`**: Daily/Monthly limits per token.
-*   **`model_pricing`**: Dynamic cost-per-1M-token by model pattern (glob matching).
-*   **`services`**: Registered external APIs for action gateway proxying.
-*   **`sessions`**: Multi-turn conversation tracking (cost, status, spend caps).
-*   **`teams`** + **`team_members`**: Org hierarchy.
-*   **`model_access_groups`**: LLM model RBAC.
-*   **`oidc_providers`**: SSO/OIDC identity provider configs.
-*   **`webhooks`**: Event delivery endpoints.
-*   **`notifications`**: In-app alert history.
+### 4.1 Policy Engine
 
-### 4.2. Redis (System of Speed)
-*   **Cache (`cache:*`)**:
-    *   Stores resolved Token → Policy + Credential mappings.
-    *   TTL: 5-10 mins. Invalidated via Pub/Sub on updates.
-*   **Counters (`usage:*`)**:
-    *   `usage:{token_id}:requests:{window}`: Rate limit counters.
-    *   `spend:{token_id}:daily:{YYYY-MM-DD}`: Atomic spend tracking.
-*   **Streams (`stream:*`)**:
-    *   `stream:approvals`: HITL request queue.
-    *   `stream:approval_responses`: Operator decisions.
-*   **LLM Cache (`response:*`)**:
-    *   Stores `SHA256(request_signature) -> response_payload`.
+**Location**: `src/middleware/engine/`
+
+The policy engine is the brain of TrueFlow. It evaluates declarative JSON-logic rules against request context.
+
+#### Architecture
+
+```rust
+pub struct Policy {
+    pub id: Uuid,
+    pub name: String,
+    pub phase: Phase,           // Pre or Post
+    pub mode: PolicyMode,       // Enforce or Shadow
+    pub rules: Vec<Rule>,
+    pub retry: Option<RetryConfig>,
+}
+
+pub struct Rule {
+    pub when: Condition,        // Recursive condition tree
+    pub then: Vec<Action>,      // Actions to execute
+    pub async_check: bool,      // Non-blocking evaluation
+}
+```
+
+#### Phases
+
+| Phase | When | Use Cases |
+|-------|------|-----------|
+| `Pre` | Before upstream request | Access control, rate limiting, request redaction, routing, approval gates |
+| `Post` | After response received | Response redaction, schema validation, logging, alerts |
+
+#### Modes
+
+| Mode | Behavior |
+|------|----------|
+| `Enforce` | Actions execute; deny blocks requests |
+| `Shadow` | Violations logged only; request proceeds (for testing) |
+
+#### Condition Evaluation
+
+Conditions form a recursive tree with AND/OR/NOT logic:
+
+```rust
+pub enum Condition {
+    All { all: Vec<Condition> },     // AND
+    Any { any: Vec<Condition> },     // OR
+    Not { not: Box<Condition> },     // Negation
+    Check { field, op, value },      // Leaf comparison
+    Always { always: bool },         // Catch-all
+}
+```
+
+#### Operators
+
+12 operators supported: `eq`, `neq`, `gt`, `gte`, `lt`, `lte`, `in`, `glob`, `regex`, `contains`, `starts_with`, `ends_with`, `exists`
+
+#### Security Protections
+
+- **MAX_RECURSION_DEPTH = 100**: Prevents stack overflow from deeply nested conditions
+- **ReDoS Protection**: 1MB regex size limit
+- **Glob DoS Protection**: 100K iteration limit
+- **MED-5 Fix**: Empty conditions treated as denial (safe default)
+
+#### Action Types (20+)
+
+| Action | Phase | Description |
+|--------|-------|-------------|
+| `Allow` | Any | Explicit allow (no-op) |
+| `Deny` | Any | Block with custom status/message |
+| `RateLimit` | Pre | Sliding window rate limiting |
+| `Throttle` | Pre | Artificial delay |
+| `Redact` | Any | PII detection and masking |
+| `Transform` | Pre | Header/body modification |
+| `Override` | Pre | Force body field values |
+| `Log` | Any | Custom log message |
+| `Tag` | Any | Add audit log metadata |
+| `Webhook` | Any | Fire external webhook |
+| `ContentFilter` | Pre | 14 check categories |
+| `RequireApproval` | Pre | Human-in-the-loop |
+| `Split` | Pre | A/B traffic splitting |
+| `DynamicRoute` | Pre | Smart model selection |
+| `ConditionalRoute` | Pre | Condition-based routing |
+| `ValidateSchema` | Post | JSON Schema validation |
+| `ExternalGuardrail` | Any | Azure/AWS/LlamaGuard |
+| `ToolScope` | Pre | MCP tool filtering |
+| `BudgetAlert` | Post | Spend threshold alerts |
+
+#### Evaluation Order (MED-6)
+
+1. Rules processed in array order
+2. Actions within a rule collected in order
+3. Policies processed in array order
+4. **Deny Short-Circuit (HIGH-4)**: Processing stops immediately on deny
 
 ---
 
-## 5. Integrations
+### 4.2 Model Router
 
-*   **Webhooks**:
-    *   **Events**: `policy_violation`, `spend_cap_exceeded`, `rate_limit_exceeded`.
-    *   **Delivery**: Fire-and-forget POST requests to configured URLs.
-*   **Slack**:
-    *   Interactive Block Kit messages for HITL approvals.
-    *   Real-time alerts for critical failures.
+**Location**: `src/proxy/model_router/`
+
+The model router handles provider detection and format translation.
+
+#### Provider Detection
+
+Auto-detection from model name prefix:
+
+| Prefix | Provider |
+|--------|----------|
+| `gpt-*`, `o1-*`, `o3-*` | OpenAI |
+| `claude-*` | Anthropic |
+| `gemini-*` | Google Gemini |
+| `bedrock-*` | AWS Bedrock |
+| `command-*` | Cohere |
+| `mistral-*` | Mistral |
+| `groq-*` | Groq |
+| `together-*` | Together AI |
+| `ollama-*` | Ollama |
+
+#### Request Translation
+
+OpenAI-format requests are translated to native provider formats:
+
+- **Anthropic**: Messages array to `messages`, system prompt handling, tool definition translation
+- **Gemini**: `contents` array, `generationConfig`, `systemInstruction`
+- **Bedrock**: Converse API format, tool handling
+
+#### Response Translation
+
+Native provider responses translated back to OpenAI format:
+
+- **Anthropic**: `content` blocks to `choices`, usage extraction
+- **Gemini**: `candidates` to `choices`, `usageMetadata` mapping
+- **Bedrock**: Binary event stream decoding, tool result handling
 
 ---
 
-## 6. Development & Deployment
+### 4.3 Load Balancer & Circuit Breaker
 
-*   **Docker**:
-    *   Multi-stage builds (Planner + Builder + Runtime) for minimal image size (~100MB).
-    *   Non-root user `trueflow` for security.
-*   **Configuration**:
-    *   `Config` struct loads from Environment Variables + `.env` file.
-    *   Strict typing and validation at startup (fails fast if config is invalid).
+**Location**: `src/proxy/loadbalancer.rs`
 
+#### Load Balancing Strategies
+
+| Strategy | Description |
+|----------|-------------|
+| Weighted Round-Robin | Within priority tiers |
+| Least Busy | Track in-flight requests per upstream |
+| Lowest Latency | Use p50 latency cache (5min refresh) |
+| Weighted Random | Random with weights, prevents thundering herd |
+| Health-Aware | Skip unhealthy upstreams |
+
+#### Circuit Breaker States
+
+```
+Closed (healthy) --> Open (blocked after failures) --> Half-Open (cooldown probe) --> Closed/Open
+```
+
+#### Configuration
+
+```json
+{
+  "enabled": true,
+  "failure_threshold": 3,
+  "failure_rate_threshold": 0.5,
+  "min_sample_size": 10,
+  "recovery_cooldown_secs": 30,
+  "half_open_max_requests": 1
+}
+```
+
+#### Distributed State
+
+- Redis-backed failure counters: `cb:{token_id}:{url_hash}:failures`
+- Half-open probe limit is instance-local (HIGH-9 limitation)
+
+---
+
+### 4.4 Guardrails Engine
+
+**Location**: `src/middleware/guardrail/`
+
+Built-in safety layer with 100+ pre-built patterns.
+
+#### Content Filter Categories (14)
+
+1. Jailbreak detection (DAN, prompt injection)
+2. Harmful content (CSAM, suicide, violence)
+3. Code injection (SQL, shell, XSS)
+4. Profanity and slurs
+5. Bias and discrimination
+6. Sensitive topics (medical/legal advice)
+7. Gibberish and encoding smuggling
+8. Contact information
+9. IP leakage
+10. Competitor mentions
+11. Topic allowlist
+12. Topic denylist
+13. Custom patterns
+14. Content length
+
+#### External Guardrail Vendors
+
+| Vendor | Integration |
+|--------|-------------|
+| Azure Content Safety | Full API integration |
+| AWS Comprehend | Full API integration |
+| LlamaGuard | Ollama/vLLM host |
+| Palo Alto AIRS | Enterprise integration |
+| Prompt Security | Enterprise integration |
+
+---
+
+### 4.5 PII Detection & Redaction
+
+**Location**: `src/middleware/redact.rs`, `src/middleware/pii/`
+
+#### Built-in Patterns
+
+| Pattern | Description |
+|---------|-------------|
+| SSN | US Social Security Number (MED-14 fix) |
+| Email | RFC 5322 compliant |
+| Credit Card | With Luhn validation (MED-15) |
+| Phone | International formats |
+| API Key | Common key prefixes |
+| IBAN | International bank accounts |
+| DOB | Date of birth formats |
+| IPv4 | IP address detection |
+
+#### NLP Backend
+
+Presidio integration for unstructured PII (names, addresses, multilingual entities).
+
+#### Streaming Support
+
+- SSE chunk processing
+- UTF-8 boundary handling
+- Known limitation: Split-across-chunk PII not detected (documented)
+
+---
+
+### 4.6 Vault (Credential Encryption)
+
+**Location**: `src/vault/builtin.rs`
+
+#### Envelope Encryption Architecture
+
+```
+Master Key (KEK)
+  - 32-byte key from TRUEFLOW_MASTER_KEY env var
+  - Never stored in database
+  |
+  +-- Data Encryption Key (DEK)
+       - Unique 256-bit key per credential
+       - Stored encrypted by KEK in PostgreSQL
+       |
+       +-- Credential
+            - Encrypted by DEK using AES-256-GCM
+            - Stored as: nonce (12B) + ciphertext + tag
+```
+
+#### Security Features
+
+- **CRIT-4**: KEK zeroized on drop
+- Per-credential DEK prevents key reuse
+- 96-bit random nonce per encryption
+- Constant-time key comparison
+
+---
+
+### 4.7 MCP Client & Registry
+
+**Location**: `src/mcp/`
+
+The Model Context Protocol integration enables tool discovery and execution.
+
+#### Registry (`mcp/registry.rs`)
+
+- In-memory `Arc<RwLock<HashMap>>` of connected MCP servers
+- Cached tool schemas for injection
+- OAuth 2.0 auto-discovery (RFC 9728)
+
+#### Client (`mcp/client.rs`)
+
+- JSON-RPC 2.0 over Streamable HTTP
+- Methods: `initialize`, `tools/list`, `tools/call`
+- Auth modes: None, Bearer, OAuth 2.0
+
+#### Tool Execution Flow
+
+1. Agent request with `X-MCP-Servers: brave,slack` header
+2. Gateway fetches cached tool schemas
+3. Tools injected as `mcp__brave__search`, `mcp__slack__send_message`
+4. LLM returns `finish_reason: "tool_calls"` for MCP tools
+5. Gateway executes via JSON-RPC
+6. Result appended to messages, re-sent to LLM
+7. Max 10 iterations
+
+---
+
+### 4.8 Prompt Management
+
+**Location**: `src/api/prompt_handlers.rs`
+
+#### Features
+
+- Versioned prompts with immutable history
+- Folder organization
+- Variable templating (`{{variable}}`)
+- Label-based deployment (`production`, `staging`)
+- Server-side rendering
+
+#### Workflow
+
+1. Create prompt with slug and folder
+2. Publish version with model, messages, parameters
+3. Deploy version to label
+4. Render at runtime with variable substitution
+
+#### API Endpoints
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /prompts` | List prompts (filter by folder) |
+| `POST /prompts` | Create prompt |
+| `POST /prompts/{id}/versions` | Publish new version |
+| `POST /prompts/{id}/deploy` | Deploy version to label |
+| `GET /prompts/by-slug/{slug}/render` | Render with variables |
+
+---
+
+### 4.9 Experiment Tracking
+
+**Location**: `src/api/experiment_handlers.rs`
+
+#### Architecture
+
+Experiments are a convenience layer over the `Split` policy action.
+
+#### Creation Flow
+
+1. `POST /experiments` creates experiment record
+2. Auto-generates `Split` policy with variant weights
+3. Variant selection is deterministic by `request_id`
+
+#### Metrics Tracked
+
+- Request count per variant
+- Average latency
+- Total cost
+- Error rate
+
+---
+
+### 4.10 Realtime WebSocket Proxy
+
+**Location**: `src/proxy/realtime.rs`
+
+#### Purpose
+
+Proxy OpenAI Realtime API WebSocket connections through the gateway.
+
+#### Flow
+
+1. Client connects to `/v1/realtime`
+2. Gateway establishes upstream WebSocket
+3. Bidirectional message passthrough
+4. Token authentication and policy evaluation
+
+---
+
+### 4.11 Rate Limiting
+
+**Location**: `src/cache.rs`
+
+#### Implementation
+
+- Redis-backed sliding window (no 2x burst vulnerability)
+- Per-token, per-project, global scopes
+- Configurable windows: second, minute, hour, day
+
+#### Key Format
+
+```
+rate_limit:{token_id}:{window_type}:{window_value}
+```
+
+---
+
+### 4.12 Spend Management
+
+**Location**: `src/middleware/spend.rs`
+
+#### Cap Types
+
+| Period | Redis Key | Description |
+|--------|-----------|-------------|
+| Daily | `spend:{token_id}:daily:{YYYY-MM-DD}` | Resets daily |
+| Monthly | `spend:{token_id}:monthly:{YYYY-MM}` | Resets monthly |
+| Lifetime | Database | Never resets |
+
+#### Enforcement
+
+- Atomic Redis Lua script for check-and-increment
+- Single-flight pattern (MED-8) prevents thundering herd on cache misses
+- Background budget checker job (15min intervals)
+
+---
+
+## 5. Background Jobs
+
+**Location**: `src/jobs/`
+
+| Job | Interval | Purpose |
+|-----|----------|---------|
+| Cleanup | 1 hour | Expire Level 2 audit logs, strip bodies |
+| Approval Expiry | 60 seconds | Expire stale HITL requests |
+| Session Cleanup | 15 minutes | Remove orphaned sessions |
+| Budget Checker | 15 minutes | Project spend alerts, webhook notifications |
+| Latency Cache Refresh | 5 minutes | Recompute p50 latency per model |
+| Cache Eviction | 60 seconds | Remove expired L1 entries |
+| Key Rotation | 1 hour (configurable) | DEK re-encryption |
+
+---
+
+## 6. Data Architecture
+
+### 6.1 PostgreSQL (System of Record)
+
+**Migrations**: 42 migrations (001-042)
+
+**Key Tables**:
+
+| Table | Purpose |
+|-------|---------|
+| `organizations` | Multi-tenant root |
+| `credentials` | Encrypted API keys |
+| `tokens` | Virtual tokens with policy bindings |
+| `policies` | Policy definitions with versioning |
+| `policy_versions` | Full version history |
+| `audit_logs` | Request/response logs (partitioned by month) |
+| `approvals` | HITL request queue |
+| `sessions` | Multi-turn conversation tracking |
+| `api_keys` | Management API access |
+| `webhooks` | Event delivery endpoints |
+| `mcp_servers` | MCP server registry |
+| `prompts` | Prompt templates |
+| `prompt_versions` | Prompt version history |
+| `experiments` | A/B test tracking |
+| `teams` | Organization hierarchy |
+| `model_access_groups` | LLM model RBAC |
+| `oidc_providers` | SSO/OIDC configurations |
+| `spend_caps` | Per-token budget limits |
+| `notifications` | In-app alerts |
+
+### 6.2 Redis (System of Speed)
+
+| Namespace | Purpose |
+|-----------|---------|
+| `cache:*` | Token/policy/credential lookups (TTL 5-10 min) |
+| `spend:*` | Atomic spend counters |
+| `rate_limit:*` | Sliding window counters |
+| `cb:*` | Circuit breaker state |
+| `response:*` | LLM response cache |
+| `stream:*` | HITL approval queues |
+
+---
+
+## 7. Authentication & Authorization
+
+### 7.1 Authentication Methods
+
+| Method | Header | Role |
+|--------|--------|------|
+| SuperAdmin | `X-Admin-Key` or `Authorization: Bearer {env_key}` | SuperAdmin |
+| API Key | `Authorization: Bearer ak_*` | Admin/Member/ReadOnly |
+| OIDC JWT | `Authorization: Bearer {jwt}` | Mapped from claims |
+
+### 7.2 RBAC
+
+| Role | Permissions |
+|------|-------------|
+| SuperAdmin | Full access (env key only) |
+| Admin | Full access within org |
+| Member | Read/write, no delete |
+| ReadOnly | Read-only access |
+
+### 7.3 Scope System
+
+26 scope namespaces: `tokens:read`, `tokens:write`, `policies:read`, `policies:write`, etc.
+
+Wildcards supported: `*` grants all, `tokens:*` grants all token actions.
+
+---
+
+## 8. Observability
+
+### 8.1 Logging
+
+- Structured JSON logs when `TRUEFLOW_LOG_FORMAT=json`
+- SIEM-compatible (Splunk, Datadog, ELK, CloudWatch)
+
+### 8.2 Tracing
+
+- OpenTelemetry OTLP export to Jaeger/Tempo
+- Spans for: `middleware`, `db_query`, `redis_op`, `upstream_request`, `policy_eval`
+- W3C Trace Context (`traceparent`) propagation
+
+### 8.3 Metrics
+
+Prometheus `/metrics` endpoint exposes:
+
+| Metric | Type | Description |
+|--------|------|-------------|
+| `trueflow_requests_total` | Counter | By method, status, token |
+| `trueflow_request_duration_seconds` | Histogram | Proxy latency |
+| `trueflow_upstream_errors_total` | Counter | By upstream URL |
+| `trueflow_cache_hits_total` | Counter | Response cache hits |
+| `trueflow_cache_misses_total` | Counter | Response cache misses |
+
+### 8.4 Exporters
+
+| Exporter | Config |
+|----------|--------|
+| Langfuse | `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY` |
+| DataDog | `DD_API_KEY` |
+| Custom Webhooks | Per-project configuration |
+
+---
+
+## 9. Security Architecture
+
+See dedicated [Security Document](security.md) for full details.
+
+### Key Protections
+
+- Envelope encryption for all credentials
+- Constant-time key comparison
+- SSRF protection for webhooks
+- OIDC cannot grant SuperAdmin role (SEC-01)
+- Empty admin key rejected (SEC-06)
+- Insecure default key blocked in production (SEC-08)
+
+---
+
+## 10. Development & Deployment
+
+### Docker
+
+- Multi-stage builds (Planner + Builder + Runtime)
+- Minimal image size (~100MB)
+- Non-root user `trueflow`
+
+### Configuration
+
+Environment variables loaded at startup:
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `DATABASE_URL` | Yes | PostgreSQL connection string |
+| `REDIS_URL` | Yes | Redis connection string |
+| `TRUEFLOW_MASTER_KEY` | Yes | 32-byte hex encryption key |
+| `TRUEFLOW_ADMIN_KEY` | Yes | Admin API access key |
+| `DASHBOARD_ORIGIN` | Yes | CORS origin for dashboard |
+| `DASHBOARD_SECRET` | Yes | Shared secret for dashboard |
+
+### Health Endpoints
+
+| Endpoint | Purpose |
+|----------|---------|
+| `/healthz` | Liveness probe (process running) |
+| `/readyz` | Readiness probe (DB + Redis connected) |
+| `/metrics` | Prometheus metrics |
+
+---
+
+## 11. Known Limitations
+
+| Area | Limitation | Mitigation |
+|------|------------|------------|
+| Circuit Breaker | Half-open limit is instance-local | Set conservative `half_open_max_requests` |
+| PII Streaming | Split-across-chunk PII not detected | Documented, not fixed |
+| Redis | Required for operation | Readiness probe returns 503 if unavailable |
+| Precision | f64 for spend calculations | Documented precision considerations |

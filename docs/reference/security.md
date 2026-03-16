@@ -251,6 +251,162 @@ The real credential exists in memory for the shortest possible time — typicall
 
 ---
 
+## Security Fixes Registry
+
+The following security issues have been identified and addressed in the TrueFlow codebase. This registry documents each fix for compliance and audit purposes.
+
+### Critical Severity
+
+| ID | Description | Fix | Location |
+|----|-------------|-----|----------|
+| CRIT-1 | Default project ID was global shared UUID, allowing cross-tenant data access | Generate org-specific deterministic UUID v5 from org_id | `api/mod.rs:default_project_id()` |
+| CRIT-4 | KEK held in memory after VaultCrypto drop | Zeroize KEK on drop using `zeroize` crate | `vault/builtin.rs:Drop` |
+
+### High Severity
+
+| ID | Description | Fix | Location |
+|----|-------------|-----|----------|
+| HIGH-4 | Policy engine continued processing after deny action | Short-circuit evaluation stops immediately on deny | `middleware/engine/mod.rs` |
+| HIGH-9 | Circuit breaker half-open limit is instance-local | Documented limitation; mitigation via conservative settings | `proxy/loadbalancer.rs` |
+
+### Medium Severity
+
+| ID | Description | Fix | Location |
+|----|-------------|-----|----------|
+| MED-1 | Input validation gaps | Validation added | Various |
+| MED-2 | Input validation gaps | Validation added | Various |
+| MED-3 | Input validation gaps | Validation added | Various |
+| MED-4 | Admin key weak entropy warning | Log warning if key < 32 chars | `api/mod.rs:admin_auth()` |
+| MED-5 | Empty policy condition should be safe default | Treat empty conditions as denial | `middleware/engine/evaluate.rs` |
+| MED-6 | Action ordering not documented | Documented MED-6 in policy engine | `middleware/engine/mod.rs` |
+| MED-7 | Spend cap race conditions | Redis atomic operations | `middleware/spend.rs` |
+| MED-8 | Cache miss thundering herd on spend checks | Single-flight pattern | `middleware/spend.rs` |
+| MED-9 | Spend cap enforcement gaps | Hard cap enforcement | `middleware/spend.rs` |
+| MED-10 | Input validation gaps | Validation added | Various |
+| MED-11 | Input validation gaps | Validation added | Various |
+| MED-12 | Input validation gaps | Validation added | Various |
+| MED-13 | External guardrail threshold not validated | Threshold bounds checking | `middleware/external_guardrail.rs` |
+| MED-14 | SSN regex matched dashed-only patterns incorrectly | Fixed SSN pattern | `middleware/redact.rs` |
+| MED-15 | Credit card validation missing Luhn check | Added Luhn algorithm validation | `middleware/redact.rs` |
+
+### Low Severity (H-series)
+
+| ID | Description | Fix | Location |
+|----|-------------|-----|----------|
+| H-1 | Dangerous header injection blocked | Block host, content-length, etc. | `main.rs:handle_credential_command` |
+| H-6 | UTF-8 duration parsing edge case | Fixed UTF-8 handling | `middleware/policy.rs` |
+
+---
+
+## OIDC JWT Authentication Flow
+
+TrueFlow supports OpenID Connect (OIDC) authentication for the Management API. The flow uses full cryptographic verification via JWKS.
+
+### Provider Registration
+
+OIDC providers are registered directly in the `oidc_providers` database table:
+
+```sql
+INSERT INTO oidc_providers (org_id, name, issuer_url, client_id, jwks_uri, audience, claim_mapping, default_role, default_scopes, enabled)
+VALUES (
+  'org-uuid',
+  'Okta',
+  'https://your-org.okta.com',
+  'client-id',
+  'https://your-org.okta.com/.well-known/jwks.json',
+  'trueflow-api',
+  '{"role": "custom:role", "scopes": "custom:scopes"}',
+  'member',
+  '["tokens:read", "policies:read"]',
+  true
+);
+```
+
+### JWT Validation Flow
+
+```
+1. Request arrives with Authorization: Bearer {jwt}
+   |
+2. Peek at JWT payload (unverified) to extract `iss` claim
+   |
+3. Look up OIDC provider by issuer URL in database
+   |
+4. Fetch JWKS from provider's jwks_uri (cached)
+   |
+5. Verify JWT signature using matching JWK
+   |
+6. Validate claims:
+   - iss matches provider issuer_url
+   - aud contains configured audience
+   - exp is in the future
+   - iat is valid
+   |
+7. Extract role and scopes from claim_mapping
+   |
+8. Enforce SEC-01: OIDC cannot grant SuperAdmin
+   - "superadmin" claim capped to Admin role
+   |
+9. Create AuthContext with mapped role/scopes
+   |
+10. Proceed to authorization check
+```
+
+### Security Properties
+
+- **SEC-01**: OIDC can never grant SuperAdmin role. Any `superadmin` claim is capped to Admin.
+- **Signature Verification**: Full JWKS-based signature verification using RS256/RS384/RS512/ES256/ES384/ES512.
+- **Audience Validation**: Token must include the configured audience.
+- **Issuer Validation**: Token issuer must match a registered provider.
+- **Claim Mapping**: Flexible mapping from JWT claims to TrueFlow roles and scopes.
+
+### Example Claim Mapping
+
+```json
+{
+  "role": "custom:trueflow_role",
+  "scopes": "custom:trueflow_scopes",
+  "org_id": "custom:organization_id"
+}
+```
+
+---
+
+## Guardrail Header Mode Security
+
+The `X-TrueFlow-Guardrails` header allows per-request guardrail configuration. This is controlled by the token's `guardrail_header_mode` field.
+
+### Modes
+
+| Mode | Behavior | Security Implication |
+|------|----------|---------------------|
+| `disabled` (default) | Header is ignored | Prevents unauthorized guardrail injection |
+| `append` | Header actions added to configured policies | Trusted callers can add guardrails |
+| `override` | Header actions replace all policies | High trust; bypasses existing policies |
+
+### Security Considerations
+
+1. **Default is Secure**: By default, `guardrail_header_mode` is `disabled`, preventing unauthorized agents from injecting guardrails.
+
+2. **Trust Required**: Only enable `append` or `override` modes for tokens where the agent is trusted to specify guardrails.
+
+3. **Audit Trail**: All header-based guardrail activations are logged with the token ID for traceability.
+
+### Warning Log
+
+When a header is present but ignored:
+
+```
+WARN: X-TrueFlow-Guardrails header present but ignored (guardrail_header_mode=disabled)
+```
+
+### Recommended Configuration
+
+- Production tokens: `guardrail_header_mode: "disabled"`
+- Development tokens: `guardrail_header_mode: "append"`
+- Never use `override` in production without explicit security review
+
+---
+
 ## Compliance Roadmap
 
 *Note: The following are planned roadmap items for TrueFlow enterprise deployments. Timelines are targets, not factual commitments.*

@@ -25,6 +25,9 @@ TrueFlow is a Rust gateway that sits between your AI agents and every LLM provid
 | [Policy Guide](guides/policies.md) | Conditions, actions, shadow mode, spend caps, content filters |
 | [Framework Integrations](guides/framework-integrations.md) | LangChain, CrewAI, LlamaIndex |
 | [Supported Providers](guides/providers.md) | All 10 LLM providers — model prefixes, auth, streaming |
+| [Experiments and A/B Testing](guides/experiments.md) | Traffic splitting, model comparison, canary rollouts |
+| [MCP Integration](guides/mcp.md) | Model Context Protocol server integration and tool discovery |
+| [Prompt Management](guides/prompts.md) | Versioned templates, deployment, server-side rendering |
 
 ## Reference
 
@@ -40,3 +43,9 @@ TrueFlow is a Rust gateway that sits between your AI agents and every LLM provid
 |-------|-------------|
 | [Docker](deployment/docker.md) | Docker Compose for development and single-server production |
 | [Kubernetes](deployment/kubernetes.md) | K8s manifests, health probes, resource limits |
+
+## Feature Inventory
+
+| Doc | Description |
+|-----|-------------|
+| [Gateway Features](../GATEWAY_FEATURES.md) | Complete inventory of all implemented features |

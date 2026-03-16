@@ -426,6 +426,23 @@ Validates that the LLM response body (or extracted JSON from markdown blocks) co
 }
 ```
 
+| Param | Type | Default | Description |
+|-------|------|---------|-------------|
+| `schema` | object | required | JSON Schema draft 2020-12 compatible schema definition. |
+| `not` | boolean | `false` | If `true`, the rule passes only when the response does NOT match the schema. Useful for detecting unwanted patterns. |
+| `message` | string | `null` | Custom error message returned when validation fails. |
+
+**Use Cases:**
+
+- Ensure responses contain required fields
+- Validate data types and value ranges
+- Detect JSON structure violations
+- Block responses matching unwanted schemas (with `not: true`)
+
+**JSON Extraction:**
+
+If the response contains markdown code blocks with JSON (e.g., ` ```json ... ``` `), the gateway automatically extracts the JSON for validation.
+
 ### `dynamic_route`
 
 Selects an upstream based on a routing strategy. Evaluates at request time — useful for load balancing or cost-optimized routing across multiple providers.
@@ -512,6 +529,140 @@ Built-in content filtering used by guardrail presets. Checks request/response te
 | `message` | Custom error message when blocked |
 
 > **Note:** This action is primarily used internally by guardrail presets (e.g., `pii_redaction`, `prompt_injection`). For most use cases, prefer the `POST /guardrails/enable` API instead of crafting `content_filter` rules manually.
+
+### `split`
+
+Traffic splitting for A/B testing and canary rollouts. Distributes requests across multiple variants based on relative weights. Variant selection is deterministic per `request_id` — the same caller always gets the same variant within a single request.
+
+```json
+{
+  "action": "split",
+  "experiment": "model-comparison-q1",
+  "variants": [
+    {
+      "weight": 70,
+      "name": "control",
+      "set_body_fields": {"model": "gpt-4o"}
+    },
+    {
+      "weight": 30,
+      "name": "experiment",
+      "set_body_fields": {"model": "claude-3-5-sonnet-20241022"}
+    }
+  ]
+}
+```
+
+| Param | Type | Description |
+|-------|------|-------------|
+| `variants` | array | One or more variants with relative weights. Weights do not need to sum to 100. |
+| `experiment` | string | Optional experiment name for grouping audit log entries. Used to analyze results. |
+| `variant.weight` | integer | Relative weight for selection. Higher values = more traffic. |
+| `variant.name` | string | Variant identifier for tracking. |
+| `variant.set_body_fields` | object | Fields to override in the request body (e.g., model name). |
+
+**Use Cases:**
+
+- A/B test different models (GPT-4 vs Claude)
+- Canary rollouts with gradual traffic shift
+- Model performance comparison
+
+**Tracking:**
+
+The experiment name and variant name are attached to the audit log entry for each request. Query audit logs to analyze:
+
+```bash
+curl "http://localhost:8443/api/v1/audit?experiment=model-comparison-q1"
+```
+
+### `tool_scope`
+
+RBAC for LLM tool calls. Filters or restricts which tools an agent can invoke. Works with both native tool definitions and MCP tools (`mcp__*` namespace).
+
+```json
+{
+  "action": "tool_scope",
+  "allowed_tools": ["search_web", "get_weather", "mcp__brave__search"],
+  "blocked_tools": ["delete_file", "exec_command"],
+  "default": "deny"
+}
+```
+
+| Param | Type | Default | Description |
+|-------|------|---------|-------------|
+| `allowed_tools` | array | `[]` | Whitelist of tool names. If non-empty, only these tools are permitted. |
+| `blocked_tools` | array | `[]` | Blacklist of tool names. These tools are always blocked. |
+| `default` | string | `"allow"` | Default behavior when tool is not in either list. `"allow"` or `"deny"`. |
+
+**Matching Rules:**
+
+1. If `allowed_tools` is non-empty and tool is NOT in the list: block
+2. If tool IS in `blocked_tools`: block
+3. If tool is in both lists: block (deny takes precedence)
+4. Otherwise: apply `default` behavior
+
+**Glob Patterns:**
+
+Tool names support glob patterns:
+
+```json
+{
+  "action": "tool_scope",
+  "allowed_tools": ["mcp__brave__*"],
+  "blocked_tools": ["mcp__*__delete", "mcp__*__admin_*"]
+}
+```
+
+**MCP Tools:**
+
+MCP tools are automatically namespaced as `mcp__{server}__{tool}`:
+
+- `mcp__brave__search` — Brave search via MCP
+- `mcp__slack__send_message` — Slack messaging via MCP
+
+### `budget_alert`
+
+Triggers notifications when spend thresholds are crossed. Runs in the post-flight phase after cost is calculated.
+
+```json
+{
+  "action": "budget_alert",
+  "thresholds": {
+    "warn": 0.75,
+    "critical": 0.90
+  },
+  "period": "monthly",
+  "limit_usd": 500.00,
+  "webhook_url": "https://hooks.slack.com/services/..."
+}
+```
+
+| Param | Type | Description |
+|-------|------|-------------|
+| `thresholds.warn` | float | Warning threshold as fraction (0.0-1.0). Triggers at 75% of limit by default. |
+| `thresholds.critical` | float | Critical threshold as fraction. Triggers at 90% by default. |
+| `period` | string | Period to check: `"daily"`, `"monthly"`, or `"lifetime"`. |
+| `limit_usd` | float | Budget limit in USD. |
+| `webhook_url` | string | Optional webhook URL for notifications. Falls back to project webhooks. |
+
+**Webhook Payload:**
+
+```json
+{
+  "event_type": "budget_alert",
+  "timestamp": "2026-03-16T14:30:00Z",
+  "token_id": "tf_v1_...",
+  "token_name": "production-agent",
+  "project_id": "uuid",
+  "details": {
+    "period": "monthly",
+    "limit_usd": 500.00,
+    "current_usd": 375.50,
+    "threshold": 0.75,
+    "level": "warn"
+  }
+}
+```
 
 ---
 
