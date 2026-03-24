@@ -85,6 +85,11 @@ pub struct AuditEntry {
     /// The upstream API call was made before the cap was checked, so the cost was incurred
     /// but not tracked. This is a billing anomaly that requires attention.
     pub spend_cap_overrun: bool,
+    /// External user/customer ID from the token (SaaS builder attribution).
+    /// Copied from token.external_user_id for request-level attribution.
+    pub external_user_id: Option<String>,
+    /// Token purpose at time of request (copied from token.purpose).
+    pub token_purpose: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

@@ -293,6 +293,7 @@ pub async fn proxy_handler(
             token_name: &token.name,
             project_id: &token.project_id.to_string(),
             client_ip: client_ip_str.as_deref(),
+            token_purpose: &token.purpose,
             response_status: None,
             response_body: None,
             response_headers: None,
@@ -468,6 +469,8 @@ pub async fn proxy_handler(
                     session_id.clone(),
                     parent_span_id.clone(),
                     custom_properties.clone(),
+                    token.external_user_id.clone(),
+                    Some(token.purpose.clone()),
                 );
                 audit.policy_result = Some(crate::models::audit::PolicyResult::Deny {
                     policy: triggered.policy_name.clone(),
@@ -582,7 +585,9 @@ pub async fn proxy_handler(
                         session_id.clone(),
                         parent_span_id.clone(),
                         custom_properties.clone(),
-                    );
+                        token.external_user_id.clone(),
+                    Some(token.purpose.clone()),
+                );
                     audit.policy_result = Some(crate::models::audit::PolicyResult::Deny {
                         policy: triggered.policy_name.clone(),
                         reason: "rate limit exceeded".to_string(),
@@ -1056,7 +1061,9 @@ pub async fn proxy_handler(
                                 session_id.clone(),
                                 parent_span_id.clone(),
                                 custom_properties.clone(),
-                            );
+                                token.external_user_id.clone(),
+                    Some(token.purpose.clone()),
+                );
                             audit.policy_result = Some(crate::models::audit::PolicyResult::Deny {
                                 policy: triggered.policy_name.clone(),
                                 reason: format!(
@@ -1101,7 +1108,9 @@ pub async fn proxy_handler(
                                 session_id.clone(),
                                 parent_span_id.clone(),
                                 custom_properties.clone(),
-                            );
+                                token.external_user_id.clone(),
+                    Some(token.purpose.clone()),
+                );
                             audit.policy_result = Some(crate::models::audit::PolicyResult::Deny {
                                 policy: triggered.policy_name.clone(),
                                 reason: format!(
@@ -1159,7 +1168,9 @@ pub async fn proxy_handler(
                             session_id.clone(),
                             parent_span_id.clone(),
                             custom_properties.clone(),
-                        );
+                            token.external_user_id.clone(),
+                    Some(token.purpose.clone()),
+                );
                         audit.policy_result = Some(crate::models::audit::PolicyResult::Deny {
                             policy: triggered.policy_name.clone(),
                             reason: reason.clone(),
@@ -1210,7 +1221,9 @@ pub async fn proxy_handler(
                 session_id.clone(),
                 parent_span_id.clone(),
                 custom_properties.clone(),
-            );
+                token.external_user_id.clone(),
+                    Some(token.purpose.clone()),
+                );
             audit.policy_result = Some(crate::models::audit::PolicyResult::Deny {
                 policy: "DefaultRateLimit".to_string(),
                 reason: format!(
@@ -1251,7 +1264,9 @@ pub async fn proxy_handler(
             session_id.clone(),
             parent_span_id.clone(),
             custom_properties.clone(),
-        );
+            token.external_user_id.clone(),
+                    Some(token.purpose.clone()),
+                );
         audit.policy_result = Some(crate::models::audit::PolicyResult::Deny {
             policy: "SpendCap".to_string(),
             reason: e.to_string(),
@@ -1304,7 +1319,9 @@ pub async fn proxy_handler(
             session_id.clone(),
             parent_span_id.clone(),
             custom_properties.clone(),
-        );
+            token.external_user_id.clone(),
+                    Some(token.purpose.clone()),
+                );
         audit.policy_result = Some(crate::models::audit::PolicyResult::Deny {
             policy: "ProjectBudgetCap".to_string(),
             reason: "Project hard spend cap exceeded".to_string(),
@@ -1673,7 +1690,9 @@ pub async fn proxy_handler(
                             session_id.clone(),
                             parent_span_id.clone(),
                             custom_properties.clone(),
-                        );
+                            token.external_user_id.clone(),
+                    Some(token.purpose.clone()),
+                );
                         audit.policy_result =
                             Some(crate::models::audit::PolicyResult::HitlRejected);
                         audit.response_latency_ms = start.elapsed().as_millis() as u64;
@@ -1718,6 +1737,8 @@ pub async fn proxy_handler(
                     session_id.clone(),
                     parent_span_id.clone(),
                     custom_properties.clone(),
+                    token.external_user_id.clone(),
+                    Some(token.purpose.clone()),
                 );
                 audit.policy_result = Some(crate::models::audit::PolicyResult::HitlRejected);
                 audit.response_latency_ms = start.elapsed().as_millis() as u64;
@@ -1749,6 +1770,8 @@ pub async fn proxy_handler(
                     session_id.clone(),
                     parent_span_id.clone(),
                     custom_properties.clone(),
+                    token.external_user_id.clone(),
+                    Some(token.purpose.clone()),
                 );
                 audit.policy_result = Some(crate::models::audit::PolicyResult::HitlTimeout);
                 audit.response_latency_ms = start.elapsed().as_millis() as u64;
@@ -1956,7 +1979,9 @@ pub async fn proxy_handler(
                 session_id,
                 parent_span_id,
                 custom_properties.clone(),
-            );
+                token.external_user_id.clone(),
+                    Some(token.purpose.clone()),
+                );
             audit.policy_result = Some(crate::models::audit::PolicyResult::Allow);
             audit.upstream_status = Some(cached.status);
             audit.response_latency_ms = start.elapsed().as_millis() as u64;
@@ -2039,7 +2064,9 @@ pub async fn proxy_handler(
                 session_id,
                 parent_span_id,
                 custom_properties,
-            );
+                token.external_user_id.clone(),
+                    Some(token.purpose.clone()),
+                );
             audit.upstream_status = Some(403);
             audit.response_latency_ms = start.elapsed().as_millis() as u64;
             audit.emit(&state);
@@ -2563,6 +2590,8 @@ pub async fn proxy_handler(
                     session_id.clone(),
                     parent_span_id.clone(),
                     custom_properties.clone(),
+                    token.external_user_id.clone(),
+                    Some(token.purpose.clone()),
                 );
                 audit.upstream_status = Some(502);
                 audit.response_latency_ms = start.elapsed().as_millis() as u64;
@@ -2594,6 +2623,8 @@ pub async fn proxy_handler(
                     session_id,
                     parent_span_id,
                     custom_properties.clone(),
+                    token.external_user_id.clone(),
+                    Some(token.purpose.clone()),
                 );
                 audit.upstream_status = Some(504);
                 audit.response_latency_ms = start.elapsed().as_millis() as u64;
@@ -2658,6 +2689,8 @@ pub async fn proxy_handler(
                     session_id.clone(),
                     parent_span_id.clone(),
                     custom_properties.clone(),
+                    token.external_user_id.clone(),
+                    Some(token.purpose.clone()),
                 );
                 audit.policy_result = Some(if hitl_required {
                     crate::models::audit::PolicyResult::HitlApproved
@@ -2700,6 +2733,8 @@ pub async fn proxy_handler(
                     session_id,
                     parent_span_id,
                     custom_properties.clone(),
+                    token.external_user_id.clone(),
+                    Some(token.purpose.clone()),
                 );
                 audit.policy_result = Some(if hitl_required {
                     crate::models::audit::PolicyResult::HitlApproved
@@ -2873,7 +2908,9 @@ pub async fn proxy_handler(
                 session_id_bg,
                 parent_span_id_bg,
                 custom_properties.clone(),
-            );
+                token.external_user_id.clone(),
+                    Some(token.purpose.clone()),
+                );
             audit.policy_result = Some(if hitl_required {
                 crate::models::audit::PolicyResult::HitlApproved
             } else {
@@ -3302,6 +3339,7 @@ pub async fn proxy_handler(
             token_name: &token.name,
             project_id: &project_id_str,
             client_ip: client_ip_str.as_deref(),
+            token_purpose: &token.purpose,
             response_status: Some(status.as_u16()),
             response_body: parsed_resp_body.as_ref(),
             response_headers: Some(&axum_resp_headers),
@@ -3711,7 +3749,9 @@ pub async fn proxy_handler(
         session_id,
         parent_span_id,
         custom_properties.clone(),
-    );
+        token.external_user_id.clone(),
+                    Some(token.purpose.clone()),
+                );
     audit.policy_result = Some(if hitl_required {
         crate::models::audit::PolicyResult::HitlApproved
     } else {

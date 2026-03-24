@@ -1,116 +1,79 @@
-import { NextRequest, NextResponse } from "next/server";
-import { jwtVerify } from "jose";
+import { createServerClient } from '@supabase/ssr'
+import { NextResponse, type NextRequest } from 'next/server'
 
-/**
- * Next.js middleware — runs on every request server-side.
- *
- * Two auth modes (determined by env vars):
- *
- * 1. **Google SSO** (GOOGLE_CLIENT_ID is set):
- *    Checks for a valid `trueflow_session` cookie. If missing, redirects to /login.
- *    The login page initiates the Google OAuth flow.
- *
- * 2. **Shared Secret** (DASHBOARD_SECRET is set, no GOOGLE_CLIENT_ID):
- *    Sets the `dashboard_token` cookie automatically so the browser includes
- *    it on every /api/proxy/* call. Legacy mode — no login page.
- *
- * Routes excluded from auth: /login, /api/auth/*, static assets.
- */
 export async function middleware(request: NextRequest) {
-    const { pathname } = request.nextUrl;
-    const response = NextResponse.next();
+  let supabaseResponse = NextResponse.next({
+    request,
+  })
 
-    const googleSsoEnabled = !!process.env.GOOGLE_CLIENT_ID;
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
-    // ── Google SSO Mode ──
-    if (googleSsoEnabled) {
-        // Skip auth for login page, auth API routes, and static assets
-        const isPublicRoute =
-            pathname === "/login" ||
-            pathname.startsWith("/api/auth/") ||
-            pathname.startsWith("/_next/") ||
-            pathname === "/favicon.ico";
+  // Skip auth check if environment variables are missing
+  if (!supabaseUrl || !supabaseAnonKey) {
+    return supabaseResponse
+  }
 
-        if (isPublicRoute) return response;
-
-        // Check for session cookie
-        const session = request.cookies.get("trueflow_session")?.value;
-        if (!session) {
-            const loginUrl = new URL("/login", request.url);
-            return NextResponse.redirect(loginUrl);
-        }
-
-        // Verify JWT signature and expiry
-        try {
-            const sessionSecret = process.env.SESSION_SECRET;
-            if (!sessionSecret) {
-                throw new Error("SESSION_SECRET not set");
-            }
-            const secretKey = new TextEncoder().encode(sessionSecret);
-            const { payload } = await jwtVerify(session, secretKey);
-
-            // Set a client-readable mirror cookie (non-httpOnly) with display info
-            const userInfo = JSON.stringify({
-                email: payload.email,
-                name: payload.name,
-                picture: payload.picture,
-            });
-            const existing_user = request.cookies.get("trueflow_user")?.value;
-            if (!existing_user) {
-                response.cookies.set("trueflow_user", btoa(userInfo), {
-                    httpOnly: false,
-                    sameSite: "lax",
-                    secure: process.env.NODE_ENV === "production",
-                    path: "/",
-                    maxAge: 60 * 60 * 24 * 7,
-                });
-            }
-        } catch {
-            // Invalid or expired JWT — redirect to login
-            const loginUrl = new URL("/login", request.url);
-            loginUrl.searchParams.set("error", "Session expired — please sign in again");
-            const redirect = NextResponse.redirect(loginUrl);
-            redirect.cookies.delete("trueflow_session");
-            redirect.cookies.delete("trueflow_user");
-            return redirect;
-        }
-
-        // Also set the dashboard_token for gateway API auth if DASHBOARD_SECRET exists
-        const secret = process.env.DASHBOARD_SECRET;
-        if (secret) {
-            const existing = request.cookies.get("dashboard_token")?.value;
-            if (existing !== secret) {
-                response.cookies.set("dashboard_token", secret, {
-                    httpOnly: true,
-                    sameSite: "strict",
-                    secure: process.env.NODE_ENV === "production",
-                    path: "/",
-                    maxAge: 60 * 60 * 24,
-                });
-            }
-        }
-
-        return response;
+  const supabase = createServerClient(
+    supabaseUrl,
+    supabaseAnonKey,
+    {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll()
+        },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
+          supabaseResponse = NextResponse.next({
+            request,
+          })
+          cookiesToSet.forEach(({ name, value, options }) =>
+            supabaseResponse.cookies.set(name, value, options)
+          )
+        },
+      },
     }
+  )
 
-    // ── Legacy Shared Secret Mode ──
-    const secret = process.env.DASHBOARD_SECRET;
-    if (!secret) return response;
+  // IMPORTANT: Avoid writing any logic between createServerClient and
+  // supabase.auth.getUser(). A simple mistake could make your application
+  // vulnerable to attacks.
 
-    const existing = request.cookies.get("dashboard_token")?.value;
-    if (existing !== secret) {
-        response.cookies.set("dashboard_token", secret, {
-            httpOnly: true,
-            sameSite: "strict",
-            secure: process.env.NODE_ENV === "production",
-            path: "/",
-            maxAge: 60 * 60 * 24,
-        });
-    }
+  const {
+    data: { session },
+  } = await supabase.auth.getSession()
 
-    return response;
+  // Public routes that don't require authentication
+  const isPublicRoute =
+    request.nextUrl.pathname.startsWith('/login') ||
+    request.nextUrl.pathname.startsWith('/auth') ||
+    request.nextUrl.pathname.startsWith('/_next') ||
+    request.nextUrl.pathname.startsWith('/api/auth') ||
+    request.nextUrl.pathname === '/favicon.ico'
+
+  if (!session && !isPublicRoute) {
+    // Redirect to login if not authenticated
+    const url = request.nextUrl.clone()
+    url.pathname = '/login'
+    return NextResponse.redirect(url)
+  }
+
+  // IMPORTANT: You *must* return the supabaseResponse object as it is. If you're
+  // creating a new response object with NextResponse.next() make sure to:
+  // 1. Pass the request in the response.
+  // 2. Copy over the cookies.
+  return supabaseResponse
 }
 
 export const config = {
-    matcher: ["/((?!api/proxy|_next/static|_next/image|favicon.ico).*)"],
-};
+  matcher: [
+    /*
+     * Match all request paths except for the ones starting with:
+     * - _next/static (static files)
+     * - _next/image (image optimization files)
+     * - favicon.ico (favicon file)
+     * - public folder
+     */
+    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+  ],
+}

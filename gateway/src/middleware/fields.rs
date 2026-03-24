@@ -19,6 +19,7 @@ pub struct RequestContext<'a> {
     pub token_name: &'a str,
     pub project_id: &'a str,
     pub client_ip: Option<&'a str>,
+    pub token_purpose: &'a str,
 
     // ── Response data (Phase 2 / post-flight only) ──
     pub response_status: Option<u16>,
@@ -129,6 +130,7 @@ fn resolve_token(path: &str, ctx: &RequestContext<'_>) -> Option<Value> {
         "id" => Some(Value::String(ctx.token_id.to_string())),
         "name" => Some(Value::String(ctx.token_name.to_string())),
         "project_id" => Some(Value::String(ctx.project_id.to_string())),
+        "purpose" => Some(Value::String(ctx.token_purpose.to_string())),
         _ => None,
     }
 }
@@ -273,6 +275,7 @@ mod tests {
             token_name: "My Token",
             project_id: "proj_xyz",
             client_ip: Some("10.0.0.42"),
+            token_purpose: "llm",
             response_status: None,
             response_body: None,
             response_headers: None,
@@ -547,6 +550,7 @@ mod tests {
             resolve_field("token.project_id", &ctx),
             Some(json!("proj_xyz"))
         );
+        assert_eq!(resolve_field("token.purpose", &ctx), Some(json!("llm")));
         assert_eq!(resolve_field("token.unknown", &ctx), None);
     }
 

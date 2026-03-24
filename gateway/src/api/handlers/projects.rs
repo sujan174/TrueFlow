@@ -103,9 +103,15 @@ pub async fn delete_project(
 
     let id = Uuid::parse_str(&id_str).map_err(|_| StatusCode::BAD_REQUEST)?;
 
-    // PREVENT DELETING THE DEFAULT PROJECT
-    if id == auth.default_project_id() {
-        tracing::warn!("attempt to delete default project prevented");
+    // Check how many projects exist in the org
+    let projects = state.db.list_projects(auth.org_id).await.map_err(|e| {
+        tracing::error!("list_projects failed: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+    // Prevent deleting the last project - users must always have at least one
+    if projects.len() <= 1 {
+        tracing::warn!("attempt to delete last project prevented");
         return Err(StatusCode::BAD_REQUEST);
     }
 

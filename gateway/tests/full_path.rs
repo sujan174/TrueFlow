@@ -35,6 +35,7 @@ fn test_ctx<'a>(
         token_name: "Integration Test Token",
         project_id: "proj_integ",
         client_ip: Some("192.168.1.10"),
+        token_purpose: "llm",
         response_status: None,
         response_body: None,
         response_headers: None,

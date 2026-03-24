@@ -7,6 +7,10 @@
 //!
 //! Uses JSON-RPC 2.0 over HTTP POST as specified by MCP Streamable HTTP transport.
 //! Supports three auth modes: None, Bearer (static API key), OAuth 2.0 (dynamic token).
+//!
+//! Protocol compliance:
+//! - Notifications (no `id`) are sent via `notify()`, never via `rpc()`.
+//! - SSE streaming responses from `tools/call` are parsed by `read_rpc_body()`.
 
 use reqwest::Client;
 use serde_json::Value;
@@ -53,7 +57,8 @@ pub struct McpClient {
     http: Client,
     request_id: AtomicU64,
     /// Session ID returned by server during initialization (if any).
-    session_id: std::sync::Mutex<Option<String>>,
+    /// Uses tokio::sync::Mutex to be safe in async context.
+    session_id: tokio::sync::Mutex<Option<String>>,
 }
 
 impl McpClient {
@@ -82,7 +87,7 @@ impl McpClient {
             auth,
             http,
             request_id: AtomicU64::new(1),
-            session_id: std::sync::Mutex::new(None),
+            session_id: tokio::sync::Mutex::new(None),
         }
     }
 
@@ -105,6 +110,97 @@ impl McpClient {
     /// Send a JSON-RPC request to the MCP server and return the parsed result.
     async fn rpc(&self, method: &str, params: Option<Value>) -> Result<Value, String> {
         self.rpc_inner(method, params, true).await
+    }
+
+    /// Send a JSON-RPC 2.0 notification (no `id` field, no response expected).
+    ///
+    /// Per JSON-RPC 2.0 spec, notifications MUST NOT have an `id` field.
+    /// The server MUST NOT send a response to a notification.
+    async fn notify(&self, method: &str, params: Option<Value>) -> Result<(), String> {
+        let msg = serde_json::json!({
+            "jsonrpc": "2.0",
+            "method": method,
+            // params omitted if None
+        });
+        let msg = if let Some(p) = params {
+            let mut obj = msg;
+            obj["params"] = p;
+            obj
+        } else {
+            msg
+        };
+
+        let mut http_req = self
+            .http
+            .post(&self.endpoint)
+            .header("Content-Type", "application/json")
+            .header("Accept", "application/json, text/event-stream");
+
+        if let Some(auth_header) = self.resolve_auth_header().await? {
+            http_req = http_req.header("Authorization", auth_header);
+        }
+
+        {
+            let guard = self.session_id.lock().await;
+            if let Some(sid) = guard.as_ref() {
+                http_req = http_req.header("Mcp-Session-Id", sid.clone());
+            }
+        }
+
+        // Fire and forget — notifications get no response
+        let _ = http_req.json(&msg).send().await;
+        Ok(())
+    }
+
+    /// Extract a JSON-RPC response from an HTTP response body.
+    ///
+    /// Handles two content types:
+    /// - `application/json`: parse body directly as JsonRpcResponse.
+    /// - `text/event-stream` (SSE): scan for a `data:` line and parse that JSON.
+    async fn read_rpc_body(
+        &self,
+        resp: reqwest::Response,
+    ) -> Result<JsonRpcResponse, String> {
+        let content_type = resp
+            .headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("")
+            .to_string();
+
+        let body = resp
+            .text()
+            .await
+            .map_err(|e| format!("Failed to read MCP response body: {}", e))?;
+
+        if content_type.contains("text/event-stream") {
+            // SSE: find first `data: {...}` line that contains a valid JSON-RPC response
+            for line in body.lines() {
+                let line = line.trim();
+                if let Some(json_str) = line.strip_prefix("data:") {
+                    let json_str = json_str.trim();
+                    if json_str == "[DONE]" {
+                        continue;
+                    }
+                    if let Ok(rpc_resp) = serde_json::from_str::<JsonRpcResponse>(json_str) {
+                        return Ok(rpc_resp);
+                    }
+                    // Not a JSON-RPC response object (e.g. partial update) — skip
+                }
+            }
+            Err(format!(
+                "SSE stream contained no valid JSON-RPC response (body length: {})",
+                body.len()
+            ))
+        } else {
+            serde_json::from_str::<JsonRpcResponse>(&body).map_err(|e| {
+                format!(
+                    "Invalid JSON-RPC response: {} (body: {})",
+                    e,
+                    &body[..body.len().min(200)]
+                )
+            })
+        }
     }
 
     /// Inner RPC implementation with optional retry on 401.
@@ -130,8 +226,9 @@ impl McpClient {
                 http_req = http_req.header("Authorization", auth_header);
             }
 
-            // Attach session ID if we have one
-            if let Ok(guard) = self.session_id.lock() {
+            // Attach session ID if we have one (uses tokio Mutex, safe to .await)
+            {
+                let guard = self.session_id.lock().await;
                 if let Some(sid) = guard.as_ref() {
                     http_req = http_req.header("Mcp-Session-Id", sid.clone());
                 }
@@ -143,12 +240,11 @@ impl McpClient {
                 .await
                 .map_err(|e| format!("MCP request failed: {}", e))?;
 
-            // Capture session ID from response headers
+            // Capture session ID from response headers (before consuming body)
             if let Some(sid) = resp.headers().get("mcp-session-id") {
                 if let Ok(sid_str) = sid.to_str() {
-                    if let Ok(mut guard) = self.session_id.lock() {
-                        *guard = Some(sid_str.to_string());
-                    }
+                    let mut guard = self.session_id.lock().await;
+                    *guard = Some(sid_str.to_string());
                 }
             }
 
@@ -161,7 +257,6 @@ impl McpClient {
                         server_id = %server_id,
                         "MCP server returned 401, attempting token refresh and retry"
                     );
-                    // Force refresh by getting a new token
                     let _ = manager.get_valid_token(server_id).await;
                     return self.rpc_inner(&method, params, false).await;
                 }
@@ -172,18 +267,8 @@ impl McpClient {
                 return Err(format!("MCP server returned {}: {}", status, body));
             }
 
-            // Parse JSON-RPC response
-            let body = resp
-                .text()
-                .await
-                .map_err(|e| format!("Failed to read MCP response: {}", e))?;
-            let rpc_resp: JsonRpcResponse = serde_json::from_str(&body).map_err(|e| {
-                format!(
-                    "Invalid JSON-RPC response: {} (body: {})",
-                    e,
-                    &body[..body.len().min(200)]
-                )
-            })?;
+            // Parse JSON-RPC response — handles both application/json and text/event-stream
+            let rpc_resp = self.read_rpc_body(resp).await?;
 
             if let Some(err) = rpc_resp.error {
                 return Err(format!("{}", err));
@@ -211,10 +296,9 @@ impl McpClient {
         let init: InitializeResult = serde_json::from_value(result)
             .map_err(|e| format!("Failed to parse initialize result: {}", e))?;
 
-        // Send `initialized` notification (no response expected, but we send it per spec)
-        let _ = self
-            .rpc("notifications/initialized", Some(serde_json::json!({})))
-            .await;
+        // Send `notifications/initialized` as a proper JSON-RPC notification
+        // (no `id` field — per JSON-RPC 2.0 spec, notifications must not have an id).
+        let _ = self.notify("notifications/initialized", None).await;
 
         tracing::info!(
             server = ?init.server_info,

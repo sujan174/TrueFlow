@@ -38,6 +38,19 @@ pub struct CreateTokenRequest {
     pub mcp_allowed_tools: Option<serde_json::Value>,
     /// MCP tool blocklist. Takes priority over allowlist.
     pub mcp_blocked_tools: Option<serde_json::Value>,
+    /// External user/customer identifier for SaaS builders.
+    /// Links this token to a specific customer in your billing system.
+    pub external_user_id: Option<String>,
+    /// Flexible metadata for SaaS-specific data (plan tier, region, custom attributes).
+    pub metadata: Option<serde_json::Value>,
+    /// Token purpose: "llm" (LLM calls only), "tool" (tool/MCP calls only), "both" (either).
+    /// Defaults to "llm".
+    #[serde(default = "default_purpose")]
+    pub purpose: String,
+}
+
+fn default_purpose() -> String {
+    "llm".to_string()
 }
 
 impl CreateTokenRequest {
@@ -62,6 +75,47 @@ pub struct CreateTokenResponse {
     pub message: String,
 }
 
+// ── Bulk Token DTOs ─────────────────────────────────────────────
+
+/// Request for bulk token creation (SaaS builder onboarding).
+/// Maximum 500 tokens per request.
+#[derive(Deserialize)]
+pub struct BulkCreateTokenRequest {
+    pub tokens: Vec<CreateTokenRequest>,
+}
+
+#[derive(Serialize)]
+pub struct BulkCreateTokenResponse {
+    pub created: Vec<CreateTokenResponse>,
+    pub failed: Vec<BulkTokenFailure>,
+    pub total_requested: usize,
+    pub total_created: usize,
+}
+
+#[derive(Serialize)]
+pub struct BulkTokenFailure {
+    pub name: String,
+    pub error: String,
+}
+
+/// Request for bulk token revocation by filter criteria.
+/// At least one filter must be provided.
+#[derive(Deserialize)]
+pub struct BulkRevokeRequest {
+    /// Revoke all tokens for this external user/customer.
+    pub external_user_id: Option<String>,
+    /// Revoke all tokens for this team.
+    pub team_id: Option<Uuid>,
+    /// Revoke specific token IDs (alternative to filter-based revocation).
+    pub token_ids: Option<Vec<String>>,
+}
+
+#[derive(Serialize)]
+pub struct BulkRevokeResponse {
+    pub revoked_count: usize,
+    pub token_ids: Vec<String>,
+}
+
 // ── Approval DTOs ───────────────────────────────────────────
 #[derive(Deserialize)]
 pub struct DecisionRequest {
@@ -81,6 +135,10 @@ pub struct PaginationParams {
     pub limit: Option<i64>,
     pub offset: Option<i64>,
     pub project_id: Option<Uuid>,
+    /// Filter tokens by external user/customer ID.
+    pub external_user_id: Option<String>,
+    /// Filter tokens by team ID.
+    pub team_id: Option<Uuid>,
 }
 
 #[derive(Deserialize)]
@@ -100,6 +158,15 @@ pub struct SpendBreakdownResponse {
     pub total_cost_usd: f64,
     pub total_requests: i64,
     pub breakdown: Vec<crate::store::postgres::SpendByDimension>,
+}
+
+/// Response for user-level spend analytics (GET /api/v1/analytics/users).
+#[derive(Serialize)]
+pub struct UserSpendResponse {
+    pub hours: i32,
+    pub total_users: i64,
+    pub total_cost_usd: f64,
+    pub users: Vec<crate::store::postgres::UserSpendSummary>,
 }
 
 // ── Project DTOs ────────────────────────────────────────────

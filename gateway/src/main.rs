@@ -684,6 +684,9 @@ async fn handle_token_command(
                 tags: None,
                 mcp_allowed_tools: None,
                 mcp_blocked_tools: None,
+                external_user_id: None,
+                metadata: None,
+                purpose: "llm".to_string(), // Default to LLM for CLI tokens
             };
 
             state.db.insert_token(&new_token).await?;

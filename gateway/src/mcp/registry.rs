@@ -249,8 +249,9 @@ impl McpRegistry {
 
     /// Dry-run discovery: probe a URL, return auth requirements + server info without persisting.
     ///
-    /// Returns `Err` if the server cannot be reached or is not an MCP-compatible server,
-    /// which the API handler maps to 502 Bad Gateway.
+    /// Returns `Err` if the server cannot be reached at all (not a network endpoint).
+    /// If the server is OAuth-protected and no credentials are supplied, returns a partial
+    /// DiscoveryResult with `requires_auth: true` and empty tool list instead of failing.
     pub async fn discover_dry_run(&self, endpoint: &str) -> Result<DiscoveryResult, String> {
         // Try OAuth discovery
         let discovery = self.oauth_manager.discover(endpoint).await;
@@ -265,6 +266,21 @@ impl McpRegistry {
             Err(_) => ("unknown".to_string(), None, None),
         };
 
+        // If the server requires OAuth and we have no credentials, return a partial result.
+        // Don't fail — the caller just can't see server_info/tools without authing first.
+        if auth_type == "oauth2" {
+            return Ok(DiscoveryResult {
+                endpoint: endpoint.to_string(),
+                requires_auth: true,
+                auth_type,
+                token_endpoint,
+                scopes_supported: scopes,
+                server_info: None,
+                tools: vec![],
+                tool_count: 0,
+            });
+        }
+
         // Try connecting without auth to get server info and tools.
         // If initialization fails, the endpoint is not an MCP server — propagate the error.
         let client = McpClient::new(endpoint, None::<String>);
@@ -278,7 +294,7 @@ impl McpRegistry {
 
         Ok(DiscoveryResult {
             endpoint: endpoint.to_string(),
-            requires_auth: auth_type == "oauth2",
+            requires_auth: false,
             auth_type,
             token_endpoint,
             scopes_supported: scopes,
@@ -511,18 +527,43 @@ impl McpRegistry {
 }
 
 /// Sanitize a server name from serverInfo to a safe identifier.
+///
+/// Rules:
+/// - Lowercase alphanumeric, hyphens, and single underscores only
+/// - Non-alphanumeric chars become hyphens
+/// - Consecutive hyphens/underscores are collapsed to a single hyphen
+///   (prevents `__` in names which would break `mcp__{server}__{tool}` parsing)
+/// - Leading/trailing hyphens and underscores are trimmed
 fn sanitize_server_name(name: &str) -> String {
-    name.chars()
+    // Step 1: map each char to alphanumeric-or-hyphen
+    let raw: String = name
+        .chars()
         .map(|c| {
-            if c.is_alphanumeric() || c == '-' || c == '_' {
+            if c.is_alphanumeric() || c == '_' || c == '-' {
                 c.to_ascii_lowercase()
             } else {
                 '-'
             }
         })
-        .collect::<String>()
-        .trim_matches('-')
-        .to_string()
+        .collect();
+
+    // Step 2: collapse consecutive separators (`-`, `_`, or any mix) to a single `-`
+    let mut collapsed = String::with_capacity(raw.len());
+    let mut prev_was_sep = false;
+    for c in raw.chars() {
+        if c == '-' || c == '_' {
+            if !prev_was_sep {
+                collapsed.push('-');
+            }
+            prev_was_sep = true;
+        } else {
+            collapsed.push(c);
+            prev_was_sep = false;
+        }
+    }
+
+    // Step 3: trim leading/trailing hyphens
+    collapsed.trim_matches('-').to_string()
 }
 
 /// Serializable server info for API responses.
@@ -589,8 +630,11 @@ mod tests {
         assert_eq!(sanitize_server_name("Brave Search"), "brave-search");
         assert_eq!(sanitize_server_name("slack-mcp"), "slack-mcp");
         assert_eq!(sanitize_server_name("My Server!@#"), "my-server");
-        assert_eq!(sanitize_server_name("GITHUB_Tools"), "github_tools");
+        // Consecutive underscores collapse to a single hyphen (prevents __ in mcp__ prefix)
+        assert_eq!(sanitize_server_name("GITHUB_Tools"), "github-tools");
+        assert_eq!(sanitize_server_name("my__api"), "my-api");
         assert_eq!(sanitize_server_name("---test---"), "test");
+        assert_eq!(sanitize_server_name("a__b__c"), "a-b-c");
     }
 
     #[test]

@@ -294,6 +294,7 @@ fn make_ctx<'a>(
         token_name: "Test Token",
         project_id: "proj_abc",
         client_ip: Some("192.168.1.1"),
+        token_purpose: "llm",
         response_status: None,
         response_body: None,
         response_headers: None,

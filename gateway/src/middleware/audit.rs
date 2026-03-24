@@ -139,7 +139,7 @@ async fn insert_audit_log(
             user_id, tenant_id, external_request_id, log_level,
             tool_calls, tool_call_count, finish_reason,
             session_id, parent_span_id, error_type, is_streaming,
-            cache_hit, custom_properties, payload_url, spend_cap_overrun
+            cache_hit, custom_properties, payload_url, spend_cap_overrun, external_user_id, token_purpose
         )
         VALUES (
             $1, $2, $3, $4, $5, $6, $7, $8,
@@ -150,7 +150,7 @@ async fn insert_audit_log(
             $27, $28, $29, $30,
             $31, $32, $33,
             $34, $35, $36, $37,
-            $38, $39, $40, $41
+            $38, $39, $40, $41, $42, $43
         )
         "#,
     )
@@ -199,6 +199,10 @@ async fn insert_audit_log(
     .bind(&payload_url)
     // Spend cap overrun tracking
     .bind(entry.spend_cap_overrun)
+    // User attribution (SaaS builder support)
+    .bind(&entry.external_user_id)
+    // Token purpose
+    .bind(&entry.token_purpose)
     .execute(pool)
     .await?;
 
@@ -339,6 +343,8 @@ mod tests {
             custom_properties: None,
             payload_url: None,
             spend_cap_overrun: false,
+            external_user_id: None,
+            token_purpose: Some("llm".to_string()),
         }
     }
 

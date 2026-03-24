@@ -8,6 +8,7 @@ use axum::{
 use serde_json::json;
 
 use super::dtos::{CreateTokenRequest, CreateTokenResponse, PaginationParams};
+use super::dtos::{BulkCreateTokenRequest, BulkCreateTokenResponse, BulkRevokeRequest, BulkRevokeResponse, BulkTokenFailure};
 use super::helpers::{verify_project_ownership, verify_token_ownership};
 use crate::api::AuthContext;
 use crate::store::postgres::TokenRow;
@@ -28,14 +29,32 @@ pub async fn list_tokens(
     let limit = params.limit.unwrap_or(100).clamp(1, 1000);
     let offset = params.offset.unwrap_or(0).max(0);
 
-    let tokens = state
-        .db
-        .list_tokens(project_id, limit, offset)
-        .await
-        .map_err(|e| {
-            tracing::error!("list_tokens failed: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+    // Use filtered query if filters are provided
+    let tokens = if params.external_user_id.is_some() || params.team_id.is_some() {
+        state
+            .db
+            .list_tokens_by_filter(
+                project_id,
+                params.external_user_id.as_deref(),
+                params.team_id,
+                limit,
+                offset,
+            )
+            .await
+            .map_err(|e| {
+                tracing::error!("list_tokens_by_filter failed: {}", e);
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?
+    } else {
+        state
+            .db
+            .list_tokens(project_id, limit, offset)
+            .await
+            .map_err(|e| {
+                tracing::error!("list_tokens failed: {}", e);
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?
+    };
 
     Ok(Json(tokens))
 }
@@ -120,6 +139,9 @@ pub async fn create_token(
         tags: payload.tags,
         mcp_allowed_tools: payload.mcp_allowed_tools,
         mcp_blocked_tools: payload.mcp_blocked_tools,
+        external_user_id: payload.external_user_id,
+        metadata: payload.metadata,
+        purpose: payload.purpose.clone(),
     };
 
     state.db.insert_token(&new_token).await.map_err(|e| {
@@ -308,4 +330,152 @@ pub async fn update_circuit_breaker(
 
     tracing::info!(token_id = %token_id, "circuit breaker config updated");
     Ok(Json(payload))
+}
+
+// ── Bulk Token Operations (SaaS Builder Support) ─────────────────────────────
+
+/// POST /api/v1/tokens/bulk — create multiple tokens at once.
+/// Maximum 500 tokens per request to prevent abuse.
+pub async fn bulk_create_tokens(
+    State(state): State<Arc<AppState>>,
+    Extension(auth): Extension<AuthContext>,
+    Json(payload): Json<BulkCreateTokenRequest>,
+) -> Result<(StatusCode, Json<BulkCreateTokenResponse>), StatusCode> {
+    auth.require_role("admin")?;
+    auth.require_scope("tokens:write")
+        .map_err(|_| StatusCode::FORBIDDEN)?;
+
+    // Limit bulk size to prevent abuse
+    if payload.tokens.is_empty() {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    if payload.tokens.len() > 500 {
+        return Err(StatusCode::PAYLOAD_TOO_LARGE);
+    }
+
+    let project_id = auth.default_project_id();
+    verify_project_ownership(&state, auth.org_id, project_id).await?;
+
+    let mut created = Vec::new();
+    let mut failed = Vec::new();
+    let total_requested = payload.tokens.len();
+
+    for token_req in payload.tokens {
+        let proj = token_req.project_id.unwrap_or(project_id);
+        let proj_short = &proj.to_string()[..8];
+        let mut random_bytes = [0u8; 16];
+        use aes_gcm::aead::OsRng;
+        use rand::RngCore;
+        OsRng.fill_bytes(&mut random_bytes);
+        let token_id = format!("tf_v1_{}_tok_{}", proj_short, hex::encode(random_bytes));
+
+        let name = token_req.name.clone();
+        let new_token = crate::store::postgres::NewToken {
+            id: token_id.clone(),
+            project_id: proj,
+            name: token_req.name.clone(),
+            credential_id: token_req.credential_id,
+            upstream_url: token_req.upstream_url.clone(),
+            scopes: serde_json::json!([]),
+            policy_ids: token_req.policy_ids.clone().unwrap_or_default(),
+            log_level: token_req.resolved_log_level(),
+            circuit_breaker: token_req.circuit_breaker.clone(),
+            allowed_models: token_req.allowed_models.clone(),
+            team_id: token_req.team_id,
+            tags: token_req.tags.clone(),
+            mcp_allowed_tools: token_req.mcp_allowed_tools.clone(),
+            mcp_blocked_tools: token_req.mcp_blocked_tools.clone(),
+            external_user_id: token_req.external_user_id.clone(),
+            metadata: token_req.metadata.clone(),
+            purpose: token_req.purpose.clone(),
+        };
+
+        match state.db.insert_token(&new_token).await {
+            Ok(()) => {
+                created.push(CreateTokenResponse {
+                    token_id: token_id.clone(),
+                    name,
+                    message: format!("Use: Authorization: Bearer {}", token_id),
+                });
+            }
+            Err(e) => {
+                tracing::warn!("bulk_create_tokens: failed to create token: {}", e);
+                failed.push(BulkTokenFailure {
+                    name,
+                    error: e.to_string(),
+                });
+            }
+        }
+    }
+
+    let total_created = created.len();
+
+    Ok((
+        if created.is_empty() {
+            StatusCode::BAD_REQUEST
+        } else if failed.is_empty() {
+            StatusCode::CREATED
+        } else {
+            StatusCode::MULTI_STATUS
+        },
+        Json(BulkCreateTokenResponse {
+            created,
+            failed,
+            total_requested,
+            total_created,
+        }),
+    ))
+}
+
+/// POST /api/v1/tokens/bulk-revoke — revoke tokens by filter criteria.
+/// At least one filter must be provided (external_user_id, team_id, or token_ids).
+pub async fn bulk_revoke_tokens(
+    State(state): State<Arc<AppState>>,
+    Extension(auth): Extension<AuthContext>,
+    Json(payload): Json<BulkRevokeRequest>,
+) -> Result<Json<BulkRevokeResponse>, StatusCode> {
+    auth.require_role("admin")?;
+    auth.require_scope("tokens:write")
+        .map_err(|_| StatusCode::FORBIDDEN)?;
+
+    // Require at least one filter to prevent accidental mass revocation
+    if payload.external_user_id.is_none()
+        && payload.team_id.is_none()
+        && payload.token_ids.is_none()
+    {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
+    let project_id = auth.default_project_id();
+    verify_project_ownership(&state, auth.org_id, project_id).await?;
+
+    let revoked_ids = state
+        .db
+        .bulk_revoke_tokens(
+            project_id,
+            payload.external_user_id.as_deref(),
+            payload.team_id,
+            payload.token_ids.as_deref(),
+        )
+        .await
+        .map_err(|e| {
+            tracing::error!("bulk_revoke_tokens failed: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    // Clean up load balancer state for revoked tokens
+    for id in &revoked_ids {
+        state.lb.cleanup_token(id);
+        crate::proxy::smart_router::cleanup_round_robin_counter(id);
+    }
+
+    tracing::info!(
+        count = revoked_ids.len(),
+        "bulk token revocation completed"
+    );
+
+    Ok(Json(BulkRevokeResponse {
+        revoked_count: revoked_ids.len(),
+        token_ids: revoked_ids,
+    }))
 }

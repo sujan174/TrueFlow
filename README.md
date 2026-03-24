@@ -85,6 +85,23 @@ Five load-balancing strategies across any mix of providers: round-robin, weighte
 
 Every request produces a structured log entry: sender identity, model, policy trigger, fields redacted, latency, and cost. Partitioned by month for high-throughput writes. Export to Prometheus, Langfuse, DataDog, or any OpenTelemetry-compatible backend with a single config line.
 
+### SaaS builder support
+
+For SaaS platforms embedding AI capabilities, TrueFlow provides customer-level attribution:
+- **External user ID**: Link tokens to customers from your billing system
+- **Bulk operations**: Onboard hundreds of customers with a single API call
+- **Per-customer analytics**: Track spend by customer across all their tokens
+- **Flexible metadata**: Store plan tier, region, or custom attributes on each token
+
+```json
+{
+  "name": "customer-acme",
+  "external_user_id": "cust_abc123",
+  "metadata": {"plan": "enterprise", "region": "us-east"},
+  "spend_cap_daily": 100
+}
+```
+
 ### A/B model experiments
 
 Split traffic across model variants by weight. Compare latency, cost, and output quality side by side in the dashboard. Promote the winner — no agent code changes required.

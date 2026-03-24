@@ -92,11 +92,10 @@ impl AuthContext {
             return Uuid::nil();
         }
 
-        // CRIT-1 FIX: Generate org-specific default project UUID
-        // This ensures each org gets its own default project, preventing cross-tenant data access
-        // We use a deterministic UUID v5 based on the org_id
-        let namespace = Uuid::parse_str("00000000-0000-0000-0000-000000000000").unwrap();
-        Uuid::new_v5(&namespace, self.org_id.as_bytes())
+        // CRIT-1 FIX: Return the org_id as the default project ID.
+        // In this design, each org has a default project with the same ID as the org.
+        // This prevents cross-tenant data access while maintaining backward compatibility.
+        self.org_id
     }
 
     /// Check if the context has the required scope (or is SuperAdmin/Admin).
@@ -150,6 +149,9 @@ pub fn api_router(state: Arc<AppState>) -> Router<Arc<AppState>> {
             "/tokens",
             get(handlers::list_tokens).post(handlers::create_token),
         )
+        // Bulk token operations (SaaS builder support)
+        .route("/tokens/bulk", post(handlers::bulk_create_tokens))
+        .route("/tokens/bulk-revoke", post(handlers::bulk_revoke_tokens))
         .route("/tokens/:id", delete(handlers::revoke_token))
         .route("/tokens/:id/usage", get(handlers::get_token_usage))
         .route(
@@ -235,6 +237,13 @@ pub fn api_router(state: Arc<AppState>) -> Router<Arc<AppState>> {
         )
         .route("/auth/keys/:id", delete(handlers::revoke_api_key))
         .route("/auth/whoami", get(handlers::whoami))
+        // User management (Supabase Auth sync)
+        .route("/auth/sync-user", post(handlers::sync_user))
+        .route("/users", get(handlers::list_users))
+        .route("/users/me", get(handlers::get_current_user))  // Must be before /users/:id
+        .route("/users/:id", get(handlers::get_user))
+        .route("/users/:id/role", patch(handlers::update_user_role))
+        .route("/users/me/last-project", put(handlers::update_last_project))
         // Billing (New)
         .route("/billing/usage", get(handlers::get_org_usage))
         // Analytics (New)
@@ -257,6 +266,16 @@ pub fn api_router(state: Arc<AppState>) -> Router<Arc<AppState>> {
             "/analytics/latency",
             get(analytics::get_latency_percentiles),
         )
+        // New analytics endpoints for dashboard
+        .route("/analytics/models", get(analytics::get_model_usage))
+        .route(
+            "/analytics/spend/provider",
+            get(analytics::get_spend_by_provider),
+        )
+        .route(
+            "/analytics/latency/provider",
+            get(analytics::get_latency_by_provider),
+        )
         // New Server-Side Analytics (Phase 8)
         .route("/analytics/summary", get(handlers::get_analytics_summary))
         .route(
@@ -271,6 +290,117 @@ pub fn api_router(state: Arc<AppState>) -> Router<Arc<AppState>> {
             "/analytics/spend/breakdown",
             get(handlers::get_spend_breakdown),
         )
+        // User-level spend analytics (SaaS builder support)
+        .route("/analytics/users", get(handlers::get_user_spend))
+        // Traffic analytics (Traffic Tab)
+        .route(
+            "/analytics/traffic/timeseries",
+            get(handlers::get_traffic_timeseries),
+        )
+        .route(
+            "/analytics/latency/timeseries",
+            get(handlers::get_latency_timeseries),
+        )
+        // Cost analytics (Cost Tab)
+        .route("/analytics/budget-health", get(handlers::get_budget_health))
+        .route(
+            "/analytics/spend/timeseries",
+            get(handlers::get_spend_timeseries),
+        )
+        .route(
+            "/analytics/cost-efficiency",
+            get(handlers::get_cost_efficiency),
+        )
+        .route("/analytics/burn-rate", get(handlers::get_budget_burn_rate))
+        .route("/analytics/token-spend", get(handlers::get_token_spend))
+        // Users & Tokens analytics (Users & Tokens Tab)
+        .route("/analytics/users/growth", get(handlers::get_user_growth))
+        .route(
+            "/analytics/users/engagement",
+            get(handlers::get_user_engagement),
+        )
+        .route("/analytics/tokens/alerts", get(handlers::get_token_alerts))
+        .route(
+            "/analytics/users/requests",
+            get(handlers::get_requests_per_user),
+        )
+        // Cache analytics (Cache Tab)
+        .route("/analytics/cache/summary", get(handlers::get_cache_summary))
+        .route(
+            "/analytics/cache/hit-rate-timeseries",
+            get(handlers::get_cache_hit_rate_timeseries),
+        )
+        .route(
+            "/analytics/cache/top-queries",
+            get(handlers::get_top_cached_queries),
+        )
+        .route(
+            "/analytics/cache/model-efficiency",
+            get(handlers::get_model_cache_efficiency),
+        )
+        .route(
+            "/analytics/cache/latency-comparison",
+            get(handlers::get_cache_latency_comparison),
+        )
+        // Model analytics (Models Tab)
+        .route(
+            "/analytics/models/usage-timeseries",
+            get(handlers::get_model_usage_timeseries),
+        )
+        .route(
+            "/analytics/models/error-rates",
+            get(handlers::get_model_error_rates),
+        )
+        .route(
+            "/analytics/models/latency",
+            get(handlers::get_model_latency),
+        )
+        .route(
+            "/analytics/models/stats",
+            get(handlers::get_model_stats),
+        )
+        .route(
+            "/analytics/models/cost-latency-scatter",
+            get(handlers::get_cost_latency_scatter),
+        )
+        // Security analytics (Security Tab)
+        .route(
+            "/analytics/security/summary",
+            get(handlers::get_security_summary),
+        )
+        .route(
+            "/analytics/security/guardrail-triggers",
+            get(handlers::get_guardrail_triggers),
+        )
+        .route(
+            "/analytics/security/pii-breakdown",
+            get(handlers::get_pii_breakdown),
+        )
+        .route(
+            "/analytics/security/policy-actions",
+            get(handlers::get_policy_actions),
+        )
+        .route(
+            "/analytics/security/shadow-policies",
+            get(handlers::get_shadow_policies),
+        )
+        .route(
+            "/analytics/security/data-residency",
+            get(handlers::get_data_residency),
+        )
+        // HITL analytics (HITL Tab)
+        .route("/analytics/hitl/summary", get(handlers::get_hitl_summary))
+        .route("/analytics/hitl/volume", get(handlers::get_hitl_volume))
+        .route("/analytics/hitl/latency", get(handlers::get_hitl_latency))
+        .route(
+            "/analytics/hitl/reasons",
+            get(handlers::get_hitl_rejection_reasons),
+        )
+        // Error analytics (Errors Tab)
+        .route("/analytics/errors/summary", get(handlers::get_error_summary))
+        .route("/analytics/errors/timeseries", get(handlers::get_error_timeseries))
+        .route("/analytics/errors/breakdown", get(handlers::get_error_breakdown))
+        .route("/analytics/errors/logs", get(handlers::get_error_logs))
         // Settings & System
         .route(
             "/settings",

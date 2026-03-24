@@ -52,6 +52,10 @@ pub(crate) struct AuditBuilder {
     pub(super) custom_properties: Option<serde_json::Value>,
     // Spend tracking
     pub(super) spend_cap_overrun: bool,
+    // User attribution (SaaS builder support)
+    pub(super) external_user_id: Option<String>,
+    // Token purpose
+    pub(super) token_purpose: Option<String>,
 }
 
 impl AuditBuilder {
@@ -104,6 +108,8 @@ impl AuditBuilder {
             custom_properties: self.custom_properties,
             payload_url: None, // set by audit middleware after potential offload
             spend_cap_overrun: self.spend_cap_overrun,
+            external_user_id: self.external_user_id,
+            token_purpose: self.token_purpose,
         };
         // ── Observability Export ──────────────────────────────────────
         // Fan out to Prometheus, Langfuse, and DataDog (non-blocking).
@@ -137,6 +143,8 @@ pub(crate) fn base_audit(
     session_id: Option<String>,
     parent_span_id: Option<String>,
     custom_properties: Option<serde_json::Value>,
+    external_user_id: Option<String>,
+    token_purpose: Option<String>,
 ) -> AuditBuilder {
     AuditBuilder {
         req_id: Some(req_id),
@@ -156,6 +164,8 @@ pub(crate) fn base_audit(
         session_id,
         parent_span_id,
         custom_properties,
+        external_user_id,
+        token_purpose,
         ..Default::default()
     }
 }

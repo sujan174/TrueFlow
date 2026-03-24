@@ -165,6 +165,8 @@ trueflow/
 - **Credential**: Real API key stored in encrypted vault (AES-256-GCM envelope encryption).
 - **Policy**: JSON rules with conditions (AND/OR logic) and actions (deny, rate-limit, redact, route, etc.).
 - **Projects**: Multi-tenant isolation - tokens, credentials, and policies are scoped to projects.
+- **External User ID**: Customer identifier for SaaS builders - links tokens to customers from billing system.
+- **Token Metadata**: Flexible JSONB storage for SaaS-specific data (plan tier, region, custom attributes).
 
 ### Required Environment Variables
 - `DATABASE_URL`: PostgreSQL connection string

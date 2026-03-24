@@ -1,13 +1,5 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
-
-## Key Features (v0.7.0+)
-
-- **Collapsible Sidebar**: Smooth, animated navigation that maximizes screen real estate.
-- **Theme Support**: Built-in Light, Dark, and System modes.
-- **Project Structure**: Multi-project support with header-based switching.
-- **Settings Redesign**: Clean, tabbed interface for Gateway, Security, and Advanced configurations.
-
 ## Getting Started
 
 First, run the development server:

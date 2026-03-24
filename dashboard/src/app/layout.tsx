@@ -1,42 +1,48 @@
 import type { Metadata } from "next";
-import { Inter, JetBrains_Mono } from "next/font/google";
-import "./globals.css";
+import { Plus_Jakarta_Sans, JetBrains_Mono } from "next/font/google";
+import { ThemeProvider } from "@/components/theme-provider";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
-import { ProjectProvider } from "@/contexts/project-context";
-import { ThemeProvider } from "next-themes";
-import { AppShell } from "@/components/app-shell";
+import "./globals.css";
 
-const inter = Inter({
+const plusJakarta = Plus_Jakarta_Sans({
+  variable: "--font-sans",
   subsets: ["latin"],
-  variable: "--font-inter",
-  display: "swap",
+  weight: ["400", "500", "600", "700"],
 });
 
 const jetbrainsMono = JetBrains_Mono({
-  subsets: ["latin"],
   variable: "--font-mono",
-  display: "swap",
-  weight: ["400", "500", "600"],
+  subsets: ["latin"],
 });
 
 export const metadata: Metadata = {
-  title: "TrueFlow Dashboard",
-  description: "Manage tokens, approvals, and audit logs for the TrueFlow Gateway",
+  title: "TrueFlow - AI Gateway Dashboard",
+  description: "Ship AI with confidence. Govern every request.",
 };
 
 export default function RootLayout({
   children,
-}: {
+}: Readonly<{
   children: React.ReactNode;
-}) {
+}>) {
   return (
-    <html lang="en" suppressHydrationWarning>
-      <body className={`${inter.variable} ${jetbrainsMono.variable} flex h-screen w-full bg-background font-sans antialiased text-foreground`}>
-        <ThemeProvider attribute="class" defaultTheme="dark" enableSystem disableTransitionOnChange>
-          <ProjectProvider>
-            <AppShell>{children}</AppShell>
+    <html
+      lang="en"
+      className={`${plusJakarta.variable} ${jetbrainsMono.variable} h-full antialiased`}
+      suppressHydrationWarning
+    >
+      <body className="min-h-full flex flex-col font-sans">
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="dark"
+          enableSystem
+          disableTransitionOnChange={false}
+        >
+          <TooltipProvider>
+            {children}
             <Toaster />
-          </ProjectProvider>
+          </TooltipProvider>
         </ThemeProvider>
       </body>
     </html>

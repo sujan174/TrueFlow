@@ -1,1388 +1,969 @@
-// Use relative path to hit the Next.js proxy
-const BASE_URL = "/api/proxy";
+import type {
+  AnalyticsSummary,
+  AnalyticsTimeseriesPoint,
+  LatencyStat,
+  TokenSummary,
+  TokenRow,
+  SpendCap,
+  ModelUsageStat,
+  ProviderSpendStat,
+  ProviderLatencyStat,
+  UpstreamStatus,
+  TrafficTimeseriesPoint,
+  LatencyTimeseriesPoint,
+  AuditLogRow,
+  BudgetHealthStatus,
+  SpendTimeseriesPoint,
+  CostEfficiencyPoint,
+  BudgetBurnRate,
+  TokenSpendWithCap,
+  SpendByDimension,
+  UserGrowthPoint,
+  EngagementTiersResponse,
+  TokenAlertsResponse,
+  RequestsPerUserPoint,
+  CacheSummaryStats,
+  CacheHitRatePoint,
+  CachedQueryRow,
+  ModelCacheEfficiency,
+  CacheLatencyComparison,
+  ModelUsageTimeseriesPoint,
+  ModelErrorRate,
+  ModelLatencyStat,
+  ModelStatsRow,
+  CostLatencyScatterPoint,
+  ExperimentSummary,
+  SecuritySummaryStats,
+  GuardrailTriggerStat,
+  PiiBreakdownStat,
+  PolicyActionStat,
+  ShadowPolicyStat,
+  DataResidencyStats,
+  HitlSummaryStats,
+  HitlVolumePoint,
+  HitlLatencyStats,
+  RejectionReason,
+  ApprovalRequest,
+  ErrorSummaryStats,
+  ErrorTimeseriesPoint,
+  ErrorTypeBreakdown,
+  ErrorLogRow,
+} from "./types/analytics"
+import type { Project } from "./types/project"
+import type {
+  TokenRow as TokenType,
+  CreateTokenRequest,
+  CreateTokenResponse,
+  TokenUsageStats,
+  CircuitBreakerConfig,
+  CredentialMeta,
+  CreateCredentialRequest,
+  CreateCredentialResponse,
+  BulkCreateTokenRequest,
+  BulkCreateTokenResponse,
+  BulkRevokeRequest,
+  BulkRevokeResponse,
+  DeleteResponse,
+} from "./types/token"
+import type {
+  PolicyRow,
+  PolicyVersionRow,
+  CreatePolicyRequest,
+  UpdatePolicyRequest,
+  PolicyResponse,
+  Rule,
+  Action,
+} from "./types/policy"
 
-async function api<T>(path: string, options?: RequestInit): Promise<T> {
-  let url = `${BASE_URL}${path}`;
+// Re-export types for consumers
+export type {
+  AnalyticsSummary,
+  AnalyticsTimeseriesPoint,
+  LatencyStat,
+  TokenSummary,
+  TokenRow,
+  SpendCap,
+  ModelUsageStat,
+  ProviderSpendStat,
+  ProviderLatencyStat,
+  UpstreamStatus,
+  TrafficTimeseriesPoint,
+  LatencyTimeseriesPoint,
+  AuditLogRow,
+  BudgetHealthStatus,
+  SpendTimeseriesPoint,
+  CostEfficiencyPoint,
+  BudgetBurnRate,
+  TokenSpendWithCap,
+  SpendByDimension,
+  UserGrowthPoint,
+  EngagementTiersResponse,
+  TokenAlertsResponse,
+  RequestsPerUserPoint,
+  CacheSummaryStats,
+  CacheHitRatePoint,
+  CachedQueryRow,
+  ModelCacheEfficiency,
+  CacheLatencyComparison,
+  ModelUsageTimeseriesPoint,
+  ModelErrorRate,
+  ModelLatencyStat,
+  ModelStatsRow,
+  CostLatencyScatterPoint,
+  ExperimentSummary,
+  SecuritySummaryStats,
+  GuardrailTriggerStat,
+  PiiBreakdownStat,
+  PolicyActionStat,
+  ShadowPolicyStat,
+  DataResidencyStats,
+  HitlSummaryStats,
+  HitlVolumePoint,
+  HitlLatencyStats,
+  RejectionReason,
+  ApprovalRequest,
+  Project,
+  ErrorSummaryStats,
+  ErrorTimeseriesPoint,
+  ErrorTypeBreakdown,
+  ErrorLogRow,
+  PolicyRow,
+  PolicyVersionRow,
+  CreatePolicyRequest,
+  UpdatePolicyRequest,
+  PolicyResponse,
+  Rule,
+}
 
-  // Inject project_id if present (client-side only)
-  if (typeof window !== "undefined") {
-    const projectId = localStorage.getItem("trueflow_project_id");
-    if (projectId) {
-      const separator = url.includes("?") ? "&" : "?";
-      url = `${url}${separator}project_id=${projectId}`;
-    }
-  }
+// Use local API proxy for client-side calls (handles auth server-side)
+interface FetchOptions {
+  cache?: RequestCache
+  next?: { revalidate?: number }
+}
 
-  const res = await fetch(url, {
-    cache: "no-store",
+async function gatewayFetch<T>(
+  endpoint: string,
+  options: FetchOptions = {}
+): Promise<T> {
+  const response = await fetch(`/api/gateway${endpoint}`, {
     ...options,
     headers: {
       "Content-Type": "application/json",
-      ...options?.headers,
     },
-  });
+  })
 
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`API ${res.status}: ${body}`);
+  if (!response.ok) {
+    throw new Error(`Gateway API error: ${response.status} ${response.statusText}`)
   }
 
-  if (res.status === 204) {
-    return null as T;
-  }
-
-  return res.json();
-
+  return response.json()
 }
 
-// ── Types ──────────────────────────────────────
-
-export interface Token {
-  id: string;
-  project_id: string;
-  name: string;
-  credential_id: string;
-  upstream_url: string;
-  scopes: unknown;
-  policy_ids: string[];
-  log_level: number;
-  is_active: boolean;
-  created_at: string;
-  // Extended fields
-  team_id: string | null;
-  allowed_models: string[] | null;
-  allowed_model_group_ids: string[] | null;
-  tags: Record<string, string> | null;
-  mcp_allowed_tools: string[] | null;
-  mcp_blocked_tools: string[] | null;
+// Analytics endpoints
+export async function getAnalyticsSummary(hours = 24): Promise<AnalyticsSummary> {
+  return gatewayFetch<AnalyticsSummary>(`/analytics/summary?range=${hours}`, {
+    next: { revalidate: 60 }, // Cache for 60 seconds
+  })
 }
 
-export interface ApprovalRequest {
-  id: string;
-  token_id: string | null;
-  project_id: string;
-  idempotency_key: string | null;
-  request_summary: Record<string, unknown>;
-  status: string;
-  reviewed_by: string | null;
-  reviewed_at: string | null;
-  expires_at: string;
-  created_at: string;
+export async function getAnalyticsTimeseries(hours = 24): Promise<AnalyticsTimeseriesPoint[]> {
+  return gatewayFetch<AnalyticsTimeseriesPoint[]>(`/analytics/timeseries?range=${hours}`, {
+    next: { revalidate: 60 },
+  })
 }
 
-export interface AuditLog {
-  id: string;
-  created_at: string;
-  token_id: string | null;
-  method: string;
-  path: string;
-  upstream_status: number | null;
-  response_latency_ms: number;
-  agent_name: string | null;
-  policy_result: string;
-  estimated_cost_usd: string | null;
-  shadow_violations: string[] | null;
-  fields_redacted: string[] | null;
-  // Phase 4: AI golden signals
-  prompt_tokens: number | null;
-  completion_tokens: number | null;
-  model: string | null;
-  tokens_per_second: number | null;
-  // Phase 4: Attribution
-  user_id: string | null;
-  tenant_id: string | null;
-  external_request_id: string | null;
-  log_level: number | null;
-  // Phase 5: LLM Observability
-  tool_call_count: number | null;
-  finish_reason: string | null;
-  error_type: string | null;
-  is_streaming: boolean | null;
-  // Phase 6: Caching & Router
-  cache_hit: boolean | null;
-}
-
-export interface AuditLogDetail extends AuditLog {
-  upstream_url: string;
-  policy_mode: string | null;
-  deny_reason: string | null;
-  // Phase 5: LLM Observability (detail only)
-  tool_calls: unknown[] | null;
-  session_id: string | null;
-  parent_span_id: string | null;
-  ttft_ms: number | null;
-  // Bodies (from joined audit_log_bodies table)
-  request_body: string | null;
-  response_body: string | null;
-  request_headers: Record<string, string> | null;
-  response_headers: Record<string, string> | null;
-  // Router
-  router_info: { detected_provider?: string; original_model?: string; translated_model?: string } | null;
-  // Phase 6: Just Enough Observability
-  custom_properties: Record<string, unknown> | null;
-  payload_url: string | null;
-}
-
-// ── Session Types ─────────────────────────────────────────────
-
-export interface SessionRequest {
-  id: string;
-  created_at: string;
-  model: string | null;
-  estimated_cost_usd: string | null;
-  response_latency_ms: number | null;
-  prompt_tokens: number | null;
-  completion_tokens: number | null;
-  tool_call_count: number | null;
-  cache_hit: boolean | null;
-  custom_properties: Record<string, unknown> | null;
-  payload_url: string | null;
-}
-
-export interface SessionSummary {
-  session_id: string | null;
-  total_requests: number;
-  total_cost_usd: string | null;
-  total_prompt_tokens: number;
-  total_completion_tokens: number;
-  total_latency_ms: number;
-  models_used: string[] | null;
-  first_request_at: string;
-  last_request_at: string;
-  requests: SessionRequest[];
-}
-
-export interface ExperimentSummary {
-  experiment_name: string;
-  variant_name: string;
-  total_requests: number;
-  avg_latency_ms: number;
-  total_cost_usd: number;
-  avg_tokens: number;
-  error_count: number;
-}
-
-export interface UpstreamEntry {
-  url: string;
-  weight?: number;
-  priority?: number;
-}
-
-export interface CreateTokenRequest {
-  name: string;
-  credential_id: string;
-  upstream_url: string;
-  project_id?: string;
-  policy_ids?: string[];
-  upstreams?: UpstreamEntry[];
-  log_level?: number;
-  // Gateway extended fields
-  team_id?: string;
-  allowed_models?: string[];
-  tags?: Record<string, string>;
-  fallback_url?: string;
-  mcp_allowed_tools?: string[];
-  mcp_blocked_tools?: string[];
-}
-
-export interface CreateTokenResponse {
-  token_id: string;
-  name: string;
-  message: string;
-}
-
-// ── API Functions ──────────────────────────────
-
-export const listTokens = () => api<Token[]>("/tokens");
-export const getToken = (id: string) => api<Token>(`/tokens/${id}`);
-
-export const createToken = (data: CreateTokenRequest) => {
-  if (!data.project_id && typeof window !== "undefined") {
-    const pid = localStorage.getItem("trueflow_project_id");
-    if (pid) data.project_id = pid;
-  }
-  return api<CreateTokenResponse>("/tokens", {
-    method: "POST",
-    body: JSON.stringify(data),
-  });
-};
-
-export const listApprovals = () => api<ApprovalRequest[]>("/approvals");
-
-export const decideApproval = (id: string, decision: "approved" | "rejected") =>
-  api<{ id: string; status: string; updated: boolean }>(
-    `/approvals/${id}/decision`,
-    {
-      method: "POST",
-      body: JSON.stringify({ decision }),
-    }
-  );
-
-export const listAuditLogs = (limit = 50, offset = 0, filters?: { token_id?: string }) => {
-  let qs = `limit=${limit}&offset=${offset}`;
-  if (filters?.token_id) qs += `&token_id=${filters.token_id}`;
-  return api<AuditLog[]>(`/audit?${qs}`);
-};
-
-export const getAuditLogDetail = (id: string) =>
-  api<AuditLogDetail>(`/audit/${id}`);
-
-export const listSessions = (limit = 100, offset = 0) =>
-  api<SessionSummary[]>(`/sessions?limit=${limit}&offset=${offset}`);
-
-export const getSession = (id: string) =>
-  api<SessionSummary>(`/sessions/${encodeURIComponent(id)}`);
-
-// ── Session Entity (sessions table — status, spend cap) ───────
-
-/** Live session row from the sessions table (status, caps, cost). */
-export interface SessionEntity {
-  session_id: string;
-  token_id: string;
-  project_id: string;
-  status: "active" | "paused" | "completed";
-  total_cost_usd: string;
-  total_prompt_tokens: number;
-  total_completion_tokens: number;
-  spend_cap_usd: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
-export const getSessionEntity = (id: string) =>
-  api<SessionEntity>(`/sessions/${encodeURIComponent(id)}/entity`);
-
-export const updateSessionStatus = (
-  id: string,
-  status: "active" | "paused" | "completed"
-) =>
-  api<{ session_id: string; status: string; updated: boolean }>(
-    `/sessions/${encodeURIComponent(id)}/status`,
-    { method: "PATCH", body: JSON.stringify({ status }) }
-  );
-
-export const setSessionSpendCap = (id: string, spend_cap_usd: number | null) =>
-  api<{ session_id: string; spend_cap_usd: string | null }>(
-    `/sessions/${encodeURIComponent(id)}/spend-cap`,
-    { method: "PUT", body: JSON.stringify({ spend_cap_usd }) }
-  );
-
-export const swrFetcher = <T>(path: string) => api<T>(path);
-
-// ── Upstream Health ─────────────────────────────
-
-export interface UpstreamStatus {
-  token_id: string;
-  url: string;
-  is_healthy: boolean;
-  failure_count: number;
-  cooldown_remaining_secs: number | null;
-}
-
-export const getUpstreamHealth = () =>
-  api<UpstreamStatus[]>('/health/upstreams');
-
-// ── Policy Types & API ─────────────────────────
-
-export interface Policy {
-  id: string;
-  project_id: string;
-  name: string;
-  mode: string;
-  rules: unknown[];
-  is_active: boolean;
-  created_at: string;
-}
-
-export interface CreatePolicyRequest {
-  name: string;
-  mode?: string;
-  rules: unknown[];
-  project_id?: string;
-}
-
-export const listPolicies = () => api<Policy[]>("/policies");
-
-export const createPolicy = (data: CreatePolicyRequest) => {
-  if (!data.project_id && typeof window !== "undefined") {
-    const pid = localStorage.getItem("trueflow_project_id");
-    if (pid) data.project_id = pid;
-  }
-  return api<{ id: string; name: string; message: string }>("/policies", {
-    method: "POST",
-    body: JSON.stringify(data),
-  });
-};
-
-export const updatePolicy = (id: string, data: { name?: string; mode?: string; rules?: unknown[] }) =>
-  api<{ id: string; name: string; message: string }>(`/policies/${id}`, {
-    method: "PUT",
-    body: JSON.stringify(data),
-  });
-
-export const deletePolicy = (id: string) =>
-  api<{ id: string; deleted: boolean }>(`/policies/${id}`, {
-    method: "DELETE",
-  });
-
-// ── Credential Types & API ─────────────────────
-
-export interface Credential {
-  id: string;
-  name: string;
-  provider: string;
-  version: number;
-  is_active: boolean;
-  created_at: string;
-}
-
-export const listCredentials = () => api<Credential[]>("/credentials");
-
-export const createCredential = (data: { name: string; provider: string; secret: string }) =>
-  api<{ id: string; name: string; message: string }>("/credentials", {
-    method: "POST",
-    body: JSON.stringify(data),
-  });
-
-export const rotateCredential = (id: string) =>
-  api<{ id: string; secret: string; message: string }>(`/credentials/${id}/rotate`, {
-    method: "POST",
-  });
-
-// ── Token Revocation ───────────────────────────
-
-export const revokeToken = (tokenId: string) =>
-  api<{ token_id: string; revoked: boolean }>(`/tokens/${tokenId}`, {
-    method: "DELETE",
-  });
-
-// ── Analytics Types & API ──────────────────────
-
-export interface VolumeStat {
-  bucket: string;
-  count: number;
-}
-
-export interface StatusStat {
-  status_class: number;
-  count: number;
-}
-
-export interface LatencyStat {
-  p50: number;
-  p90: number;
-  p99: number;
-  avg: number;
-}
-
-export const getRequestVolume = () => api<VolumeStat[]>("/analytics/volume");
-
-export const getStatusDistribution = () => api<StatusStat[]>("/analytics/status");
-
-export const getLatencyPercentiles = () => api<LatencyStat>("/analytics/latency");
-
-// ── Project Types & API ────────────────────────
-
-export interface Project {
-  id: string;
-  org_id: string;
-  name: string;
-  created_at: string;
-}
-
-export const listProjects = () => api<Project[]>("/projects");
-
-export const createProject = (name: string) =>
-  api<{ id: string; name: string }>("/projects", {
-    method: "POST",
-    body: JSON.stringify({ name }),
-  });
-
-export const updateProject = (id: string, name: string) =>
-  api<{ id: string; name: string }>(`/projects/${id}`, {
-    method: "PUT",
-    body: JSON.stringify({ name }),
-  });
-
-export const deleteProject = (id: string) =>
-  api<void>(`/projects/${id}`, {
-    method: "DELETE",
-  });
-
-// ── System API ─────────────────────────────────
-
-export const getHealth = () => api<{ status: string }>("/healthz");
-
-// ── Policy Versions ──────────────────────────
-
-export interface PolicyVersion {
-  id: string;
-  policy_id: string;
-  version: number;
-  name: string | null;
-  mode: string | null;
-  phase: string | null;
-  rules: unknown[];
-  retry: unknown | null;
-  changed_by: string | null;
-  created_at: string;
-}
-
-export const listPolicyVersions = (policyId: string) =>
-  api<PolicyVersion[]>(`/policies/${policyId}/versions`);
-
-// ── Token Usage ──────────────────────────────
-
-export interface TokenUsageBucket {
-  bucket: string;
-  count: number;
-}
-
-export interface TokenUsageStats {
-  total_requests: number;
-  success_count: number;
-  error_count: number;
-  avg_latency_ms: number;
-  total_cost_usd: number;
-  hourly: TokenUsageBucket[];
-}
-
-export const getTokenUsage = (tokenId: string) =>
-  api<TokenUsageStats>(`/tokens/${tokenId}/usage`);
-
-// ── Notifications ────────────────────────────
-
-export interface Notification {
-  id: string;
-  project_id: string;
-  type: string;
-  title: string;
-  body: string | null;
-  metadata: Record<string, unknown> | null;
-  is_read: boolean;
-  created_at: string;
-}
-
-export const listNotifications = () => api<Notification[]>("/notifications");
-
-export const countUnreadNotifications = () =>
-  api<{ count: number }>("/notifications/unread");
-
-export const markNotificationRead = (id: string) =>
-  api<{ success: boolean }>(`/notifications/${id}/read`, { method: "POST" });
-
-export const markAllNotificationsRead = () =>
-  api<{ success: boolean }>("/notifications/read-all", { method: "POST" });
-
-// ── Services (Action Gateway) ────────────────
-
-export interface Service {
-  id: string;
-  project_id: string;
-  name: string;
-  description: string;
-  base_url: string;
-  service_type: string;
-  credential_id: string | null;
-  is_active: boolean;
-  created_at: string;
-  updated_at: string;
-}
-
-export const listServices = () => api<Service[]>("/services");
-
-export const createService = (data: {
-  name: string;
-  description?: string;
-  base_url: string;
-  service_type?: string;
-  credential_id?: string;
-}) => {
-  const payload = { ...data, project_id: undefined };
-  if (typeof window !== "undefined") {
-    const pid = localStorage.getItem("trueflow_project_id");
-    if (pid) (payload as Record<string, unknown>).project_id = pid;
-  }
-  return api<Service>("/services", {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
-};
-
-export const deleteService = (id: string) =>
-  api<{ deleted: boolean }>(`/services/${id}`, { method: "DELETE" });
-
-// ── SSE Stream ───────────────────────────────
-
-// SEC-04: EventSource sends cookies automatically for same-origin requests.
-// If the dashboard is ever served from a different origin than the API proxy,
-// SSE will fail silently. In that case, switch to fetch-based polling.
-export const streamAuditLogs = (onEvent: (log: AuditLog) => void) => {
-  const projectId = typeof window !== "undefined" ? localStorage.getItem("trueflow_project_id") : null;
-  const url = `${BASE_URL}/audit/stream${projectId ? `?project_id=${projectId}` : ""}`;
-  const evtSource = new EventSource(url);
-
-  evtSource.addEventListener("audit", (e) => {
-    try {
-      const logs: AuditLog[] = JSON.parse(e.data);
-      logs.forEach(onEvent);
-    } catch (err) {
-      console.error("Failed to parse SSE audit event", err);
-    }
-  });
-
-  return () => evtSource.close();
-};
-
-// ── API Keys ──────────────────────────────────────────────
-
-export interface ApiKey {
-  id: string;
-  org_id: string;
-  user_id: string | null;
-  name: string;
-  key_prefix: string;
-  role: string;
-  scopes: string[];
-  last_used_at: string | null;
-  expires_at: string | null;
-  is_active: boolean;
-  created_at: string;
-}
-
-export interface CreateApiKeyRequest {
-  name: string;
-  role: string;
-  scopes: string[];
-  key_prefix?: string;
-}
-
-export interface CreateApiKeyResponse {
-  key: string;
-  id: string;
-  name: string;
-}
-
-export async function listApiKeys(): Promise<ApiKey[]> {
-  return api("/auth/keys");
-}
-
-export async function createApiKey(req: CreateApiKeyRequest): Promise<CreateApiKeyResponse> {
-  return api("/auth/keys", {
-    method: "POST",
-    body: JSON.stringify(req),
-  });
-}
-
-export async function revokeApiKey(id: string): Promise<boolean> {
-  // Returns boolean if successful (true) or throws
-  await api(`/auth/keys/${id}`, { method: "DELETE" });
-  return true;
-}
-
-export async function getWhoAmI(): Promise<Record<string, unknown>> {
-  return api("/auth/whoami");
-}
-
-// ── Billing ───────────────────────────────────────────────
-
-export interface UsageMeter {
-  org_id: string;
-  period: string; // YYYY-MM
-  total_requests: number;
-  total_tokens_used: number;
-  total_spend_usd: number;
-  updated_at: string;
-}
-
-export async function getUsage(period?: string): Promise<UsageMeter> {
-  const query = period ? `?period=${period}` : "";
-  const res: Record<string, unknown> | null = await api(`/billing/usage${query}`);
-  if (!res) {
-    const d = new Date();
-    return {
-      org_id: "unknown",
-      period: period || `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`,
-      total_requests: 0,
-      total_tokens_used: 0,
-      total_spend_usd: 0,
-      updated_at: new Date().toISOString()
-    };
-  }
-
-  // The backend serializes some numeric types (like Rust Decimal or BigInt)
-  // as strings to preserve precision. We cast them to JS numbers for the UI.
-  return {
-    org_id: String(res.org_id || ""),
-    period: String(res.period || ""),
-    updated_at: String(res.updated_at || ""),
-    total_requests: Number(res.total_requests) || 0,
-    total_tokens_used: Number(res.total_tokens_used) || 0,
-    total_spend_usd: Number(res.total_spend_usd) || 0,
-  };
-}
-
-// ── Analytics ─────────────────────────────────────────────
-
-export interface TokenSummary {
-  token_id: string;
-  total_requests: number;
-  errors: number;
-  avg_latency_ms: number;
-  last_active: string | null;
-}
-
-export interface TokenVolume {
-  hour: string;
-  count: number;
-}
-
-export interface TokenStatus {
-  status: number;
-  count: number;
-}
-
-export interface TokenLatency {
-  p50: number;
-  p90: number;
-  p99: number;
+export async function getLatencyPercentiles(): Promise<LatencyStat> {
+  return gatewayFetch<LatencyStat>("/analytics/latency", {
+    next: { revalidate: 60 },
+  })
 }
 
 export async function getTokenAnalytics(): Promise<TokenSummary[]> {
-  return api("/analytics/tokens");
+  return gatewayFetch<TokenSummary[]>("/analytics/tokens", {
+    next: { revalidate: 60 },
+  })
 }
 
-export async function getTokenVolume(tokenId: string): Promise<TokenVolume[]> {
-  return api(`/analytics/tokens/${tokenId}/volume`);
+// New provider analytics endpoints
+export async function getModelUsage(hours = 24): Promise<ModelUsageStat[]> {
+  return gatewayFetch<ModelUsageStat[]>(`/analytics/models?range=${hours}`, {
+    next: { revalidate: 60 },
+  })
 }
 
-export async function getTokenStatus(tokenId: string): Promise<TokenStatus[]> {
-  return api(`/analytics/tokens/${tokenId}/status`);
+export async function getSpendByProvider(hours = 24): Promise<ProviderSpendStat[]> {
+  return gatewayFetch<ProviderSpendStat[]>(`/analytics/spend/provider?range=${hours}`, {
+    next: { revalidate: 60 },
+  })
 }
 
-export async function getTokenLatency(tokenId: string): Promise<TokenLatency> {
-  return api(`/analytics/tokens/${tokenId}/latency`);
+export async function getSpendByModel(hours = 24): Promise<SpendByDimension[]> {
+  return gatewayFetch<SpendByDimension[]>(`/analytics/spend/breakdown?group_by=model&hours=${hours}`, {
+    next: { revalidate: 60 },
+  })
 }
 
-// ── Spend Caps ────────────────────────────────────────────────
-
-export interface SpendStatus {
-  daily_limit_usd: number | null;
-  monthly_limit_usd: number | null;
-  current_daily_usd: number;
-  current_monthly_usd: number;
+export async function getLatencyByProvider(hours = 24): Promise<ProviderLatencyStat[]> {
+  return gatewayFetch<ProviderLatencyStat[]>(`/analytics/latency/provider?range=${hours}`, {
+    next: { revalidate: 60 },
+  })
 }
 
-export async function getSpendCaps(tokenId: string): Promise<SpendStatus> {
-  return api(`/tokens/${tokenId}/spend`);
+// Token endpoints
+export async function listTokens(limit = 100): Promise<TokenRow[]> {
+  return gatewayFetch<TokenRow[]>(`/tokens?limit=${limit}`, {
+    next: { revalidate: 30 },
+  })
 }
 
-export async function upsertSpendCap(
-  tokenId: string,
-  period: "daily" | "monthly",
-  limit_usd: number
-): Promise<void> {
-  return api(`/tokens/${tokenId}/spend`, {
-    method: "PUT",
-    body: JSON.stringify({ period, limit_usd }),
-  });
+export async function getTokenSpendCaps(): Promise<SpendCap[]> {
+  const tokens = await listTokens(100)
+  return tokens
+    .filter((t) => t.spend_cap_usd !== null && t.spend_cap_usd > 0)
+    .map((t) => ({
+      token_id: t.id,
+      token_name: t.name,
+      spend_used_usd: t.spend_used_usd,
+      spend_cap_usd: t.spend_cap_usd!,
+    }))
+    .sort((a, b) => (b.spend_used_usd || 0) - (a.spend_used_usd || 0))
+    .slice(0, 5)
 }
 
-export async function deleteSpendCap(
-  tokenId: string,
-  period: "daily" | "monthly"
-): Promise<void> {
-  return api(`/tokens/${tokenId}/spend/${period}`, { method: "DELETE" });
+// Upstream health
+export async function getUpstreamHealth(): Promise<UpstreamStatus[]> {
+  try {
+    return gatewayFetch("/health/upstreams", { next: { revalidate: 30 } })
+  } catch {
+    return []
+  }
 }
 
-// ── Webhooks ──────────────────────────────────────────────────
-
-export interface Webhook {
-  id: string;
-  project_id: string;
-  url: string;
-  events: string[];
-  is_active: boolean;
-  created_at: string;
+// Calculate derived metrics
+export function formatNumber(num: number): string {
+  if (num >= 1000000) {
+    return (num / 1000000).toFixed(1) + "M"
+  }
+  if (num >= 1000) {
+    return (num / 1000).toFixed(1) + "k"
+  }
+  return num.toString()
 }
 
-export interface TestWebhookResponse {
-  success: boolean;
-  message: string;
+export function formatCurrency(num: number): string {
+  return "$" + num.toFixed(2)
 }
 
-export async function listWebhooks(): Promise<Webhook[]> {
-  return api("/webhooks");
+export function formatLatency(ms: number): string {
+  return Math.round(ms) + "ms"
 }
 
-export async function createWebhook(data: {
-  url: string;
-  events?: string[];
-}): Promise<Webhook> {
-  return api("/webhooks", {
+// Traffic analytics endpoints (Traffic Tab)
+export async function getTrafficTimeseries(hours = 24): Promise<TrafficTimeseriesPoint[]> {
+  return gatewayFetch<TrafficTimeseriesPoint[]>(`/analytics/traffic/timeseries?range=${hours}`, {
+    next: { revalidate: 60 },
+  })
+}
+
+export async function getLatencyTimeseries(hours = 24): Promise<LatencyTimeseriesPoint[]> {
+  return gatewayFetch<LatencyTimeseriesPoint[]>(`/analytics/latency/timeseries?range=${hours}`, {
+    next: { revalidate: 60 },
+  })
+}
+
+export async function getAuditLogs(limit = 50): Promise<AuditLogRow[]> {
+  return gatewayFetch<AuditLogRow[]>(`/audit?limit=${limit}`, {
+    next: { revalidate: 30 },
+  })
+}
+
+// Cost analytics endpoints (Cost Tab)
+export async function getBudgetHealth(): Promise<BudgetHealthStatus> {
+  return gatewayFetch<BudgetHealthStatus>("/analytics/budget-health", {
+    next: { revalidate: 60 },
+  })
+}
+
+export async function getSpendTimeseries(
+  groupBy: "provider" | "model" | "token" = "provider",
+  hours = 168
+): Promise<SpendTimeseriesPoint[]> {
+  return gatewayFetch<SpendTimeseriesPoint[]>(
+    `/analytics/spend/timeseries?group_by=${groupBy}&range=${hours}`,
+    { next: { revalidate: 60 } }
+  )
+}
+
+export async function getCostEfficiency(hours = 168): Promise<CostEfficiencyPoint[]> {
+  return gatewayFetch<CostEfficiencyPoint[]>(`/analytics/cost-efficiency?range=${hours}`, {
+    next: { revalidate: 60 },
+  })
+}
+
+export async function getBudgetBurnRate(): Promise<BudgetBurnRate> {
+  return gatewayFetch<BudgetBurnRate>("/analytics/burn-rate", {
+    next: { revalidate: 60 },
+  })
+}
+
+export async function getTokenSpendWithCaps(hours = 168): Promise<TokenSpendWithCap[]> {
+  return gatewayFetch<TokenSpendWithCap[]>(`/analytics/token-spend?range=${hours}`, {
+    next: { revalidate: 60 },
+  })
+}
+
+// Project endpoints - use local API proxy routes for client-side calls
+export async function listProjects(): Promise<Project[]> {
+  const response = await fetch("/api/projects", {
+    cache: "no-store",
+  })
+
+  if (!response.ok) {
+    throw new Error(`API error: ${response.status} ${response.statusText}`)
+  }
+
+  return response.json()
+}
+
+export async function createProject(name: string): Promise<Project> {
+  const response = await fetch("/api/projects", {
     method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ name }),
+  })
+
+  if (!response.ok) {
+    throw new Error(`API error: ${response.status} ${response.statusText}`)
+  }
+
+  return response.json()
+}
+
+export async function updateProject(id: string, name: string): Promise<Project> {
+  const response = await fetch(`/api/projects/${id}`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ name }),
+  })
+
+  if (!response.ok) {
+    throw new Error(`API error: ${response.status} ${response.statusText}`)
+  }
+
+  return response.json()
+}
+
+export async function deleteProject(id: string): Promise<void> {
+  const response = await fetch(`/api/projects/${id}`, {
+    method: "DELETE",
+  })
+
+  if (!response.ok) {
+    throw new Error(`API error: ${response.status} ${response.statusText}`)
+  }
+}
+
+// User preferences endpoints
+export interface CurrentUser {
+  id: string
+  org_id: string
+  email: string
+  role: string
+  supabase_id: string | null
+  name: string | null
+  picture_url: string | null
+  last_project_id: string | null
+}
+
+export async function getCurrentUser(): Promise<CurrentUser> {
+  return gatewayFetch<CurrentUser>("/users/me", {
+    next: { revalidate: 0 }, // Don't cache - need fresh user data
+  })
+}
+
+export async function updateLastProject(projectId: string): Promise<void> {
+  const response = await fetch("/api/gateway/users/me/last-project", {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ project_id: projectId }),
+  })
+
+  if (!response.ok) {
+    throw new Error(`API error: ${response.status} ${response.statusText}`)
+  }
+}
+
+// Users & Tokens analytics endpoints (Users & Tokens Tab)
+export async function getUserGrowth(hours = 720): Promise<UserGrowthPoint[]> {
+  return gatewayFetch<UserGrowthPoint[]>(`/analytics/users/growth?range=${hours}`, {
+    next: { revalidate: 60 },
+  })
+}
+
+export async function getEngagementTiers(hours = 720): Promise<EngagementTiersResponse> {
+  return gatewayFetch<EngagementTiersResponse>(`/analytics/users/engagement?range=${hours}`, {
+    next: { revalidate: 60 },
+  })
+}
+
+export async function getTokenAlerts(hours = 24): Promise<TokenAlertsResponse> {
+  return gatewayFetch<TokenAlertsResponse>(`/analytics/tokens/alerts?range=${hours}`, {
+    next: { revalidate: 60 },
+  })
+}
+
+export async function getRequestsPerUser(hours = 168): Promise<RequestsPerUserPoint[]> {
+  return gatewayFetch<RequestsPerUserPoint[]>(`/analytics/users/requests?range=${hours}`, {
+    next: { revalidate: 60 },
+  })
+}
+
+// Cache analytics endpoints (Cache Tab)
+export async function getCacheSummary(hours = 24): Promise<CacheSummaryStats> {
+  return gatewayFetch<CacheSummaryStats>(`/analytics/cache/summary?range=${hours}`, {
+    next: { revalidate: 60 },
+  })
+}
+
+export async function getCacheHitRateTimeseries(hours = 168): Promise<CacheHitRatePoint[]> {
+  return gatewayFetch<CacheHitRatePoint[]>(`/analytics/cache/hit-rate-timeseries?range=${hours}`, {
+    next: { revalidate: 60 },
+  })
+}
+
+export async function getTopCachedQueries(limit = 25): Promise<CachedQueryRow[]> {
+  return gatewayFetch<CachedQueryRow[]>(`/analytics/cache/top-queries?limit=${limit}`, {
+    next: { revalidate: 60 },
+  })
+}
+
+export async function getModelCacheEfficiency(hours = 168): Promise<ModelCacheEfficiency[]> {
+  return gatewayFetch<ModelCacheEfficiency[]>(`/analytics/cache/model-efficiency?range=${hours}`, {
+    next: { revalidate: 60 },
+  })
+}
+
+export async function getCacheLatencyComparison(hours = 168): Promise<CacheLatencyComparison> {
+  return gatewayFetch<CacheLatencyComparison>(`/analytics/cache/latency-comparison?range=${hours}`, {
+    next: { revalidate: 60 },
+  })
+}
+
+// Model analytics endpoints (Models Tab)
+export async function getModelUsageTimeseries(
+  groupBy: "requests" | "cost" | "cache_hits" = "requests",
+  hours = 168
+): Promise<ModelUsageTimeseriesPoint[]> {
+  return gatewayFetch<ModelUsageTimeseriesPoint[]>(
+    `/analytics/models/usage-timeseries?group_by=${groupBy}&range=${hours}`,
+    { next: { revalidate: 60 } }
+  )
+}
+
+export async function getModelErrorRates(hours = 168): Promise<ModelErrorRate[]> {
+  return gatewayFetch<ModelErrorRate[]>(`/analytics/models/error-rates?range=${hours}`, {
+    next: { revalidate: 60 },
+  })
+}
+
+export async function getModelLatency(hours = 168): Promise<ModelLatencyStat[]> {
+  return gatewayFetch<ModelLatencyStat[]>(`/analytics/models/latency?range=${hours}`, {
+    next: { revalidate: 60 },
+  })
+}
+
+export async function getModelStats(hours = 168): Promise<ModelStatsRow[]> {
+  return gatewayFetch<ModelStatsRow[]>(`/analytics/models/stats?range=${hours}`, {
+    next: { revalidate: 60 },
+  })
+}
+
+export async function getCostLatencyScatter(hours = 168): Promise<CostLatencyScatterPoint[]> {
+  return gatewayFetch<CostLatencyScatterPoint[]>(`/analytics/models/cost-latency-scatter?range=${hours}`, {
+    next: { revalidate: 60 },
+  })
+}
+
+// Experiment analytics endpoints
+export async function getAnalyticsExperiments(): Promise<ExperimentSummary[]> {
+  return gatewayFetch<ExperimentSummary[]>("/analytics/experiments", {
+    next: { revalidate: 60 },
+  })
+}
+
+// Security analytics endpoints (Security Tab)
+export async function getSecuritySummary(hours = 168): Promise<SecuritySummaryStats> {
+  return gatewayFetch<SecuritySummaryStats>(`/analytics/security/summary?range=${hours}`, {
+    next: { revalidate: 60 },
+  })
+}
+
+export async function getGuardrailTriggers(hours = 168): Promise<GuardrailTriggerStat[]> {
+  return gatewayFetch<GuardrailTriggerStat[]>(`/analytics/security/guardrail-triggers?range=${hours}`, {
+    next: { revalidate: 60 },
+  })
+}
+
+export async function getPiiBreakdown(hours = 168): Promise<PiiBreakdownStat[]> {
+  return gatewayFetch<PiiBreakdownStat[]>(`/analytics/security/pii-breakdown?range=${hours}`, {
+    next: { revalidate: 60 },
+  })
+}
+
+export async function getPolicyActions(hours = 168): Promise<PolicyActionStat[]> {
+  return gatewayFetch<PolicyActionStat[]>(`/analytics/security/policy-actions?range=${hours}`, {
+    next: { revalidate: 60 },
+  })
+}
+
+export async function getShadowPolicies(hours = 168): Promise<ShadowPolicyStat[]> {
+  return gatewayFetch<ShadowPolicyStat[]>(`/analytics/security/shadow-policies?range=${hours}`, {
+    next: { revalidate: 60 },
+  })
+}
+
+export async function getDataResidency(hours = 168): Promise<DataResidencyStats> {
+  return gatewayFetch<DataResidencyStats>(`/analytics/security/data-residency?range=${hours}`, {
+    next: { revalidate: 60 },
+  })
+}
+
+// HITL analytics endpoints (HITL Tab)
+export async function getHitlSummary(hours = 168): Promise<HitlSummaryStats> {
+  return gatewayFetch<HitlSummaryStats>(`/analytics/hitl/summary?range=${hours}`, {
+    next: { revalidate: 30 },
+  })
+}
+
+export async function getHitlVolume(hours = 168): Promise<HitlVolumePoint[]> {
+  return gatewayFetch<HitlVolumePoint[]>(`/analytics/hitl/volume?range=${hours}`, {
+    next: { revalidate: 60 },
+  })
+}
+
+export async function getHitlLatency(hours = 168): Promise<HitlLatencyStats> {
+  return gatewayFetch<HitlLatencyStats>(`/analytics/hitl/latency?range=${hours}`, {
+    next: { revalidate: 60 },
+  })
+}
+
+export async function getHitlRejectionReasons(hours = 168): Promise<RejectionReason[]> {
+  return gatewayFetch<RejectionReason[]>(`/analytics/hitl/reasons?range=${hours}`, {
+    next: { revalidate: 60 },
+  })
+}
+
+export async function listApprovals(): Promise<ApprovalRequest[]> {
+  return gatewayFetch<ApprovalRequest[]>("/approvals", {
+    next: { revalidate: 30 },
+  })
+}
+
+export async function decideApproval(
+  id: string,
+  decision: "approved" | "rejected"
+): Promise<{ id: string; status: string; updated: boolean }> {
+  const response = await fetch(`/api/gateway/approvals/${id}/decision`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ decision }),
+  })
+
+  if (!response.ok) {
+    throw new Error(`Failed to ${decision} approval: ${response.status}`)
+  }
+
+  return response.json()
+}
+
+// Error analytics endpoints (Errors Tab)
+export async function getErrorSummary(hours = 168): Promise<ErrorSummaryStats> {
+  return gatewayFetch<ErrorSummaryStats>(`/analytics/errors/summary?range=${hours}`, {
+    next: { revalidate: 60 },
+  })
+}
+
+export async function getErrorTimeseries(hours = 168): Promise<ErrorTimeseriesPoint[]> {
+  return gatewayFetch<ErrorTimeseriesPoint[]>(`/analytics/errors/timeseries?range=${hours}`, {
+    next: { revalidate: 60 },
+  })
+}
+
+export async function getErrorBreakdown(hours = 168): Promise<ErrorTypeBreakdown[]> {
+  return gatewayFetch<ErrorTypeBreakdown[]>(`/analytics/errors/breakdown?range=${hours}`, {
+    next: { revalidate: 60 },
+  })
+}
+
+export async function getErrorLogs(limit = 50): Promise<ErrorLogRow[]> {
+  return gatewayFetch<ErrorLogRow[]>(`/analytics/errors/logs?limit=${limit}`, {
+    next: { revalidate: 30 },
+  })
+}
+
+// ── Token Management API ─────────────────────────────────────────────────────
+
+interface ListTokensParams {
+  limit?: number
+  offset?: number
+  external_user_id?: string
+  team_id?: string
+}
+
+export async function listTokensWithParams(params?: ListTokensParams): Promise<TokenType[]> {
+  const searchParams = new URLSearchParams()
+  if (params?.limit) searchParams.set("limit", params.limit.toString())
+  if (params?.offset) searchParams.set("offset", params.offset.toString())
+  if (params?.external_user_id) searchParams.set("external_user_id", params.external_user_id)
+  if (params?.team_id) searchParams.set("team_id", params.team_id)
+
+  const queryString = searchParams.toString()
+  return gatewayFetch<TokenType[]>(`/tokens${queryString ? `?${queryString}` : ""}`)
+}
+
+export async function getToken(id: string): Promise<TokenType> {
+  return gatewayFetch<TokenType>(`/tokens/${id}`)
+}
+
+export async function createToken(data: CreateTokenRequest): Promise<CreateTokenResponse> {
+  const response = await fetch("/api/gateway/tokens", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
-  });
+  })
+
+  if (!response.ok) {
+    throw new Error(`Failed to create token: ${response.status}`)
+  }
+
+  return response.json()
 }
 
-export async function deleteWebhook(id: string): Promise<void> {
-  return api(`/webhooks/${id}`, { method: "DELETE" });
+export async function revokeToken(id: string): Promise<void> {
+  const response = await fetch(`/api/gateway/tokens/${id}`, {
+    method: "DELETE",
+  })
+
+  if (!response.ok && response.status !== 204) {
+    throw new Error(`Failed to revoke token: ${response.status}`)
+  }
 }
 
-export async function testWebhook(url: string): Promise<TestWebhookResponse> {
-  return api("/webhooks/test", {
+export async function bulkCreateTokens(data: BulkCreateTokenRequest): Promise<BulkCreateTokenResponse> {
+  const response = await fetch("/api/gateway/tokens/bulk", {
     method: "POST",
-    body: JSON.stringify({ url }),
-  });
-}
-
-// ── Analytics (Phase 8) ──────────────────────────────────────
-
-export interface AnalyticsSummary {
-  total_requests: number;
-  success_count: number;
-  error_count: number;
-  avg_latency: number;
-  total_cost: number;
-  total_tokens: number;
-  total_input_tokens?: number;
-  total_output_tokens?: number;
-}
-
-export interface AnalyticsTimeseriesPoint {
-  bucket: string;
-  request_count: number;
-  error_count: number;
-  cost: number;
-  lat: number;
-  input_tokens?: number;
-  output_tokens?: number;
-}
-
-// ── System Settings (Phase 9) ────────────────────────────────
-
-export interface SystemSettings {
-  [key: string]: unknown;
-}
-
-export const getSettings = () => api<SystemSettings>("/settings");
-
-export const updateSettings = (settings: SystemSettings) =>
-  api<{ success: boolean }>("/settings", {
-    method: "PUT",
-    body: JSON.stringify({ settings }),
-  });
-
-export const flushCache = () =>
-  api<{ success: boolean; message: string; keys_deleted: number }>("/system/flush-cache", {
-    method: "POST",
-  });
-
-// ── Model Pricing ─────────────────────────────────────────────
-
-export interface ModelPricing {
-  id: string;
-  provider: string;
-  model_pattern: string;
-  input_per_m: number;
-  output_per_m: number;
-  updated_at: string;
-}
-
-export const listModelPricing = () => api<ModelPricing[]>("/pricing");
-
-export const upsertModelPricing = (data: {
-  provider: string;
-  model_pattern: string;
-  input_per_m: number;
-  output_per_m: number;
-}) =>
-  api<ModelPricing>("/pricing", {
-    method: "PUT",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
-  });
+  })
 
-export const deleteModelPricing = (id: string) =>
-  api<void>(`/pricing/${id}`, { method: "DELETE" });
+  if (!response.ok) {
+    throw new Error(`Failed to bulk create tokens: ${response.status}`)
+  }
 
-// ── Cache Management ────────────────────────────
-
-export interface CacheStats {
-  cache_key_count: number;
-  estimated_size_bytes: number;
-  default_ttl_secs: number;
-  max_entry_bytes: number;
-  cached_fields: string[];
-  skip_conditions: string[];
-  namespace_counts: {
-    llm_cache: number;
-    spend_tracking: number;
-    rate_limits: number;
-  };
-  sample_entries: {
-    key: string;
-    full_key: string;
-    size_bytes: number;
-    ttl_secs: number;
-  }[];
+  return response.json()
 }
 
-export const getCacheStats = () => api<CacheStats>("/system/cache-stats");
+export async function bulkRevokeTokens(data: BulkRevokeRequest): Promise<BulkRevokeResponse> {
+  const response = await fetch("/api/gateway/tokens/bulk-revoke", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  })
 
-// ── Guardrails ────────────────────────────────────────────────
+  if (!response.ok) {
+    throw new Error(`Failed to bulk revoke tokens: ${response.status}`)
+  }
 
-export interface GuardrailPreset {
-  name: string;
-  description: string;
-  category: string;
-  patterns?: string[];
-  required_fields?: string[];
+  return response.json()
 }
 
-export interface GuardrailPresetsResponse {
-  presets: GuardrailPreset[];
+export async function getTokenUsage(id: string, hours = 168): Promise<TokenUsageStats> {
+  return gatewayFetch<TokenUsageStats>(`/tokens/${id}/usage?hours=${hours}`)
 }
 
-export interface EnableGuardrailsResponse {
-  success: boolean;
-  applied_presets: string[];
-  policy_id: string | null;
-  policy_name: string;
-  skipped: string[];
-  /** If guardrails were already configured, shows who set them last (sdk/dashboard/header). */
-  previous_source: string | null;
+export async function getCircuitBreaker(id: string): Promise<CircuitBreakerConfig> {
+  return gatewayFetch<CircuitBreakerConfig>(`/tokens/${id}/circuit-breaker`)
+}
+
+export async function updateCircuitBreaker(
+  id: string,
+  config: Partial<CircuitBreakerConfig>
+): Promise<CircuitBreakerConfig> {
+  const response = await fetch(`/api/gateway/tokens/${id}/circuit-breaker`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(config),
+  })
+
+  if (!response.ok) {
+    throw new Error(`Failed to update circuit breaker: ${response.status}`)
+  }
+
+  return response.json()
+}
+
+// ── Credentials (Vault) API ──────────────────────────────────────────────────
+
+export async function listCredentials(): Promise<CredentialMeta[]> {
+  return gatewayFetch<CredentialMeta[]>("/credentials")
+}
+
+export async function createCredential(data: CreateCredentialRequest): Promise<CreateCredentialResponse> {
+  const response = await fetch("/api/gateway/credentials", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  })
+
+  if (!response.ok) {
+    throw new Error(`Failed to create credential: ${response.status}`)
+  }
+
+  return response.json()
+}
+
+export async function deleteCredential(id: string): Promise<DeleteResponse> {
+  const response = await fetch(`/api/gateway/credentials/${id}`, {
+    method: "DELETE",
+  })
+
+  if (!response.ok) {
+    throw new Error(`Failed to delete credential: ${response.status}`)
+  }
+
+  return response.json()
+}
+
+// Re-export token types (TokenRow already exported from analytics)
+export type {
+  CreateTokenRequest,
+  CreateTokenResponse,
+  TokenUsageStats,
+  CircuitBreakerConfig,
+  CredentialMeta,
+  CreateCredentialRequest,
+  CreateCredentialResponse,
+  BulkCreateTokenRequest,
+  BulkCreateTokenResponse,
+  BulkRevokeRequest,
+  BulkRevokeResponse,
+  DeleteResponse,
+} from "./types/token"
+
+// Re-export policy types
+export type {
+  PolicyMode,
+  PolicyPhase,
+  Condition,
+  ConditionCheck,
+  ConditionAll,
+  ConditionAny,
+  ConditionNot,
+  ConditionAlways,
+  Action,
+  ActionDeny,
+  ActionAllow,
+  ActionRequireApproval,
+  ActionRateLimit,
+  ActionThrottle,
+  ActionRedact,
+  ActionTransform,
+  ActionOverride,
+  ActionLog,
+  ActionTag,
+  ActionWebhook,
+  ActionContentFilter,
+  ActionSplit,
+  ActionDynamicRoute,
+  ActionValidateSchema,
+  ActionConditionalRoute,
+  ActionExternalGuardrail,
+  ActionToolScope,
+  RetryConfig,
+  isGuardrailAction,
+  getActionDisplayName,
+} from "./types/policy"
+
+// ── Policy Management API ─────────────────────────────────────────────────────
+
+interface ListPoliciesParams {
+  limit?: number
+  offset?: number
+  project_id?: string
+}
+
+export async function listPolicies(params?: ListPoliciesParams): Promise<PolicyRow[]> {
+  const searchParams = new URLSearchParams()
+  if (params?.limit) searchParams.set("limit", params.limit.toString())
+  if (params?.offset) searchParams.set("offset", params.offset.toString())
+  if (params?.project_id) searchParams.set("project_id", params.project_id)
+
+  const queryString = searchParams.toString()
+  return gatewayFetch<PolicyRow[]>(`/policies${queryString ? `?${queryString}` : ""}`)
+}
+
+export async function createPolicy(data: CreatePolicyRequest): Promise<PolicyResponse> {
+  const response = await fetch("/api/gateway/policies", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  })
+
+  if (!response.ok) {
+    const error = await response.text()
+    throw new Error(`Failed to create policy: ${response.status} ${error}`)
+  }
+
+  return response.json()
+}
+
+export async function updatePolicy(id: string, data: UpdatePolicyRequest): Promise<PolicyResponse> {
+  const response = await fetch(`/api/gateway/policies/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  })
+
+  if (!response.ok) {
+    const error = await response.text()
+    throw new Error(`Failed to update policy: ${response.status} ${error}`)
+  }
+
+  return response.json()
+}
+
+export async function deletePolicy(id: string): Promise<void> {
+  const response = await fetch(`/api/gateway/policies/${id}`, {
+    method: "DELETE",
+  })
+
+  if (!response.ok && response.status !== 204) {
+    throw new Error(`Failed to delete policy: ${response.status}`)
+  }
+}
+
+export async function getPolicyVersions(id: string): Promise<PolicyVersionRow[]> {
+  return gatewayFetch<PolicyVersionRow[]>(`/policies/${id}/versions`)
+}
+
+// ── Guardrail Presets API ─────────────────────────────────────────
+
+export interface GuardrailScope {
+  models?: string[]
+  paths?: string[]
+}
+
+export interface EnableGuardrailsRequest {
+  token_id: string
+  presets: string[]
+  source?: "sdk" | "dashboard" | "header"
+  topic_allowlist?: string[]
+  topic_denylist?: string[]
+  scope?: GuardrailScope
+}
+
+export interface GuardrailsResponse {
+  success: boolean
+  applied_presets: string[]
+  policy_id: string | null
+  policy_name: string
+  skipped: string[]
+  previous_source: string | null
 }
 
 export interface GuardrailsStatus {
-  token_id: string;
-  has_guardrails: boolean;
-  source: string | null;
-  policy_id: string | null;
-  policy_name: string | null;
-  presets: string[];
+  token_id: string
+  has_guardrails: boolean
+  source: string | null
+  policy_id: string | null
+  policy_name: string | null
+  presets: string[]
 }
 
-export const getGuardrailPresets = () =>
-  api<GuardrailPresetsResponse>("/guardrails/presets");
+export interface GuardrailPreset {
+  name: string
+  description: string
+  category: string
+  actions: string[]
+  warning?: string
+}
 
-export const getGuardrailStatus = (token_id: string) =>
-  api<GuardrailsStatus>(`/guardrails/status?token_id=${encodeURIComponent(token_id)}`);
+export interface ListPresetsResponse {
+  presets: GuardrailPreset[]
+  total: number
+}
 
-export const enableGuardrails = (
-  token_id: string,
-  presets: string[],
-  source: string = "dashboard",
-  topic_allowlist: string[] = [],
-  topic_denylist: string[] = []
-) =>
-  api<EnableGuardrailsResponse>("/guardrails/enable", {
+/**
+ * Enable guardrails on a token using presets.
+ * @example
+ * await enableGuardrails({
+ *   token_id: "tf_v1_xxx",
+ *   presets: ["prompt_injection", "pii_redaction"],
+ *   source: "dashboard",
+ *   scope: { models: ["gpt-4"] }
+ * })
+ */
+export async function enableGuardrails(
+  data: EnableGuardrailsRequest
+): Promise<GuardrailsResponse> {
+  const response = await fetch("/api/gateway/guardrails/enable", {
     method: "POST",
-    body: JSON.stringify({ token_id, presets, source, topic_allowlist, topic_denylist }),
-  });
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      ...data,
+      source: data.source || "dashboard",
+    }),
+  })
 
-export const disableGuardrails = (token_id: string) =>
-  api<{ success: boolean; removed: number }>("/guardrails/disable", {
-    method: "DELETE",
-    body: JSON.stringify({ token_id }),
-  });
+  if (!response.ok) {
+    const error = await response.text()
+    throw new Error(`Failed to enable guardrails: ${response.status} ${error}`)
+  }
 
-// ── OIDC / SSO Providers ───────────────────────────────────────
-
-export interface OidcProvider {
-  id: string;
-  project_id: string;
-  issuer_url: string;
-  client_id: string;
-  audience: string | null;
-  /** JSON claim-to-role mapping: { "roles.admin": "admin" } */
-  claim_mappings: Record<string, string> | null;
-  is_active: boolean;
-  created_at: string;
-  updated_at: string;
+  return response.json()
 }
 
-export interface CreateOidcProviderRequest {
-  issuer_url: string;
-  client_id: string;
-  audience?: string;
-  claim_mappings?: Record<string, string>;
-}
-
-export const listOidcProviders = () =>
-  api<OidcProvider[]>("/oidc/providers");
-
-export const createOidcProvider = (data: CreateOidcProviderRequest) =>
-  api<OidcProvider>("/oidc/providers", {
-    method: "POST",
-    body: JSON.stringify(data),
-  });
-
-export const updateOidcProvider = (
-  id: string,
-  data: Partial<CreateOidcProviderRequest> & { is_active?: boolean }
-) =>
-  api<OidcProvider>(`/oidc/providers/${id}`, {
-    method: "PUT",
-    body: JSON.stringify(data),
-  });
-
-export const deleteOidcProvider = (id: string) =>
-  api<{ deleted: boolean }>(`/oidc/providers/${id}`, { method: "DELETE" });
-
-// ── Anomaly Detection ────────────────────────────────────────
-
-export interface AnomalyEvent {
-  token_id: string;
-  current_velocity: number;
-  baseline_mean: number;
-  threshold: number;
-  is_anomalous: boolean;
-  window_secs: number;
-  total_data_points: number;
-}
-
-export interface AnomalyResponse {
-  events: AnomalyEvent[];
-  total: number;
-  window_secs: number;
-  sigma_threshold: number;
-}
-
-export const getAnomalyEvents = () =>
-  api<AnomalyResponse>("/anomalies");
-
-// ── MCP Server Management ────────────────────────────────────
-
-export interface McpToolDef {
-  name: string;
-  description: string | null;
-  inputSchema: unknown;
-  outputSchema?: unknown;
-}
-
-export interface McpServerInfo {
-  id: string;
-  name: string;
-  endpoint: string;
-  status: string;
-  auth_type: string;
-  tool_count: number;
-  tools: string[];
-  last_refreshed_secs_ago: number;
-  server_info: { name: string; version: string } | null;
-}
-
-export interface RegisterMcpServerResponse {
-  id: string;
-  name: string;
-  auth_type: string;
-  tool_count: number;
-  tools: string[];
-}
-
-export interface McpDiscoveryResult {
-  endpoint: string;
-  requires_auth: boolean;
-  auth_type: string;
-  token_endpoint?: string;
-  scopes_supported?: string[];
-  server_info?: { name: string; version: string };
-  tools: McpToolDef[];
-  tool_count: number;
-}
-
-export interface McpReauthResponse {
-  success: boolean;
-  error?: string;
-}
-
-export interface TestMcpServerResponse {
-  connected: boolean;
-  tool_count: number;
-  tools: McpToolDef[];
-  error: string | null;
-}
-
-export const listMcpServers = () => api<McpServerInfo[]>("/mcp/servers");
-
-export const registerMcpServer = (data: {
-  name?: string;
-  endpoint: string;
-  api_key?: string;
-  client_id?: string;
-  client_secret?: string;
-  auto_discover?: boolean;
-}) =>
-  api<RegisterMcpServerResponse>("/mcp/servers", {
-    method: "POST",
-    body: JSON.stringify(data),
-  });
-
-export const deleteMcpServer = (id: string) =>
-  api<void>(`/mcp/servers/${id}`, { method: "DELETE" });
-
-export const refreshMcpServer = (id: string) =>
-  api<McpToolDef[]>(`/mcp/servers/${id}/refresh`, { method: "POST" });
-
-export const listMcpServerTools = (id: string) =>
-  api<McpToolDef[]>(`/mcp/servers/${id}/tools`);
-
-export const discoverMcpServer = (endpoint: string) =>
-  api<McpDiscoveryResult>("/mcp/servers/discover", {
-    method: "POST",
-    body: JSON.stringify({ endpoint }),
-  });
-
-export const reauthMcpServer = (id: string) =>
-  api<McpReauthResponse>(`/mcp/servers/${id}/reauth`, { method: "POST" });
-
-export const testMcpServer = (data: {
-  name?: string;
-  endpoint: string;
-  api_key?: string;
-}) =>
-  api<TestMcpServerResponse>("/mcp/servers/test", {
-    method: "POST",
-    body: JSON.stringify(data),
-  });
-
-// ── Teams ─────────────────────────────────────────────────────
-
-export interface Team {
-  id: string;
-  org_id: string;
-  name: string;
-  description: string | null;
-  max_budget_usd: string | null;
-  budget_duration: string | null;
-  allowed_models: string[] | null;
-  tags: Record<string, string> | null;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface CreateTeamRequest {
-  name: string;
-  description?: string;
-  max_budget_usd?: number | null;
-  budget_duration?: string | null;
-  allowed_models?: string[];
-  tags?: Record<string, string>;
-}
-
-export interface TeamMember {
-  team_id: string;
-  user_id: string;
-  role: string;
-  joined_at: string;
-}
-
-export interface TeamSpend {
-  team_id: string;
-  total_cost_usd: number;
-  total_requests: number;
-  period_start: string;
-  period_end: string;
-}
-
-export const listTeams = () => api<Team[]>("/teams");
-
-export const createTeam = (data: CreateTeamRequest | string) =>
-  api<Team>("/teams", {
-    method: "POST",
-    body: JSON.stringify(typeof data === "string" ? { name: data } : data),
-  });
-
-export const updateTeam = (id: string, data: Partial<CreateTeamRequest> | string) =>
-  api<Team>(`/teams/${id}`, {
-    method: "PUT",
-    body: JSON.stringify(typeof data === "string" ? { name: data } : data),
-  });
-
-export const deleteTeam = (id: string) =>
-  api<void>(`/teams/${id}`, { method: "DELETE" });
-
-export const listTeamMembers = (id: string) =>
-  api<TeamMember[]>(`/teams/${id}/members`);
-
-export const addTeamMember = (id: string, user_id: string, role: string) =>
-  api<void>(`/teams/${id}/members`, {
-    method: "POST",
-    body: JSON.stringify({ user_id, role }),
-  });
-
-export const removeTeamMember = (id: string, user_id: string) =>
-  api<void>(`/teams/${id}/members/${user_id}`, { method: "DELETE" });
-
-export const getTeamSpend = (id: string) =>
-  api<TeamSpend>(`/teams/${id}/spend`);
-
-// ── Model Access Groups ───────────────────────────────────────
-
-export interface ModelAccessGroup {
-  id: string;
-  org_id: string;
-  name: string;
-  allowed_models: string[];
-  created_at: string;
-  updated_at: string;
-}
-
-export const listModelAccessGroups = () =>
-  api<ModelAccessGroup[]>("/model-access-groups");
-
-export const createModelAccessGroup = (data: {
-  name: string;
-  allowed_models: string[];
-}) =>
-  api<ModelAccessGroup>("/model-access-groups", {
-    method: "POST",
-    body: JSON.stringify(data),
-  });
-
-export const updateModelAccessGroup = (
-  id: string,
-  data: { name?: string; allowed_models?: string[] }
-) =>
-  api<ModelAccessGroup>(`/model-access-groups/${id}`, {
-    method: "PUT",
-    body: JSON.stringify(data),
-  });
-
-export const deleteModelAccessGroup = (id: string) =>
-  api<void>(`/model-access-groups/${id}`, { method: "DELETE" });
-
-// ── Circuit Breaker ───────────────────────────────────────────
-
-export interface CircuitBreakerConfig {
-  enabled: boolean;
-  failure_threshold: number;
-  recovery_cooldown_secs: number;
-  half_open_max_requests: number;
-}
-
-export const getCircuitBreaker = (tokenId: string) =>
-  api<CircuitBreakerConfig>(`/tokens/${tokenId}/circuit-breaker`);
-
-export const updateCircuitBreaker = (
+/**
+ * Disable guardrails on a token.
+ */
+export async function disableGuardrails(
   tokenId: string,
-  data: Partial<CircuitBreakerConfig>
-) =>
-  api<CircuitBreakerConfig>(`/tokens/${tokenId}/circuit-breaker`, {
-    method: "PATCH",
-    body: JSON.stringify(data),
-  });
-
-// ── Config-as-Code ────────────────────────────────────────────
-
-// SEC-01: Export functions must check response status to avoid silently
-// downloading 401 HTML pages as "YAML" files when auth fails.
-
-async function checkedProxyFetch(path: string): Promise<Response> {
-  const res = await fetch(`/api/proxy/${path}`, { credentials: "same-origin" });
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`Export failed (${res.status}): ${body.slice(0, 200)}`);
-  }
-  return res;
-}
-
-export const exportConfig = (format: "yaml" | "json" = "yaml") =>
-  checkedProxyFetch(`config/export?format=${format}`);
-
-export const exportPolicies = () =>
-  checkedProxyFetch(`config/export/policies`);
-
-export const exportTokens = () =>
-  checkedProxyFetch(`config/export/tokens`);
-
-export const importConfig = (content: string) =>
-  api<{ imported: boolean; message: string }>("/config/import", {
-    method: "POST",
-    body: content,
-    // Note: body is raw yaml/json string, override Content-Type
-  });
-
-// ── GDPR / Project Purge ─────────────────────────────────────
-
-export const purgeProjectData = (projectId: string) =>
-  api<{ purged: boolean; message: string }>(`/projects/${projectId}/purge`, {
-    method: "POST",
-  });
-
-// ── Spend Breakdown ───────────────────────────────────────────
-
-export interface SpendBreakdownItem {
-  label: string;
-  cost_usd: number;
-  request_count: number;
-  token_count: number;
-}
-
-export interface SpendBreakdown {
-  by_model: SpendBreakdownItem[];
-  by_token: SpendBreakdownItem[];
-}
-
-export const getSpendBreakdown = async (range = "24"): Promise<SpendBreakdown> => {
-  // Gateway returns {breakdown: [{dimension, total_cost_usd, ...}]} per group_by.
-  // We need to fetch both model and token breakdowns and transform them.
-  interface GatewayBreakdownItem {
-    dimension: string;
-    total_cost_usd: number;
-    request_count: number;
-    total_prompt_tokens?: number;
-    total_completion_tokens?: number;
-  }
-  interface GatewayBreakdownResponse {
-    breakdown?: GatewayBreakdownItem[];
+  policyNamePrefix?: string
+): Promise<void> {
+  const body: Record<string, string> = { token_id: tokenId }
+  if (policyNamePrefix) {
+    body.policy_name_prefix = policyNamePrefix
   }
 
-  const transform = (items: GatewayBreakdownItem[] | undefined): SpendBreakdownItem[] =>
-    (items || []).map(item => ({
-      label: item.dimension,
-      cost_usd: item.total_cost_usd,
-      request_count: item.request_count,
-      token_count: (item.total_prompt_tokens || 0) + (item.total_completion_tokens || 0),
-    }));
+  const response = await fetch("/api/gateway/guardrails/disable", {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  })
 
-  try {
-    const [byModel, byToken] = await Promise.all([
-      api<GatewayBreakdownResponse>(`/analytics/spend/breakdown?range=${range}&group_by=model`),
-      api<GatewayBreakdownResponse>(`/analytics/spend/breakdown?range=${range}&group_by=token`),
-    ]);
-    return {
-      by_model: transform(byModel?.breakdown),
-      by_token: transform(byToken?.breakdown),
-    };
-  } catch {
-    return { by_model: [], by_token: [] };
+  if (!response.ok && response.status !== 204) {
+    throw new Error(`Failed to disable guardrails: ${response.status}`)
   }
-};
-
-// ── PII Vault Rehydration ─────────────────────────────────────
-
-export interface PiiRehydrateResponse {
-  results: Record<string, string>;
 }
 
-export const rehydratePii = (tokens: string[]) =>
-  api<PiiRehydrateResponse>("/pii/rehydrate", {
-    method: "POST",
-    body: JSON.stringify({ tokens }),
-  });
-
-// ── Prompt Management ─────────────────────────────────────────
-
-export interface Prompt {
-  id: string;
-  name: string;
-  slug: string;
-  description: string;
-  folder: string;
-  tags: Record<string, string>;
-  created_at: string;
-  updated_at: string;
-  created_by: string;
-  version_count?: number;
-  latest_version?: number;
-  latest_model?: string;
-  labels?: string[];
+/**
+ * Get guardrail status for a token.
+ */
+export async function getGuardrailStatus(tokenId: string): Promise<GuardrailsStatus> {
+  return gatewayFetch<GuardrailsStatus>(`/guardrails/status?token_id=${encodeURIComponent(tokenId)}`)
 }
 
-export interface PromptVersion {
-  id: string;
-  prompt_id: string;
-  version: number;
-  model: string;
-  messages: Array<{ role: string; content: string }>;
-  temperature: number | null;
-  max_tokens: number | null;
-  top_p: number | null;
-  tools: unknown | null;
-  commit_message: string;
-  created_at: string;
-  created_by: string;
-  labels: string[];
+/**
+ * List available guardrail presets.
+ */
+export async function listGuardrailPresets(): Promise<ListPresetsResponse> {
+  return gatewayFetch<ListPresetsResponse>("/guardrails/presets")
 }
-
-export interface CreatePromptRequest {
-  name: string;
-  slug?: string;
-  description?: string;
-  folder?: string;
-  tags?: Record<string, string>;
-}
-
-export interface CreateVersionRequest {
-  model: string;
-  messages: Array<{ role: string; content: string }>;
-  temperature?: number;
-  max_tokens?: number;
-  top_p?: number;
-  tools?: unknown;
-  commit_message?: string;
-}
-
-export interface DeployRequest {
-  version: number;
-  label: string;
-}
-
-export interface RenderResponse {
-  model: string;
-  messages: Array<{ role: string; content: string }>;
-  temperature?: number;
-  max_tokens?: number;
-  top_p?: number;
-  tools?: unknown;
-  version: number;
-  label?: string;
-  prompt_id: string;
-  prompt_slug: string;
-}
-
-export const listPrompts = (folder?: string) =>
-  api<Prompt[]>(`/prompts${folder ? `?folder=${encodeURIComponent(folder)}` : ""}`);
-
-export const getPrompt = (id: string) =>
-  api<{ prompt: Prompt; versions: PromptVersion[]; version_count: number }>(`/prompts/${id}`);
-
-export const createPrompt = (data: CreatePromptRequest) =>
-  api<{ id: string; slug: string }>("/prompts", {
-    method: "POST",
-    body: JSON.stringify(data),
-  });
-
-export const updatePrompt = (id: string, data: Partial<CreatePromptRequest>) =>
-  api<{ message: string }>(`/prompts/${id}`, {
-    method: "PUT",
-    body: JSON.stringify(data),
-  });
-
-export const deletePrompt = (id: string) =>
-  api<{ message: string }>(`/prompts/${id}`, { method: "DELETE" });
-
-export const createVersion = (promptId: string, data: CreateVersionRequest) =>
-  api<{ id: string; version: number }>(`/prompts/${promptId}/versions`, {
-    method: "POST",
-    body: JSON.stringify(data),
-  });
-
-export const listVersions = (promptId: string) =>
-  api<PromptVersion[]>(`/prompts/${promptId}/versions`);
-
-export const deployVersion = (promptId: string, data: DeployRequest) =>
-  api<{ message: string }>(`/prompts/${promptId}/deploy`, {
-    method: "POST",
-    body: JSON.stringify(data),
-  });
-
-export const renderPrompt = (slug: string, variables?: Record<string, string>, label?: string, version?: number) =>
-  api<RenderResponse>(`/prompts/by-slug/${slug}/render`, {
-    method: "POST",
-    body: JSON.stringify({ variables, label, version }),
-  });
-
-export const listPromptFolders = () =>
-  api<string[]>("/prompts/folders");

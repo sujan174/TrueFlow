@@ -11,6 +11,17 @@ pub struct SpendByDimension {
     pub total_completion_tokens: i64,
 }
 
+/// User-level spend summary for SaaS builder analytics.
+#[derive(Debug, sqlx::FromRow, Serialize, Deserialize)]
+pub struct UserSpendSummary {
+    pub external_user_id: String,
+    pub total_cost_usd: f64,
+    pub request_count: i64,
+    pub total_prompt_tokens: i64,
+    pub total_completion_tokens: i64,
+    pub token_count: i64,
+}
+
 // -- Input structs --
 
 pub struct NewCredential {
@@ -46,6 +57,12 @@ pub struct NewToken {
     pub mcp_allowed_tools: Option<serde_json::Value>,
     /// MCP tool blocklist. Takes priority over allowlist. Supports glob patterns.
     pub mcp_blocked_tools: Option<serde_json::Value>,
+    /// External user/customer identifier for SaaS builders (e.g., customer ID from billing system).
+    pub external_user_id: Option<String>,
+    /// Flexible JSONB for SaaS-specific data (plan tier, region, custom attributes).
+    pub metadata: Option<serde_json::Value>,
+    /// Token purpose: "llm" (LLM calls only), "tool" (tool/MCP calls only), "both" (either).
+    pub purpose: String,
 }
 
 // -- Output structs --
@@ -94,6 +111,12 @@ pub struct TokenRow {
     /// SECURITY: Controls how X-TrueFlow-Guardrails header is processed.
     /// Options: "disabled" (ignore, default for security), "append" (add to policies), "override" (replace policies)
     pub guardrail_header_mode: Option<String>,
+    /// External user/customer identifier for SaaS builders (e.g., customer ID from billing system).
+    pub external_user_id: Option<String>,
+    /// Flexible JSONB for SaaS-specific data (plan tier, region, custom attributes).
+    pub metadata: Option<serde_json::Value>,
+    /// Token purpose: "llm" (LLM calls only), "tool" (tool/MCP calls only), "both" (either).
+    pub purpose: String,
 }
 
 #[derive(Debug, sqlx::FromRow, Serialize, Deserialize)]
@@ -412,4 +435,155 @@ pub struct NewPromptVersion {
     pub tools: Option<serde_json::Value>,
     pub commit_message: String,
     pub created_by: String,
+}
+
+// ── Supabase User Sync ─────────────────────────────────────────
+
+/// Request to sync a user from Supabase Auth to the gateway database.
+/// Called by the dashboard after successful Supabase login.
+#[derive(Debug, Deserialize)]
+pub struct SyncUserRequest {
+    /// Supabase Auth user ID (from JWT `sub` claim)
+    pub supabase_id: Uuid,
+    /// User email from Supabase Auth
+    pub email: String,
+    /// Display name (optional, from OAuth providers)
+    pub name: Option<String>,
+    /// Avatar URL (optional, from OAuth providers)
+    pub picture: Option<String>,
+}
+
+/// Response after syncing a user from Supabase.
+#[derive(Debug, Serialize)]
+pub struct SyncUserResponse {
+    /// Gateway user ID
+    pub user_id: Uuid,
+    /// Organization ID the user belongs to
+    pub org_id: Uuid,
+    /// User role in the organization
+    pub role: String,
+    /// Whether this was a new user creation
+    pub is_new_user: bool,
+    /// The user's last selected project (for cross-device persistence)
+    pub last_project_id: Option<Uuid>,
+}
+
+/// User row with Supabase fields
+#[derive(Debug, sqlx::FromRow, Serialize, Deserialize)]
+pub struct UserRow {
+    pub id: Uuid,
+    pub org_id: Uuid,
+    pub email: String,
+    pub role: String,
+    pub supabase_id: Option<Uuid>,
+    pub name: Option<String>,
+    pub picture_url: Option<String>,
+    pub last_login_at: Option<DateTime<Utc>>,
+    pub last_project_id: Option<Uuid>,
+    pub created_at: DateTime<Utc>,
+}
+
+// ── Users & Tokens Analytics Types ─────────────────────────────────────
+
+/// User growth timeseries point for the Users & Tokens tab.
+/// Tracks new users and cumulative user count over time.
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
+pub struct UserGrowthPoint {
+    pub bucket: DateTime<Utc>,
+    pub new_users: i64,
+    pub cumulative_users: i64,
+}
+
+/// Engagement tier breakdown for the Users & Tokens tab.
+/// Classifies users by request volume: Power (>100), Regular (10-100), Light (1-9).
+#[derive(Debug, Serialize, Deserialize)]
+pub struct EngagementTiersResponse {
+    pub power_users: i64,
+    pub regular_users: i64,
+    pub light_users: i64,
+    pub total_users: i64,
+}
+
+/// Token alerts for the Users & Tokens tab.
+/// Shows active tokens and those hitting rate limits.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TokenAlertsResponse {
+    pub active_tokens: i64,
+    pub token_limit: Option<i64>,
+    pub tokens_at_rate_limit: i64,
+    pub rate_limited_tokens: Vec<RateLimitedToken>,
+}
+
+/// A token that is approaching or at rate limit.
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
+pub struct RateLimitedToken {
+    pub token_name: String,
+    pub percent: f64,
+}
+
+/// Requests per user timeseries point for the Users & Tokens tab.
+/// Shows request volume per user over time.
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
+pub struct RequestsPerUserPoint {
+    pub bucket: DateTime<Utc>,
+    pub user_count: i64,
+    pub request_count: i64,
+    pub avg_per_user: f64,
+}
+
+// ── MCP Server Persistence Types ─────────────────────────────────────
+
+/// Persisted MCP server configuration loaded from the database.
+#[derive(Debug, Clone, sqlx::FromRow, Serialize, Deserialize)]
+pub struct McpServerRow {
+    pub id: Uuid,
+    pub project_id: Uuid,
+    pub name: String,
+    pub endpoint: String,
+    pub auth_type: String,
+    pub api_key_encrypted: Option<String>,
+    pub oauth_client_id: Option<String>,
+    pub oauth_client_secret_enc: Option<String>,
+    pub oauth_token_endpoint: Option<String>,
+    pub oauth_scopes: Option<Vec<String>>,
+    pub oauth_access_token_enc: Option<String>,
+    pub oauth_refresh_token_enc: Option<String>,
+    pub oauth_token_expires_at: Option<DateTime<Utc>>,
+    pub status: String,
+    pub tool_count: i32,
+    pub last_error: Option<String>,
+    pub discovered_server_info: Option<serde_json::Value>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+/// Persisted MCP tool schema from the database.
+#[derive(Debug, Clone, sqlx::FromRow, Serialize, Deserialize)]
+pub struct McpServerToolRow {
+    pub id: Uuid,
+    pub server_id: Uuid,
+    pub name: String,
+    pub description: Option<String>,
+    pub input_schema: serde_json::Value,
+    pub output_schema: Option<serde_json::Value>,
+}
+
+/// Input for creating/updating an MCP server.
+pub struct NewMcpServer {
+    pub id: Uuid,
+    pub project_id: Uuid,
+    pub name: String,
+    pub endpoint: String,
+    pub auth_type: String,
+    pub api_key_encrypted: Option<String>,
+    pub oauth_client_id: Option<String>,
+    pub oauth_client_secret_enc: Option<String>,
+    pub oauth_token_endpoint: Option<String>,
+    pub oauth_scopes: Option<Vec<String>>,
+    pub oauth_access_token_enc: Option<String>,
+    pub oauth_refresh_token_enc: Option<String>,
+    pub oauth_token_expires_at: Option<DateTime<Utc>>,
+    pub status: String,
+    pub tool_count: i32,
+    pub discovered_server_info: Option<serde_json::Value>,
 }

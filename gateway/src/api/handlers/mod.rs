@@ -16,6 +16,7 @@ mod settings;
 mod spend_caps;
 mod teams;
 mod tokens;
+mod users;
 mod webhooks;
 
 // ── Re-exports: DTOs ────────────────────────────────────────
@@ -31,8 +32,8 @@ pub use self::projects::{
 
 // ── Re-exports: Tokens ──────────────────────────────────────
 pub use self::tokens::{
-    create_token, get_circuit_breaker, get_token_usage, list_tokens, revoke_token,
-    update_circuit_breaker,
+    bulk_create_tokens, bulk_revoke_tokens, create_token, get_circuit_breaker, get_token_usage,
+    list_tokens, revoke_token, update_circuit_breaker,
 };
 
 // ── Re-exports: Approvals ───────────────────────────────────
@@ -68,9 +69,17 @@ pub use self::auth::{create_api_key, list_api_keys, revoke_api_key, whoami};
 
 // ── Re-exports: Analytics ───────────────────────────────────
 pub use self::analytics::{
-    get_analytics_experiments, get_analytics_summary, get_analytics_timeseries, get_org_usage,
-    get_spend_breakdown, get_token_analytics, get_token_latency, get_token_status,
-    get_token_volume, get_upstream_health,
+    get_analytics_experiments, get_analytics_summary, get_analytics_timeseries,
+    get_budget_burn_rate, get_budget_health, get_cache_hit_rate_timeseries, get_cache_latency_comparison,
+    get_cache_summary, get_cost_efficiency, get_cost_latency_scatter, get_data_residency,
+    get_error_breakdown, get_error_logs, get_error_summary, get_error_timeseries,
+    get_guardrail_triggers, get_hitl_latency, get_hitl_rejection_reasons, get_hitl_summary,
+    get_hitl_volume, get_latency_timeseries, get_model_cache_efficiency, get_model_error_rates,
+    get_model_latency, get_model_stats, get_model_usage_timeseries, get_org_usage, get_pii_breakdown,
+    get_policy_actions, get_requests_per_user, get_security_summary, get_shadow_policies,
+    get_spend_breakdown, get_spend_timeseries, get_token_alerts, get_token_analytics, get_token_latency,
+    get_token_spend, get_token_status, get_token_volume, get_top_cached_queries, get_traffic_timeseries,
+    get_upstream_health, get_user_engagement, get_user_growth, get_user_spend,
 };
 
 // ── Re-exports: Spend Caps ──────────────────────────────────
@@ -99,3 +108,6 @@ pub use self::teams::{
     add_team_member, create_team, delete_team, get_team_spend, list_team_members, list_teams,
     remove_team_member, update_team,
 };
+
+// ── Re-exports: Users (Supabase Auth) ───────────────────────
+pub use self::users::{get_current_user, get_user, list_users, sync_user, update_last_project, update_user_role};
