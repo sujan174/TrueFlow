@@ -1,0 +1,83 @@
+<h2>Conditions Tab: Nested Logic Builder</h2>
+<p class="subtitle">Visual builder for AND/OR/NOT condition trees with 13 operators</p>
+
+<div class="mockup">
+  <div class="mockup-header">Conditions Builder</div>
+  <div class="mockup-body" style="padding: 1rem;">
+
+    <!-- Condition Group -->
+    <div style="border: 2px solid #3b82f6; border-radius: 0.5rem; padding: 1rem; background: #eff6ff;">
+      <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem;">
+        <select class="mock-input" style="width: auto; font-weight: 600; background: #dbeafe;">
+          <option>AND (All must match)</option>
+          <option>OR (Any must match)</option>
+        </select>
+        <span style="color: #6b7280; font-size: 0.875rem;">- Match all conditions below</span>
+      </div>
+
+      <!-- Condition Row 1 -->
+      <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; padding: 0.5rem; background: white; border-radius: 0.375rem;">
+        <select class="mock-input" style="width: 180px;"><option>request.path</option></select>
+        <select class="mock-input" style="width: 120px;"><option>equals</option></select>
+        <input class="mock-input" style="flex: 1;" value="/v1/chat/completions">
+        <button class="mock-button" style="padding: 0.25rem 0.5rem; color: #ef4444;">✕</button>
+      </div>
+
+      <!-- Nested OR Group -->
+      <div style="border: 2px solid #f59e0b; border-radius: 0.5rem; padding: 0.75rem; margin-left: 1rem; background: #fffbeb;">
+        <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+          <select class="mock-input" style="width: auto; font-weight: 600; background: #fef3c7;">
+            <option>AND</option>
+            <option selected>OR (Any must match)</option>
+          </select>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; padding: 0.5rem; background: white; border-radius: 0.375rem;">
+          <select class="mock-input" style="width: 180px;"><option>token.name</option></select>
+          <select class="mock-input" style="width: 120px;"><option>contains</option></select>
+          <input class="mock-input" style="flex: 1;" value="prod">
+          <button class="mock-button" style="padding: 0.25rem 0.5rem; color: #ef4444;">✕</button>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem; background: white; border-radius: 0.375rem;">
+          <select class="mock-input" style="width: 180px;"><option>context.ip</option></select>
+          <select class="mock-input" style="width: 120px;"><option>in</option></select>
+          <input class="mock-input" style="flex: 1;" value="10.0.0.0/8, 192.168.0.0/16">
+          <button class="mock-button" style="padding: 0.25rem 0.5rem; color: #ef4444;">✕</button>
+        </div>
+      </div>
+
+      <!-- Add Condition Buttons -->
+      <div style="display: flex; gap: 0.5rem; margin-top: 0.75rem;">
+        <button class="mock-button" style="font-size: 0.875rem;">+ Add Condition</button>
+        <button class="mock-button" style="font-size: 0.875rem;">+ Add Group (AND/OR)</button>
+      </div>
+    </div>
+
+    <!-- Available Fields Reference -->
+    <div style="margin-top: 1rem; padding: 0.75rem; background: #f9fafb; border-radius: 0.5rem;">
+      <h4 style="margin: 0 0 0.5rem 0; font-size: 0.875rem; color: #6b7280;">Available Fields <span style="font-weight: normal;">(click to add)</span></h4>
+      <div style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
+        <span style="padding: 0.25rem 0.5rem; background: #e5e7eb; border-radius: 0.25rem; font-size: 0.75rem; cursor: pointer;">request.method</span>
+        <span style="padding: 0.25rem 0.5rem; background: #e5e7eb; border-radius: 0.25rem; font-size: 0.75rem; cursor: pointer;">request.path</span>
+        <span style="padding: 0.25rem 0.5rem; background: #e5e7eb; border-radius: 0.25rem; font-size: 0.75rem; cursor: pointer;">token.id</span>
+        <span style="padding: 0.25rem 0.5rem; background: #e5e7eb; border-radius: 0.25rem; font-size: 0.75rem; cursor: pointer;">context.ip</span>
+        <span style="padding: 0.25rem 0.5rem; background: #e5e7eb; border-radius: 0.25rem; font-size: 0.75rem; cursor: pointer;">usage.spend_today</span>
+        <span style="padding: 0.25rem 0.5rem; background: #dbeafe; border-radius: 0.25rem; font-size: 0.75rem;">+20 more</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top: 1rem;">
+  <h3>Operators (13 total)</h3>
+  <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; font-size: 0.875rem;">
+    <div><code>equals</code> / <code>not equals</code></div>
+    <div><code>contains</code> / <code>starts with</code> / <code>ends with</code></div>
+    <div><code>greater than</code> / <code>less than</code></div>
+    <div><code>in</code> (array membership)</div>
+    <div><code>glob</code> (pattern matching)</div>
+    <div><code>regex</code> (advanced)</div>
+    <div><code>exists</code> (field present)</div>
+  </div>
+</div>

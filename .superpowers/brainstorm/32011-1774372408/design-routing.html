@@ -1,0 +1,109 @@
+<h2>Routing Tab: Load Balancing & Model Selection</h2>
+<p class="subtitle">5 routing strategies + circuit breaker + model fallbacks</p>
+
+<div class="mockup">
+  <div class="mockup-header">Routing Configuration</div>
+  <div class="mockup-body" style="padding: 1rem;">
+
+    <!-- Strategy Selection -->
+    <div style="margin-bottom: 1.5rem;">
+      <label class="label">Routing Strategy</label>
+      <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; margin-top: 0.5rem;">
+        <div style="padding: 0.75rem; background: #eff6ff; border: 2px solid #3b82f6; border-radius: 0.5rem; text-align: center; cursor: pointer;">
+          <strong>💰 Lowest Cost</strong>
+          <p style="margin: 0.25rem 0 0 0; font-size: 0.7rem; color: #6b7280;">Pick cheapest model</p>
+        </div>
+        <div style="padding: 0.75rem; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 0.5rem; text-align: center; cursor: pointer;">
+          <strong>⚡ Lowest Latency</strong>
+          <p style="margin: 0.25rem 0 0 0; font-size: 0.7rem; color: #6b7280;">Pick fastest response</p>
+        </div>
+        <div style="padding: 0.75rem; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 0.5rem; text-align: center; cursor: pointer;">
+          <strong>🔄 Round Robin</strong>
+          <p style="margin: 0.25rem 0 0 0; font-size: 0.7rem; color: #6b7280;">Rotate evenly</p>
+        </div>
+        <div style="padding: 0.75rem; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 0.5rem; text-align: center; cursor: pointer;">
+          <strong>📊 Least Busy</strong>
+          <p style="margin: 0.25rem 0 0 0; font-size: 0.7rem; color: #6b7280;">Fewest in-flight</p>
+        </div>
+        <div style="padding: 0.75rem; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 0.5rem; text-align: center; cursor: pointer;">
+          <strong>🎲 Weighted Random</strong>
+          <p style="margin: 0.25rem 0 0 0; font-size: 0.7rem; color: #6b7280;">Custom weights</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Model Pool -->
+    <div style="margin-bottom: 1.5rem;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+        <label class="label" style="margin: 0;">Model Pool</label>
+        <button class="mock-button" style="font-size: 0.75rem;">+ Add Model</button>
+      </div>
+      <div style="border: 1px solid #e5e7eb; border-radius: 0.5rem; overflow: hidden;">
+        <table style="width: 100%; border-collapse: collapse; font-size: 0.875rem;">
+          <thead style="background: #f9fafb;">
+            <tr>
+              <th style="padding: 0.5rem; text-align: left; border-bottom: 1px solid #e5e7eb;">Model</th>
+              <th style="padding: 0.5rem; text-align: left; border-bottom: 1px solid #e5e7eb;">Upstream</th>
+              <th style="padding: 0.5rem; text-align: center; border-bottom: 1px solid #e5e7eb;">Weight</th>
+              <th style="padding: 0.5rem; text-align: center; border-bottom: 1px solid #e5e7eb;"></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style="padding: 0.5rem;">gpt-4o</td>
+              <td style="padding: 0.5rem; color: #6b7280;">OpenAI</td>
+              <td style="padding: 0.5rem; text-align: center;"><input class="mock-input" style="width: 60px; text-align: center;" value="70"></td>
+              <td style="padding: 0.5rem; text-align: center;"><button style="color: #ef4444;">✕</button></td>
+            </tr>
+            <tr>
+              <td style="padding: 0.5rem;">claude-sonnet-4-20250514</td>
+              <td style="padding: 0.5rem; color: #6b7280;">Anthropic</td>
+              <td style="padding: 0.5rem; text-align: center;"><input class="mock-input" style="width: 60px; text-align: center;" value="30"></td>
+              <td style="padding: 0.5rem; text-align: center;"><button style="color: #ef4444;">✕</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Circuit Breaker -->
+    <div style="padding: 1rem; background: #fefce8; border-radius: 0.5rem; border: 1px solid #fef08a;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+        <h4 style="margin: 0;">⚡ Circuit Breaker</h4>
+        <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem;">
+          <input type="checkbox" checked> Enabled
+        </label>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; font-size: 0.875rem;">
+        <div>
+          <label class="label">Failure Threshold</label>
+          <input class="mock-input" style="width: 100%;" value="3">
+        </div>
+        <div>
+          <label class="label">Recovery (secs)</label>
+          <input class="mock-input" style="width: 100%;" value="60">
+        </div>
+        <div>
+          <label class="label">Failure Rate %</label>
+          <input class="mock-input" style="width: 100%;" value="30">
+        </div>
+      </div>
+    </div>
+
+    <!-- Fallback -->
+    <div style="margin-top: 1rem;">
+      <label class="label">Fallback Model (when all fail)</label>
+      <select class="mock-input" style="width: 100%;">
+        <option>-- Select fallback --</option>
+        <option>gpt-3.5-turbo (OpenAI)</option>
+        <option>claude-haiku-3.5 (Anthropic)</option>
+      </select>
+    </div>
+
+  </div>
+</div>
+
+<div class="section" style="margin-top: 1rem;">
+  <h3>5 Strategies</h3>
+  <p style="font-size: 0.875rem; color: #6b7280;">LowestCost, LowestLatency, RoundRobin, LeastBusy, WeightedRandom</p>
+</div>

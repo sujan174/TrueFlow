@@ -1,0 +1,45 @@
+<h2>Policy Creator: Design Approaches</h2>
+<p class="subtitle">Three different architectures for the visual policy builder</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Single-Page Tabbed Builder</h3>
+      <p>Tabs for Guardrails, Routing, PII sections. Condition builder at top. Actions configured per-tab. Compact, all-in-one view.</p>
+      <div class="pros-cons">
+        <div class="pros"><h4>Pros</h4><ul><li>Everything visible at once</li><li>Fast navigation between sections</li><li>Simpler implementation</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>Can feel overwhelming with many actions</li><li>Less guided experience</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Wizard-Based Builder</h3>
+      <p>Step-by-step flow: Basic Info → Select Category → Build Conditions → Configure Actions → Review. Guided experience.</p>
+      <div class="pros-cons">
+        <div class="pros"><h4>Pros</h4><ul><li>Great for non-technical users</li><li>Guided, less overwhelming</li><li>Clear progress indication</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>Slower for power users</li><li>More clicks to complete</li><li>Harder to edit existing policies</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Hybrid Builder with Mode Toggle (Recommended)</h3>
+      <p>Visual mode by default with tabbed sections. Toggle to JSON mode for developers. Best of both worlds.</p>
+      <div class="pros-cons">
+        <div class="pros"><h4>Pros</h4><ul><li>Serves both user types</li><li>Visual for non-technical, JSON for developers</li><li>Flexible editing patterns</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>More complex implementation</li><li>Need to keep both modes in sync</li></ul></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top: 2rem;">
+  <h3>Recommendation: Hybrid Builder (Approach C)</h3>
+  <p>Since we need to serve both non-technical admins and developers, the hybrid approach with a mode toggle is ideal. The visual builder provides guided, dropdown-based editing for conditions and actions, while the JSON toggle lets developers work efficiently with raw policy definitions.</p>
+</div>

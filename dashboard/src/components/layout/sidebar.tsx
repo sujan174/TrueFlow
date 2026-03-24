@@ -18,7 +18,6 @@ import {
   FolderOpen,
   Wrench,
 } from "lucide-react"
-import { ProjectSwitcher } from "./project-switcher"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 
@@ -189,13 +188,6 @@ export function Sidebar() {
             </span>
           )}
         </div>
-
-        {/* Project Switcher */}
-        {!collapsed && (
-          <div className="px-3 py-2">
-            <ProjectSwitcher />
-          </div>
-        )}
 
         {/* Main Navigation */}
         <nav className="flex-1 p-[14px] space-y-1 overflow-y-auto scrollbar-thin">

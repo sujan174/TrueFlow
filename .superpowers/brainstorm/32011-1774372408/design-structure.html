@@ -1,0 +1,59 @@
+<h2>Policy Creator Design: Overall Structure</h2>
+<p class="subtitle">Hybrid builder with visual mode + JSON toggle</p>
+
+<div class="mockup">
+  <div class="mockup-header">Policy Editor Layout</div>
+  <div class="mockup-body" style="padding: 1rem;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+      <div style="display: flex; gap: 0.5rem;">
+        <button class="mock-button" style="background: #3b82f6; color: white;">Visual</button>
+        <button class="mock-button">JSON</button>
+      </div>
+      <div style="display: flex; gap: 0.5rem;">
+        <button class="mock-button">Preview</button>
+        <button class="mock-button" style="background: #22c55e; color: white;">Save</button>
+      </div>
+    </div>
+
+    <div style="border: 1px solid #e5e7eb; border-radius: 0.5rem; padding: 1rem; margin-bottom: 1rem;">
+      <h4 style="margin: 0 0 0.5rem 0;">Basic Information</h4>
+      <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem;">
+        <div>
+          <label class="label">Name</label>
+          <input class="mock-input" style="width: 100%;" value="Rate Limit Policy">
+        </div>
+        <div>
+          <label class="label">Mode</label>
+          <select class="mock-input" style="width: 100%;"><option>Enforce</option><option>Shadow</option></select>
+        </div>
+        <div>
+          <label class="label">Phase</label>
+          <select class="mock-input" style="width: 100%;"><option>Pre-request</option><option>Post-response</option></select>
+        </div>
+      </div>
+    </div>
+
+    <div style="border-bottom: 2px solid #3b82f6; margin-bottom: -1px; display: flex;">
+      <div style="padding: 0.75rem 1rem; background: white; border: 1px solid #e5e7eb; border-bottom: none; border-radius: 0.5rem 0.5rem 0 0; font-weight: 600;">Conditions</div>
+      <div style="padding: 0.75rem 1rem; color: #6b7280;">Guardrails</div>
+      <div style="padding: 0.75rem 1rem; color: #6b7280;">Routing</div>
+      <div style="padding: 0.75rem 1rem; color: #6b7280;">PII</div>
+      <div style="padding: 0.75rem 1rem; color: #6b7280;">Actions</div>
+    </div>
+    <div style="border: 1px solid #e5e7eb; border-top: none; padding: 1rem; min-height: 300px; background: #fafafa;">
+      <p style="color: #6b7280; text-align: center;">[Condition Builder Area]</p>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top: 1.5rem;">
+  <h3>Page Layout</h3>
+  <ul>
+    <li><strong>Mode Toggle</strong> - Visual/JSON switch in header</li>
+    <li><strong>Basic Info Section</strong> - Name, Mode (Enforce/Shadow), Phase (Pre/Post)</li>
+    <li><strong>Tab Navigation</strong> - Conditions, Guardrails, Routing, PII, Actions</li>
+    <li><strong>Preview Button</strong> - Test policy against sample requests</li>
+  </ul>
+</div>
+
+<p style="margin-top: 1rem;">Does this overall structure look right? I'll show each tab's detailed design next.</p>

@@ -16,9 +16,7 @@ import { ModelsTabContent } from "@/components/analytics/models"
 import { SecurityTabContent } from "@/components/analytics/security"
 import { HitlTabContent } from "@/components/analytics/hitl"
 import { ErrorsTabContent } from "@/components/analytics/errors"
-import { RefreshCw, Download, Radio } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { StatusBadge } from "@/components/ui/status-badge"
+import { RefreshCw } from "lucide-react"
 
 export default function AnalyticsPage() {
   const searchParams = useSearchParams()
@@ -44,16 +42,6 @@ export default function AnalyticsPage() {
               <RefreshCw className="h-3 w-3" />
               <span>Last refreshed 30s ago</span>
             </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <StatusBadge variant="success" pulse className="gap-1.5">
-              <Radio className="h-3 w-3" />
-              LIVE
-            </StatusBadge>
-            <Button variant="outline" size="sm" className="gap-2">
-              <Download className="h-4 w-4" />
-              Export
-            </Button>
           </div>
         </div>
 

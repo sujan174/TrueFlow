@@ -1,0 +1,104 @@
+<h2>PII Tab: Redaction & Detection</h2>
+<p class="subtitle">Regex patterns + NLP (Presidio) for comprehensive PII handling</p>
+
+<div class="mockup">
+  <div class="mockup-header">PII Redaction Configuration</div>
+  <div class="mockup-body" style="padding: 1rem;">
+
+    <!-- Direction -->
+    <div style="margin-bottom: 1.5rem;">
+      <label class="label">Apply To</label>
+      <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
+        <button class="mock-button" style="background: #3b82f6; color: white;">Request Only</button>
+        <button class="mock-button">Response Only</button>
+        <button class="mock-button">Both Directions</button>
+      </div>
+    </div>
+
+    <!-- Detection Method -->
+    <div style="margin-bottom: 1.5rem;">
+      <label class="label">Detection Method</label>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 0.5rem;">
+        <!-- Regex -->
+        <div style="padding: 1rem; background: #eff6ff; border: 2px solid #3b82f6; border-radius: 0.5rem;">
+          <h4 style="margin: 0 0 0.5rem 0;">🔍 Pattern Matching</h4>
+          <p style="margin: 0 0 0.75rem 0; font-size: 0.75rem; color: #6b7280;">Fast regex-based detection</p>
+          <div style="display: flex; flex-direction: column; gap: 0.25rem;">
+            <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem;">
+              <input type="checkbox" checked> SSN (xxx-xx-xxxx)
+            </label>
+            <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem;">
+              <input type="checkbox" checked> Credit Card
+            </label>
+            <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem;">
+              <input type="checkbox" checked> Email
+            </label>
+            <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem;">
+              <input type="checkbox" checked> Phone Number
+            </label>
+            <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem;">
+              <input type="checkbox"> API Keys in URLs
+            </label>
+          </div>
+        </div>
+
+        <!-- NLP -->
+        <div style="padding: 1rem; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 0.5rem;">
+          <h4 style="margin: 0 0 0.5rem 0;">🧠 NLP Detection (Presidio)</h4>
+          <p style="margin: 0 0 0.75rem 0; font-size: 0.75rem; color: #6b7280;">AI-powered for unstructured text</p>
+          <div style="display: flex; flex-direction: column; gap: 0.25rem;">
+            <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem;">
+              <input type="checkbox" checked> Person Names
+            </label>
+            <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem;">
+              <input type="checkbox"> Locations
+            </label>
+            <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem;">
+              <input type="checkbox"> Medical Terms
+            </label>
+            <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem;">
+              <input type="checkbox"> Organizations
+            </label>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- On Match Action -->
+    <div style="margin-bottom: 1.5rem;">
+      <label class="label">When PII Detected</label>
+      <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
+        <button class="mock-button" style="background: #3b82f6; color: white;">Redact [REDACTED_SSN]</button>
+        <button class="mock-button">Block Request</button>
+        <button class="mock-button">Tokenize (reversible)</button>
+      </div>
+    </div>
+
+    <!-- Presidio Config -->
+    <div style="padding: 1rem; background: #f9fafb; border-radius: 0.5rem; border: 1px solid #e5e7eb;">
+      <h4 style="margin: 0 0 0.75rem 0;">⚙️ Presidio Settings</h4>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+        <div>
+          <label class="label">Endpoint</label>
+          <input class="mock-input" style="width: 100%;" value="http://presidio:5002">
+        </div>
+        <div>
+          <label class="label">Score Threshold</label>
+          <input class="mock-input" style="width: 100%;" value="0.7">
+        </div>
+        <div>
+          <label class="label">Language</label>
+          <select class="mock-input" style="width: 100%;"><option>en</option><option>es</option><option>de</option></select>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div class="section" style="margin-top: 1rem;">
+  <h3>Regex Patterns</h3>
+  <p style="font-size: 0.875rem; color: #6b7280;">SSN, Credit Card, Email, Phone, API Keys</p>
+  <h3>NLP Entities (Presidio)</h3>
+  <p style="font-size: 0.875rem; color: #6b7280;">PERSON, LOCATION, PHONE_NUMBER, ORGANIZATION, MEDICAL</p>
+</div>

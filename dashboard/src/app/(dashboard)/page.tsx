@@ -6,8 +6,8 @@ import { VolumeChart } from "@/components/dashboard/volume-chart"
 import { LatencyChart } from "@/components/dashboard/latency-chart"
 import { TopTokensList } from "@/components/dashboard/top-tokens-list"
 import { SpendCapsWidget } from "@/components/dashboard/spend-caps-widget"
-import { StatusBadge } from "@/components/ui/status-badge"
 import { Button } from "@/components/ui/button"
+import Link from "next/link"
 import {
   getAnalyticsSummary,
   getAnalyticsTimeseries,
@@ -25,7 +25,7 @@ import type {
   SpendCap,
   ProviderLatencyStat,
 } from "@/lib/types/analytics"
-import { Plus, RefreshCw, Activity, Timer, DollarSign, AlertTriangle, Key } from "lucide-react"
+import { RefreshCw, Activity, Timer, DollarSign, AlertTriangle, Key } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 // Animated counter hook
@@ -138,9 +138,6 @@ export default function DashboardPage() {
             </h1>
           </div>
           <div className="flex items-center gap-3">
-            <StatusBadge variant="success" pulse>
-              OPERATIONAL
-            </StatusBadge>
             <Button
               variant="outline"
               size="sm"
@@ -150,10 +147,6 @@ export default function DashboardPage() {
             >
               <RefreshCw className={cn("h-4 w-4", refreshing && "animate-spin")} />
               Refresh
-            </Button>
-            <Button size="sm" className="gap-2">
-              <Plus className="h-4 w-4" />
-              Create Token
             </Button>
           </div>
         </div>
