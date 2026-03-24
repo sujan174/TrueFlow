@@ -327,6 +327,32 @@ Returns active presets and source (sdk/dashboard) for drift detection.
 
 ---
 
+### Per-Request Guardrail Headers
+
+Control guardrails on a per-request basis using HTTP headers:
+
+#### X-TrueFlow-Guardrails-Enable
+
+Add specific guardrails to the request:
+
+```http
+X-TrueFlow-Guardrails-Enable: pii_redaction,jailbreak_protection
+```
+
+Supported presets: `pii_redaction`, `pii_block`, `prompt_injection`, `code_injection`, `hipaa`, `pci`, `pii_enterprise`
+
+#### X-TrueFlow-Guardrails-Disable
+
+Remove specific guardrails from the request:
+
+```http
+X-TrueFlow-Guardrails-Disable: pii_redaction
+```
+
+**Note:** These headers require the token's `guardrail_header_mode` to be set to `"append"` or `"override"`. Default is `"disabled"` for security.
+
+---
+
 ### Prompt Management
 
 CRUD for reusable prompt templates with immutable versioning, label-based deployment (`production` / `staging`), folder organisation, and server-side `{{variable}}` rendering.

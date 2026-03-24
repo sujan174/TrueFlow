@@ -49,3 +49,38 @@ export type GuardrailPreset =
     | typeof PRESET_PCI
     | typeof PRESET_TOPIC_FENCE
     | typeof PRESET_LENGTH_LIMIT;
+
+/** Guardrail preset category. */
+export type GuardrailPresetCategory = "safety" | "privacy" | "compliance";
+
+/**
+ * Full information about a guardrail preset returned by the API.
+ *
+ * @example
+ * ```ts
+ * const presets: GuardrailPresetInfo[] = await admin.guardrails.listPresets();
+ * const safetyPresets = presets.filter(p => p.category === "safety");
+ * ```
+ */
+export interface GuardrailPresetInfo {
+    /** Preset identifier (e.g., "prompt_injection", "pii_redaction"). */
+    name: GuardrailPreset | string;
+
+    /** Human-readable description of what the preset does. */
+    description: string;
+
+    /** Category: "safety", "privacy", or "compliance". */
+    category: GuardrailPresetCategory;
+
+    /** PII or regex patterns included in this preset (for privacy presets). */
+    patterns?: string[];
+
+    /** Fields that must be supplied when enabling this preset (e.g., topic allowlist). */
+    required_fields?: string[];
+
+    /** Default configuration options for this preset. */
+    defaults?: Record<string, unknown>;
+
+    /** Whether this preset is available for per-request header overrides. */
+    supports_header_override?: boolean;
+}

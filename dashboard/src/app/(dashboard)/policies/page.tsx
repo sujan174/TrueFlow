@@ -12,6 +12,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { toast } from "sonner"
 import {
   listPolicies,
   deletePolicy,
@@ -108,13 +109,13 @@ export default function PoliciesPage() {
       await deletePolicy(id)
       setPolicies(policies.filter((p) => p.id !== id))
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed to delete policy")
+      toast.error(err instanceof Error ? err.message : "Failed to delete policy")
     }
   }
 
   const handleDuplicate = async (policy: PolicyRow) => {
     // TODO: Implement duplication - create new policy with same rules
-    alert(`Duplicating "${policy.name}" - coming soon!`)
+    toast.info(`Duplicating "${policy.name}" - coming soon!`)
   }
 
   return (

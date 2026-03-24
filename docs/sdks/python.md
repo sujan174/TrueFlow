@@ -346,6 +346,55 @@ with client.with_guardrails(["pii_redaction", "prompt_injection"]) as g:
 
 ---
 
+## Guardrail Decorators
+
+TrueFlow provides decorators for applying guardrails to specific functions:
+
+### @with_guardrails
+
+Apply guardrails to individual functions without modifying token configuration:
+
+```python
+from trueflow import with_guardrails
+
+@with_guardrails(["pii_redaction", "jailbreak_protection"])
+def process_user_input(prompt: str) -> str:
+    # Guardrails automatically applied via X-TrueFlow-Guardrails-Enable header
+    return client.chat.completions.create(...)
+
+# Works with async functions too
+@with_guardrails(["hipaa"])
+async def process_health_data(prompt: str) -> str:
+    return await async_client.chat.completions.create(...)
+
+# Disable specific guardrails for a function
+@with_guardrails(["pii_redaction"], mode="disable")
+def debug_endpoint(prompt: str) -> str:
+    # PII redaction disabled for this function
+    return client.chat.completions.create(...)
+```
+
+### GuardrailContext
+
+Use as a context manager for block-scoped guardrail control:
+
+```python
+from trueflow import GuardrailContext
+
+with GuardrailContext(client, ["pii_redaction", "hipaa"]):
+    # Guardrails active in this block
+    response = client.chat.completions.create(...)
+
+# Guardrails no longer active
+```
+
+**Parameters:**
+- `presets` - List of guardrail preset names
+- `mode` - `"enable"` (default) or `"disable"`
+- `client` - Optional TrueFlowClient instance
+
+---
+
 ## Circuit Breaker
 
 ```python

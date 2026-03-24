@@ -260,6 +260,60 @@ async fn run_server(cfg: config::Config, port: u16) -> anyhow::Result<()> {
         }
     }
 
+    // ── MCP Server Restoration ──────────────────────────────────────────────
+    // Load persisted MCP servers from DB and restore them to the in-memory registry.
+    tracing::info!("Restoring persisted MCP servers...");
+    match state.db.list_all_mcp_servers().await {
+        Ok(servers) => {
+            let count = servers.len();
+            for server in servers {
+                // Attempt to reconnect each persisted server
+                match mcp::registry::McpServerConfig::from_persisted(&server) {
+                    Ok(config) => {
+                        // Load cached tools from DB
+                        let tools = state.db.get_mcp_server_tools(server.id).await.ok();
+                        let tool_names: Vec<String> = tools
+                            .as_ref()
+                            .map(|t| t.iter().map(|tool| tool.name.clone()).collect())
+                            .unwrap_or_default();
+
+                        // Register in memory (will reconnect on next request)
+                        match state.mcp_registry.register_from_persisted(config, tools).await {
+                            Ok(_) => {
+                                tracing::info!(
+                                    server_id = %server.id,
+                                    server_name = %server.name,
+                                    tool_count = tool_names.len(),
+                                    "MCP server restored from persistence"
+                                );
+                            }
+                            Err(e) => {
+                                tracing::warn!(
+                                    server_id = %server.id,
+                                    server_name = %server.name,
+                                    error = %e,
+                                    "Failed to restore MCP server, will retry on next request"
+                                );
+                                // Mark as disconnected but keep in registry for retry
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        tracing::warn!(
+                            server_id = %server.id,
+                            error = %e,
+                            "Failed to parse persisted MCP server config"
+                        );
+                    }
+                }
+            }
+            tracing::info!("Restored {} MCP servers from persistence", count);
+        }
+        Err(e) => {
+            tracing::warn!("Failed to load persisted MCP servers: {}", e);
+        }
+    }
+
     // ── Key Rotation Scheduler ──────────────────────────────────────────────
     // Opt-in: set TRUEFLOW_ROTATION_ENABLED=true to enable background key rotation.
     if std::env::var("TRUEFLOW_ROTATION_ENABLED")

@@ -25,6 +25,7 @@ from .resources.guardrails import (
     PRESET_TOPIC_FENCE,
     PRESET_LENGTH_LIMIT,
 )
+from .decorators import with_guardrails, GuardrailContext
 from .types import (
     Token,
     TokenCreateResponse,
@@ -105,4 +106,7 @@ __all__ = [
     "PRESET_PCI",
     "PRESET_TOPIC_FENCE",
     "PRESET_LENGTH_LIMIT",
+    # Decorators
+    "with_guardrails",
+    "GuardrailContext",
 ]

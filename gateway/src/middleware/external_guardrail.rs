@@ -173,8 +173,9 @@ async fn check_azure(
         endpoint.trim_end_matches('/')
     );
 
+    let timeout = guardrail_timeout();
     let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(10))
+        .timeout(timeout)
         .build()
         .map_err(|e| format!("azure client build error: {e}"))?;
 
@@ -245,8 +246,9 @@ async fn check_aws_comprehend(
     threshold: f32,
     text: &str,
 ) -> Result<ExternalGuardrailResult, String> {
+    let timeout = guardrail_timeout();
     let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(10))
+        .timeout(timeout)
         .build()
         .map_err(|e| format!("aws client build error: {e}"))?;
 

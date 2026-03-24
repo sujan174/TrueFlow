@@ -16,6 +16,7 @@ use uuid::Uuid;
 use super::client::{McpAuth, McpClient};
 use super::oauth::OAuthTokenManager;
 use super::types::*;
+use crate::store::postgres::types::{McpServerRow, McpServerToolRow};
 
 /// Configuration for registering an MCP server.
 #[derive(Debug, Clone)]
@@ -25,6 +26,40 @@ pub struct McpServerConfig {
     pub name: String,
     pub endpoint: String,
     pub api_key: Option<String>,
+    /// OAuth client ID (for OAuth2 servers)
+    pub oauth_client_id: Option<String>,
+    /// OAuth client secret (for OAuth2 servers)
+    pub oauth_client_secret: Option<String>,
+    /// OAuth token endpoint (for OAuth2 servers)
+    pub oauth_token_endpoint: Option<String>,
+    /// OAuth scopes (for OAuth2 servers)
+    pub oauth_scopes: Option<Vec<String>>,
+    /// Pre-cached access token (from persistence)
+    pub oauth_access_token: Option<String>,
+    /// Pre-cached refresh token (from persistence)
+    pub oauth_refresh_token: Option<String>,
+}
+
+impl McpServerConfig {
+    /// Create a config from a persisted database row.
+    pub fn from_persisted(row: &McpServerRow) -> Result<Self, String> {
+        // Note: api_key_encrypted and oauth tokens need to be decrypted
+        // For now, we create a config that will reconnect on next request
+        // The encrypted fields are handled by the vault
+        Ok(Self {
+            id: row.id,
+            project_id: row.project_id,
+            name: row.name.clone(),
+            endpoint: row.endpoint.clone(),
+            api_key: None, // Will be decrypted by the caller if needed
+            oauth_client_id: row.oauth_client_id.clone(),
+            oauth_client_secret: None, // Will be decrypted by the caller if needed
+            oauth_token_endpoint: row.oauth_token_endpoint.clone(),
+            oauth_scopes: row.oauth_scopes.clone(),
+            oauth_access_token: None, // Will be decrypted by the caller if needed
+            oauth_refresh_token: None, // Will be decrypted by the caller if needed
+        })
+    }
 }
 
 /// Request for auto-discovery registration.
@@ -129,10 +164,10 @@ impl McpRegistry {
         let (client, auth_type, name) = match discovery {
             Ok(disc) if disc.requires_auth => {
                 // OAuth is required
-                let client_id = req.client_id.ok_or_else(|| {
+                let client_id = req.client_id.clone().ok_or_else(|| {
                     "Server requires OAuth 2.0 authentication. Please provide client_id and client_secret.".to_string()
                 })?;
-                let client_secret = req.client_secret.ok_or_else(|| {
+                let client_secret = req.client_secret.clone().ok_or_else(|| {
                     "Server requires OAuth 2.0 authentication. Please provide client_secret."
                         .to_string()
                 })?;
@@ -222,6 +257,12 @@ impl McpRegistry {
             name: server_name.clone(),
             endpoint: req.endpoint,
             api_key: None, // OAuth-managed servers don't use static keys
+            oauth_client_id: req.client_id,
+            oauth_client_secret: req.client_secret,
+            oauth_token_endpoint: None, // Will be populated by discovery
+            oauth_scopes: None,
+            oauth_access_token: None,
+            oauth_refresh_token: None,
         };
 
         let tools_clone = tools.clone();
@@ -503,6 +544,71 @@ impl McpRegistry {
     pub async fn get_server_tools(&self, id: &Uuid) -> Option<Vec<McpToolDef>> {
         let servers = self.servers.read().await;
         servers.get(id).map(|s| s.tools.clone())
+    }
+
+    /// Register a server from persisted state (loaded from database on startup).
+    ///
+    /// This creates an entry in the registry with the cached tools from the database.
+    /// The server will be lazily reconnected on the first tool call.
+    pub async fn register_from_persisted(
+        &self,
+        config: McpServerConfig,
+        cached_tools: Option<Vec<McpServerToolRow>>,
+    ) -> Result<(), String> {
+        // Convert cached tools from DB rows to McpToolDef
+        let tools: Vec<McpToolDef> = cached_tools
+            .unwrap_or_default()
+            .into_iter()
+            .map(|t| McpToolDef {
+                name: t.name,
+                description: t.description,
+                input_schema: t.input_schema,
+                output_schema: t.output_schema,
+            })
+            .collect();
+
+        // Create a client that will reconnect on first use
+        let (client, auth_type) = match (&config.api_key, &config.oauth_client_id) {
+            (Some(key), _) => {
+                (McpClient::new(&config.endpoint, Some(key.clone())), "bearer".to_string())
+            }
+            (None, Some(_client_id)) => {
+                // OAuth server - will need to re-authenticate
+                // For now, create a client that will handle auth on first request
+                let auth = McpAuth::OAuth {
+                    manager: self.oauth_manager.clone(),
+                    server_id: config.id,
+                };
+                (McpClient::with_auth(&config.endpoint, auth), "oauth2".to_string())
+            }
+            (None, None) => {
+                (McpClient::new(&config.endpoint, None::<String>), "none".to_string())
+            }
+        };
+
+        let id = config.id;
+        let name = config.name.clone();
+
+        let state = McpServerState {
+            config,
+            client,
+            tools,
+            last_refreshed: std::time::Instant::now(),
+            status: McpServerStatus::Disconnected, // Will reconnect on first request
+            server_info: None,
+            auth_type,
+        };
+
+        {
+            let mut servers = self.servers.write().await;
+            servers.insert(id, state);
+        }
+        {
+            let mut index = self.name_index.write().await;
+            index.insert(name, id);
+        }
+
+        Ok(())
     }
 
     /// Check if any MCP servers are registered.

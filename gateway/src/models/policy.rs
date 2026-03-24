@@ -725,7 +725,7 @@ fn default_fallback() -> String {
     "deny".to_string()
 }
 fn default_on_error() -> String {
-    "allow".to_string() // fail-open by default for backwards compatibility
+    "deny".to_string() // fail-closed by default for security
 }
 fn default_log_level() -> String {
     "warn".to_string()
@@ -1336,7 +1336,7 @@ mod tests {
                 assert_eq!(api_key_env, Some("AZURE_KEY".to_string()));
                 assert!((threshold - 4.0).abs() < 0.01);
                 assert_eq!(on_fail, "deny");
-                assert_eq!(on_error, "allow"); // default fail-open
+                assert_eq!(on_error, "deny"); // default fail-closed
             }
             _ => panic!("Expected ExternalGuardrail, got {:?}", action),
         }
@@ -1363,7 +1363,7 @@ mod tests {
                 assert_eq!(vendor, ExternalVendor::AwsComprehend);
                 assert!((threshold - 0.8).abs() < 0.01);
                 assert_eq!(on_fail, "deny"); // default fallback
-                assert_eq!(on_error, "allow"); // default fail-open
+                assert_eq!(on_error, "deny"); // default fail-closed
             }
             _ => panic!("Expected ExternalGuardrail"),
         }
@@ -1398,7 +1398,7 @@ mod tests {
                     "default threshold should be 0.5"
                 );
                 assert_eq!(on_fail, "log");
-                assert_eq!(on_error, "allow"); // default fail-open
+                assert_eq!(on_error, "deny"); // default fail-closed
             }
             _ => panic!("Expected ExternalGuardrail"),
         }
@@ -1426,7 +1426,7 @@ mod tests {
                     "default threshold should be 0.5"
                 );
                 assert_eq!(on_fail, "deny", "default on_fail should be 'deny'");
-                assert_eq!(on_error, "allow", "default on_error should be 'allow'");
+                assert_eq!(on_error, "deny", "default on_error should be 'deny'");
                 assert!(api_key_env.is_none(), "api_key_env should default to None");
             }
             _ => panic!("Expected ExternalGuardrail"),

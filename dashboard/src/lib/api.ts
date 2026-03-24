@@ -967,3 +967,165 @@ export async function getGuardrailStatus(tokenId: string): Promise<GuardrailsSta
 export async function listGuardrailPresets(): Promise<ListPresetsResponse> {
   return gatewayFetch<ListPresetsResponse>("/guardrails/presets")
 }
+
+// ── MCP Server Management API ─────────────────────────────────────────────────
+
+import type {
+  McpServerInfo,
+  McpToolDef,
+  DiscoveryResult,
+  RegisterMcpServerRequest,
+  RegisterMcpServerResponse,
+  TestMcpServerResponse,
+  ReauthResponse,
+} from "./types/mcp"
+
+export type {
+  McpServerInfo,
+  McpToolDef,
+  DiscoveryResult,
+  RegisterMcpServerRequest,
+  RegisterMcpServerResponse,
+  TestMcpServerResponse,
+  ReauthResponse,
+}
+
+/**
+ * List all registered MCP servers.
+ */
+export async function listMcpServers(): Promise<McpServerInfo[]> {
+  return gatewayFetch<McpServerInfo[]>("/mcp/servers", {
+    next: { revalidate: 30 },
+  })
+}
+
+/**
+ * Get a single MCP server by ID.
+ */
+export async function getMcpServer(id: string): Promise<McpServerInfo> {
+  return gatewayFetch<McpServerInfo>(`/mcp/servers/${id}`)
+}
+
+/**
+ * Register a new MCP server.
+ */
+export async function registerMcpServer(data: RegisterMcpServerRequest): Promise<RegisterMcpServerResponse> {
+  const response = await fetch("/api/gateway/mcp/servers", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  })
+
+  if (!response.ok) {
+    const error = await response.text()
+    throw new Error(`Failed to register MCP server: ${response.status} ${error}`)
+  }
+
+  return response.json()
+}
+
+/**
+ * Delete an MCP server.
+ */
+export async function deleteMcpServer(id: string): Promise<void> {
+  const response = await fetch(`/api/gateway/mcp/servers/${id}`, {
+    method: "DELETE",
+  })
+
+  if (!response.ok && response.status !== 204) {
+    throw new Error(`Failed to delete MCP server: ${response.status}`)
+  }
+}
+
+/**
+ * Get tools for a specific MCP server.
+ */
+export async function getMcpServerTools(id: string): Promise<McpToolDef[]> {
+  return gatewayFetch<McpToolDef[]>(`/mcp/servers/${id}/tools`, {
+    next: { revalidate: 60 },
+  })
+}
+
+/**
+ * Refresh tool cache for an MCP server.
+ */
+export async function refreshMcpServer(id: string): Promise<McpToolDef[]> {
+  const response = await fetch(`/api/gateway/mcp/servers/${id}/refresh`, {
+    method: "POST",
+  })
+
+  if (!response.ok) {
+    throw new Error(`Failed to refresh MCP server: ${response.status}`)
+  }
+
+  return response.json()
+}
+
+/**
+ * Discover MCP server (dry-run without registration).
+ */
+export async function discoverMcpServer(endpoint: string): Promise<DiscoveryResult> {
+  const response = await fetch("/api/gateway/mcp/servers/discover", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ endpoint }),
+  })
+
+  if (!response.ok) {
+    const error = await response.text()
+    throw new Error(`Discovery failed: ${response.status} ${error}`)
+  }
+
+  return response.json()
+}
+
+/**
+ * Test MCP server connection.
+ */
+export async function testMcpServer(data: RegisterMcpServerRequest): Promise<TestMcpServerResponse> {
+  const response = await fetch("/api/gateway/mcp/servers/test", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  })
+
+  if (!response.ok) {
+    throw new Error(`Test failed: ${response.status}`)
+  }
+
+  return response.json()
+}
+
+/**
+ * Re-authenticate OAuth MCP server.
+ */
+export async function reauthMcpServer(id: string): Promise<ReauthResponse> {
+  const response = await fetch(`/api/gateway/mcp/servers/${id}/reauth`, {
+    method: "POST",
+  })
+
+  if (!response.ok) {
+    throw new Error(`Re-authentication failed: ${response.status}`)
+  }
+
+  return response.json()
+}
+
+/**
+ * Update token MCP tool access configuration.
+ */
+export async function updateTokenMcpTools(
+  tokenId: string,
+  data: { mcp_allowed_tools?: string[] | null; mcp_blocked_tools?: string[] | null }
+): Promise<void> {
+  const response = await fetch(`/api/gateway/tokens/${tokenId}/mcp-tools`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  })
+
+  if (!response.ok) {
+    const error = await response.text()
+    throw new Error(`Failed to update MCP tools: ${response.status} ${error}`)
+  }
+}

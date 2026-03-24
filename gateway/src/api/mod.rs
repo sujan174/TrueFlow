@@ -492,7 +492,7 @@ pub fn api_router(state: Arc<AppState>) -> Router<Arc<AppState>> {
             "/mcp/servers/discover",
             post(mcp_handlers::discover_mcp_server),
         )
-        .route("/mcp/servers/:id", delete(mcp_handlers::delete_mcp_server))
+        .route("/mcp/servers/:id", get(mcp_handlers::get_mcp_server).delete(mcp_handlers::delete_mcp_server))
         .route(
             "/mcp/servers/:id/refresh",
             post(mcp_handlers::refresh_mcp_server),

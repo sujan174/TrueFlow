@@ -3,6 +3,7 @@ mod api_keys;
 mod approvals;
 mod audit;
 mod credentials;
+pub mod mcp;
 mod notifications;
 mod oidc;
 mod policies;

@@ -219,6 +219,22 @@ for chunk in llm.stream_complete("Tell me about AI gateways"):
 
 ---
 
+## Per-Request Guardrails
+
+Use the `@with_guardrails` decorator to apply guardrails to specific agent functions:
+
+```python
+from trueflow import with_guardrails
+from langchain_openai import ChatOpenAI
+
+@with_guardrails(["pii_redaction", "hipaa"])
+def healthcare_agent(prompt: str) -> str:
+    llm = ChatOpenAI(base_url="http://localhost:8443/v1", api_key="tf_v1_...")
+    return llm.invoke(prompt).content
+```
+
+---
+
 ## Advanced: Without the Integration Module
 
 If you prefer not to use the integration helpers, you can configure any framework

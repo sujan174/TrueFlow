@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { PolicyForm } from "@/components/policies/policy-form"
 import { createPolicy, type CreatePolicyRequest, type UpdatePolicyRequest } from "@/lib/api"
 import { useProject } from "@/contexts/project-context"
+import { toast } from "sonner"
 
 export default function NewPolicyPage() {
   const router = useRouter()
@@ -29,7 +30,7 @@ export default function NewPolicyPage() {
       })
       router.push(`/policies/${response.id}`)
     } catch (error) {
-      alert(error instanceof Error ? error.message : "Failed to create policy")
+      toast.error(error instanceof Error ? error.message : "Failed to create policy")
     } finally {
       setIsSubmitting(false)
     }

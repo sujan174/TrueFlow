@@ -150,6 +150,24 @@ Back in the Dashboard:
 
 ---
 
+## Security Features
+
+### Guardrails
+
+Enable guardrails with the `@with_guardrails` decorator:
+
+```python
+from trueflow import with_guardrails
+
+@with_guardrails(["pii_redaction", "jailbreak_protection"])
+def my_agent(prompt: str) -> str:
+    return client.chat.completions.create(...)
+```
+
+See the [Python SDK docs](/sdks/python#guardrail-decorators) for more options.
+
+---
+
 ## Moving to Production
 
 Before deploying to production, set strong values for the secrets in `docker-compose.yml`:

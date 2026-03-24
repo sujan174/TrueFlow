@@ -59,6 +59,39 @@ impl GuardrailResult {
     }
 }
 
+// ── Regex Cache ─────────────────────────────────────────────────
+
+use std::cell::RefCell;
+use std::collections::HashMap;
+
+thread_local! {
+    /// Thread-local cache: pattern string → compiled Regex (None = invalid/too-complex).
+    /// Bounded at 256 entries to prevent unbounded memory growth from malicious policies.
+    /// Shared by topic denylist, allowlist, and custom patterns for performance.
+    static GUARDRAIL_REGEX_CACHE: RefCell<HashMap<String, Option<regex::Regex>>> =
+        RefCell::new(HashMap::with_capacity(64));
+}
+
+/// Compile a regex pattern with size limit, caching the result per-thread.
+/// Returns None if the pattern is invalid or too complex (ReDoS protection).
+fn compile_cached_guardrail(pat: &str) -> Option<regex::Regex> {
+    GUARDRAIL_REGEX_CACHE.with(|cache| {
+        let mut cache = cache.borrow_mut();
+        if let Some(cached) = cache.get(pat) {
+            return cached.clone();
+        }
+        let compiled = regex::RegexBuilder::new(pat)
+            .size_limit(1_000_000)
+            .build()
+            .ok();
+        if cache.len() >= 256 {
+            cache.clear();
+        }
+        cache.insert(pat.to_string(), compiled.clone());
+        compiled
+    })
+}
+
 // ── Main Entry Point ──────────────────────────────────────────
 
 /// Check a request body against the `ContentFilter` action config.
@@ -265,19 +298,22 @@ pub fn check_content(body: &Value, action: &Action) -> GuardrailResult {
     // 11. Topic denylist — word-boundary aware (SEC 3A-4 FIX)
     // Previously used .contains() which matched subwords (e.g. "sex" matched "context").
     // Now uses \bterm\b to prevent false positives on common subword occurrences.
-    for topic in topic_denylist {
-        // regex::escape prevents denylist entries from acting as regex patterns
-        let pattern = format!(r"(?i)\b{}\b", regex::escape(topic));
-        if let Ok(re) = regex::Regex::new(&pattern) {
-            if re.is_match(&text) {
-                matched_patterns.push(format!("topic_deny:{}", topic));
-                risk_score = (risk_score + 0.6).min(1.0);
-            }
-        } else {
-            // Fallback to contains() if pattern is somehow un-escapeable
-            if text.to_lowercase().contains(&topic.to_lowercase()) {
-                matched_patterns.push(format!("topic_deny:{}", topic));
-                risk_score = (risk_score + 0.6).min(1.0);
+    // SEC: Uses cached regex compilation (same as custom patterns) to avoid recompilation
+    // on every request and to apply size limits for ReDoS protection.
+    {
+        for topic in topic_denylist {
+            let pattern = format!(r"(?i)\b{}\b", regex::escape(topic));
+            if let Some(re) = compile_cached_guardrail(&pattern) {
+                if re.is_match(&text) {
+                    matched_patterns.push(format!("topic_deny:{}", topic));
+                    risk_score = (risk_score + 0.6).min(1.0);
+                }
+            } else {
+                // Fallback to contains() if pattern is somehow invalid
+                if text.to_lowercase().contains(&topic.to_lowercase()) {
+                    matched_patterns.push(format!("topic_deny:{}", topic));
+                    risk_score = (risk_score + 0.6).min(1.0);
+                }
             }
         }
     }
@@ -285,12 +321,13 @@ pub fn check_content(body: &Value, action: &Action) -> GuardrailResult {
     // 12. Topic allowlist — if set, block anything NOT in the allowlist
     // FIX M-1: Use word-boundary matching (same as denylist) to prevent false
     // allows from substring matching (e.g., allowlist ["ai"] matching "main").
+    // SEC: Uses cached regex compilation (same as custom patterns) for performance.
     if !topic_allowlist.is_empty() {
         let any_allowed = topic_allowlist.iter().any(|t| {
             let pattern = format!(r"(?i)\b{}\b", regex::escape(t));
-            regex::Regex::new(&pattern)
+            compile_cached_guardrail(&pattern)
                 .map(|re| re.is_match(&text))
-                .unwrap_or_else(|_| text.to_lowercase().contains(&t.to_lowercase()))
+                .unwrap_or_else(|| text.to_lowercase().contains(&t.to_lowercase()))
         });
         if !any_allowed {
             matched_patterns.push("topic_allowlist_violation".to_string());
@@ -301,35 +338,8 @@ pub fn check_content(body: &Value, action: &Action) -> GuardrailResult {
     // 13. Custom patterns
     // SEC: compile with size limit to prevent ReDoS from policy-authored patterns.
     // Cached per-thread to avoid recompilation on every request (same pattern as engine.rs).
+    // Note: compile_cached_guardrail is defined above and shared with topic denylist/allowlist.
     {
-        use std::cell::RefCell;
-        use std::collections::HashMap;
-
-        thread_local! {
-            /// Thread-local cache: pattern string → compiled Regex (None = invalid/too-complex).
-            /// Bounded at 256 entries to prevent unbounded memory growth from malicious policies.
-            static GUARDRAIL_REGEX_CACHE: RefCell<HashMap<String, Option<regex::Regex>>> =
-                RefCell::new(HashMap::with_capacity(64));
-        }
-
-        fn compile_cached_guardrail(pat: &str) -> Option<regex::Regex> {
-            GUARDRAIL_REGEX_CACHE.with(|cache| {
-                let mut cache = cache.borrow_mut();
-                if let Some(cached) = cache.get(pat) {
-                    return cached.clone();
-                }
-                let compiled = regex::RegexBuilder::new(pat)
-                    .size_limit(1_000_000)
-                    .build()
-                    .ok();
-                if cache.len() >= 256 {
-                    cache.clear();
-                }
-                cache.insert(pat.to_string(), compiled.clone());
-                compiled
-            })
-        }
-
         for (i, pattern) in custom_patterns.iter().enumerate() {
             if let Some(re) = compile_cached_guardrail(pattern) {
                 if re.is_match(&text) {

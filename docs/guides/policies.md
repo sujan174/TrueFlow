@@ -495,17 +495,19 @@ Delegates the guardrail safety check to an external vendor API. Can be extremely
   "endpoint": "https://<your-resource>.cognitiveservices.azure.com",
   "api_key_env": "AZURE_CONTENT_SAFETY_KEY",
   "threshold": 4,
-  "on_fail": "deny"
+  "on_fail": "deny",
+  "on_error": "deny"
 }
 ```
 
-| Param | Description |
-|---|---|
-| `vendor` | `"azure_content_safety"`, `"aws_comprehend"`, or `"llama_guard"` |
-| `endpoint` | Upstream vendor URL (for LlamaGuard, your Ollama/vLLM server) |
-| `api_key_env` | Environment variable name holding the API key |
-| `threshold` | Float. Threshold above which a request/response is flagged (vendor-specific) |
-| `on_fail` | `"allow"`, `"deny"`, or `"log"` (default: `"deny"`) |
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `vendor` | string | `"azure_content_safety"`, `"aws_comprehend"`, or `"llama_guard"` |
+| `endpoint` | string | Upstream vendor URL (for LlamaGuard, your Ollama/vLLM server) |
+| `api_key_env` | string | Environment variable name holding the API key |
+| `threshold` | number | Float. Threshold above which a request/response is flagged (vendor-specific) |
+| `on_fail` | string | `"allow"`, `"deny"`, or `"log"` (default: `"deny"`) |
+| `on_error` | string | What to do when the vendor call fails (timeout, network error, parse error). Options: `"deny"` (default, fail-closed) or `"allow"` (fail-open). **Security-sensitive deployments should use the default `"deny"` to prevent bypass via DoS attacks.** |
 
 ### `content_filter`
 

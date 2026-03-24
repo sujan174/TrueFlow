@@ -2,11 +2,12 @@
 
 import { useEffect, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
-import { ArrowLeft, Key, Shield, MoreHorizontal, Trash2, Copy, Check, Plus } from "lucide-react"
+import { ArrowLeft, Key, Shield, MoreHorizontal, Trash2, Copy, Check, Plus, Wrench, Save, Loader2 } from "lucide-react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { toast } from "sonner"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -18,11 +19,13 @@ import {
   getGuardrailStatus,
   listPolicies,
   revokeToken,
+  updateTokenMcpTools,
   type TokenRow,
   type GuardrailsStatus,
   type PolicyRow,
 } from "@/lib/api"
 import { GuardrailPresetDialog } from "@/components/guardrails/guardrail-preset-dialog"
+import { ToolPicker } from "@/components/mcp/tool-picker"
 
 function PurposeBadge({ purpose }: { purpose: string }) {
   const variants: Record<string, "default" | "secondary" | "outline"> = {
@@ -64,6 +67,9 @@ export default function TokenDetailPage() {
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
   const [guardrailDialogOpen, setGuardrailDialogOpen] = useState(false)
+  const [mcpAllowedTools, setMcpAllowedTools] = useState<string[] | null>(null)
+  const [mcpBlockedTools, setMcpBlockedTools] = useState<string[] | null>(null)
+  const [savingMcp, setSavingMcp] = useState(false)
 
   useEffect(() => {
     loadToken()
@@ -79,6 +85,8 @@ export default function TokenDetailPage() {
       ])
       setToken(tokenData)
       setGuardrailStatus(guardrails)
+      setMcpAllowedTools(tokenData.mcp_allowed_tools)
+      setMcpBlockedTools(tokenData.mcp_blocked_tools)
 
       // Filter policies attached to this token
       const tokenPolicyIds = new Set(tokenData.policy_ids || [])
@@ -97,7 +105,7 @@ export default function TokenDetailPage() {
       await revokeToken(tokenId)
       router.push("/tokens")
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed to revoke token")
+      toast.error(err instanceof Error ? err.message : "Failed to revoke token")
     }
   }
 
@@ -106,6 +114,28 @@ export default function TokenDetailPage() {
       navigator.clipboard.writeText(token.id)
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
+    }
+  }
+
+  const handleSaveMcpTools = async () => {
+    setSavingMcp(true)
+    try {
+      await updateTokenMcpTools(tokenId, {
+        mcp_allowed_tools: mcpAllowedTools,
+        mcp_blocked_tools: mcpBlockedTools,
+      })
+      // Update the local token state to reflect the changes
+      if (token) {
+        setToken({
+          ...token,
+          mcp_allowed_tools: mcpAllowedTools,
+          mcp_blocked_tools: mcpBlockedTools,
+        })
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to save MCP tools")
+    } finally {
+      setSavingMcp(false)
     }
   }
 
@@ -216,6 +246,10 @@ export default function TokenDetailPage() {
               <Shield className="h-4 w-4" />
               Guardrails
             </TabsTrigger>
+            <TabsTrigger value="mcp-tools" className="gap-2">
+              <Wrench className="h-4 w-4" />
+              MCP Tools
+            </TabsTrigger>
             <TabsTrigger value="policies">Policies ({policies.length})</TabsTrigger>
           </TabsList>
 
@@ -293,6 +327,34 @@ export default function TokenDetailPage() {
                 </Button>
               </div>
             )}
+          </TabsContent>
+
+          <TabsContent value="mcp-tools" className="mt-4 space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-medium">MCP Tool Access</h3>
+                <p className="text-sm text-muted-foreground">
+                  Configure which MCP tools this token can access
+                </p>
+              </div>
+              <Button className="gap-2" onClick={handleSaveMcpTools} disabled={savingMcp}>
+                {savingMcp ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Save className="h-4 w-4" />
+                )}
+                {savingMcp ? "Saving..." : "Save Changes"}
+              </Button>
+            </div>
+
+            <div className="bg-card border rounded-xl p-6">
+              <ToolPicker
+                allowedTools={mcpAllowedTools}
+                blockedTools={mcpBlockedTools}
+                onAllowedChange={setMcpAllowedTools}
+                onBlockedChange={setMcpBlockedTools}
+              />
+            </div>
           </TabsContent>
 
           <TabsContent value="policies" className="mt-4 space-y-4">

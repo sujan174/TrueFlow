@@ -16,6 +16,7 @@ import {
   Menu,
   X,
   FolderOpen,
+  Wrench,
 } from "lucide-react"
 import { ProjectSwitcher } from "./project-switcher"
 import { cn } from "@/lib/utils"
@@ -28,6 +29,7 @@ const navigation = [
   { name: "Credentials", href: "/credentials", icon: Shield },
   { name: "Policies", href: "/policies", icon: FileCheck },
   { name: "Guardrails", href: "/guardrails", icon: Filter },
+  { name: "MCP Servers", href: "/mcp/servers", icon: Wrench },
 ]
 
 const settingsNavigation = [

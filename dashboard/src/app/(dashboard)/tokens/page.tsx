@@ -10,6 +10,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { toast } from "sonner"
 import {
   listTokensWithParams,
   revokeToken,
@@ -88,7 +89,7 @@ export default function TokensPage() {
       await revokeToken(id)
       setTokens(tokens.map((t) => (t.id === id ? { ...t, is_active: false } : t)))
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed to revoke token")
+      toast.error(err instanceof Error ? err.message : "Failed to revoke token")
     }
   }
 

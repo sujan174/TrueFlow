@@ -373,7 +373,15 @@ VALUES (
 
 ## Guardrail Header Mode Security
 
-The `X-TrueFlow-Guardrails` header allows per-request guardrail configuration. This is controlled by the token's `guardrail_header_mode` field.
+TrueFlow supports multiple headers for per-request guardrail configuration. These are controlled by the token's `guardrail_header_mode` field.
+
+### Available Headers
+
+| Header | Purpose |
+|--------|---------|
+| `X-TrueFlow-Guardrails` | Specify exact guardrail actions (legacy) |
+| `X-TrueFlow-Guardrails-Enable` | Add specific guardrail presets to the request |
+| `X-TrueFlow-Guardrails-Disable` | Remove specific guardrail presets from the request |
 
 ### Modes
 

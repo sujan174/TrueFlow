@@ -1,14 +1,15 @@
 import type { HttpClient } from "../http.js";
 import type { JsonObject } from "../types.js";
+import type { GuardrailPresetInfo } from "../guardrail-presets.js";
 
 export class GuardrailsResource {
     constructor(private readonly http: HttpClient) { }
 
     /** List available guardrail presets from the gateway. */
-    async listPresets(): Promise<JsonObject[]> {
+    async listPresets(): Promise<GuardrailPresetInfo[]> {
         const res = await this.http.get("/api/v1/guardrails/presets");
         const body = (await res.json()) as Record<string, unknown>;
-        return (body["presets"] as JsonObject[]) ?? [];
+        return (body["presets"] as GuardrailPresetInfo[]) ?? [];
     }
 
     /** Check current guardrails state for a token. */

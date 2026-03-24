@@ -425,6 +425,177 @@ pub async fn proxy_handler(
         );
     }
 
+    // -- X-TrueFlow-Guardrails-Enable and X-TrueFlow-Guardrails-Disable headers --
+    // These work independently of guardrail_header_mode and allow fine-grained control
+    // SECURITY: These headers are also controlled by guardrail_header_mode
+    if header_mode != "disabled" {
+        // X-TrueFlow-Guardrails-Enable: Add specific guardrails to existing policies
+        if let Some(enable_header) = headers
+            .get("x-trueflow-guardrails-enable")
+            .and_then(|v| v.to_str().ok())
+        {
+            let mut enable_actions: Vec<TriggeredAction> = Vec::new();
+            for preset in enable_header
+                .split(',')
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+            {
+                let action = match preset {
+                    "pii_redaction" => Some(Action::Redact {
+                        direction: RedactDirection::Both,
+                        patterns: ["ssn", "email", "credit_card", "phone", "api_key", "iban", "dob", "ipv4"]
+                            .iter()
+                            .map(|s| s.to_string())
+                            .collect(),
+                        fields: vec![],
+                        on_match: RedactOnMatch::Redact,
+                        nlp_backend: None,
+                    }),
+                    "pii_block" => Some(Action::Redact {
+                        direction: RedactDirection::Request,
+                        patterns: ["ssn", "email", "credit_card", "phone"]
+                            .iter()
+                            .map(|s| s.to_string())
+                            .collect(),
+                        fields: vec![],
+                        on_match: RedactOnMatch::Block,
+                        nlp_backend: None,
+                    }),
+                    "prompt_injection" => Some(Action::ContentFilter {
+                        block_jailbreak: true,
+                        block_harmful: true,
+                        block_code_injection: true,
+                        block_profanity: false,
+                        block_bias: false,
+                        block_competitor_mention: false,
+                        block_sensitive_topics: false,
+                        block_gibberish: false,
+                        block_contact_info: false,
+                        block_ip_leakage: false,
+                        competitor_names: vec![],
+                        topic_allowlist: vec![],
+                        topic_denylist: vec![],
+                        custom_patterns: vec![],
+                        risk_threshold: 0.3,
+                        max_content_length: 0,
+                    }),
+                    "code_injection" => Some(Action::ContentFilter {
+                        block_jailbreak: false,
+                        block_harmful: false,
+                        block_code_injection: true,
+                        block_profanity: false,
+                        block_bias: false,
+                        block_competitor_mention: false,
+                        block_sensitive_topics: false,
+                        block_gibberish: false,
+                        block_contact_info: false,
+                        block_ip_leakage: false,
+                        competitor_names: vec![],
+                        topic_allowlist: vec![],
+                        topic_denylist: vec![],
+                        custom_patterns: vec![],
+                        risk_threshold: 0.3,
+                        max_content_length: 0,
+                    }),
+                    "hipaa" => Some(Action::Redact {
+                        direction: RedactDirection::Both,
+                        patterns: ["ssn", "email", "phone", "dob", "mrn"]
+                            .iter()
+                            .map(|s| s.to_string())
+                            .collect(),
+                        fields: vec![],
+                        on_match: RedactOnMatch::Redact,
+                        nlp_backend: None,
+                    }),
+                    "pci" => Some(Action::Redact {
+                        direction: RedactDirection::Both,
+                        patterns: ["credit_card", "api_key"]
+                            .iter()
+                            .map(|s| s.to_string())
+                            .collect(),
+                        fields: vec![],
+                        on_match: RedactOnMatch::Redact,
+                        nlp_backend: None,
+                    }),
+                    "pii_enterprise" => Some(Action::Redact {
+                        direction: RedactDirection::Both,
+                        patterns: ["ssn", "email", "credit_card", "phone", "api_key", "iban", "dob", "ipv4", "passport", "aws_key", "drivers_license", "mrn"]
+                            .iter()
+                            .map(|s| s.to_string())
+                            .collect(),
+                        fields: vec![],
+                        on_match: RedactOnMatch::Redact,
+                        nlp_backend: None,
+                    }),
+                    other => {
+                        tracing::warn!(
+                            preset = other,
+                            token_id = %token.id,
+                            "X-TrueFlow-Guardrails-Enable: unrecognised preset, ignoring"
+                        );
+                        None
+                    }
+                };
+                if let Some(a) = action {
+                    enable_actions.push(TriggeredAction {
+                        policy_id: uuid::Uuid::nil(),
+                        policy_name: format!("header-enable:{}", preset),
+                        rule_index: 0,
+                        action: a,
+                    });
+                }
+            }
+            if !enable_actions.is_empty() {
+                tracing::info!(
+                    token_id = %token.id,
+                    presets = ?enable_actions.iter().map(|a| &a.policy_name).collect::<Vec<_>>(),
+                    "X-TrueFlow-Guardrails-Enable: adding guardrail actions"
+                );
+                // Prepend enable actions so they run first
+                enable_actions.extend(outcome_actions);
+                outcome_actions = enable_actions;
+            }
+        }
+
+        // X-TrueFlow-Guardrails-Disable: Remove specific guardrails from policies
+        if let Some(disable_header) = headers
+            .get("x-trueflow-guardrails-disable")
+            .and_then(|v| v.to_str().ok())
+        {
+            let disable_presets: Vec<&str> = disable_header
+                .split(',')
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .collect();
+
+            if !disable_presets.is_empty() {
+                let original_count = outcome_actions.len();
+                // Filter out actions whose policy name matches any disabled preset
+                // Matches both "header-guardrail:pii_redaction" and "guardrail:pii_redaction" patterns
+                outcome_actions.retain(|action| {
+                    let policy_lower = action.policy_name.to_lowercase();
+                    !disable_presets.iter().any(|preset| {
+                        let preset_lower = preset.to_lowercase();
+                        policy_lower.contains(&format!("header-guardrail:{}", preset_lower)) ||
+                        policy_lower.contains(&format!("header-enable:{}", preset_lower)) ||
+                        policy_lower.contains(&format!("guardrail:{}", preset_lower)) ||
+                        policy_lower == preset_lower
+                    })
+                });
+
+                let removed_count = original_count - outcome_actions.len();
+                if removed_count > 0 {
+                    tracing::info!(
+                        token_id = %token.id,
+                        disabled_presets = ?disable_presets,
+                        removed_count = removed_count,
+                        "X-TrueFlow-Guardrails-Disable: removed guardrail actions"
+                    );
+                }
+            }
+        }
+    }
+
     let mut shadow_violations = shadow_violations;
 
     // -- 3.3 Execute enforced actions --

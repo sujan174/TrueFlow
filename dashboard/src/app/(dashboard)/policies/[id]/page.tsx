@@ -15,6 +15,7 @@ import {
   type UpdatePolicyRequest,
 } from "@/lib/api"
 import { Badge } from "@/components/ui/badge"
+import { toast } from "sonner"
 
 export default function EditPolicyPage() {
   const router = useRouter()
@@ -47,7 +48,7 @@ export default function EditPolicyPage() {
           // Version history is optional
         }
       } catch (error) {
-        alert(error instanceof Error ? error.message : "Failed to load policy")
+        toast.error(error instanceof Error ? error.message : "Failed to load policy")
         router.push("/policies")
       } finally {
         setLoading(false)
@@ -73,9 +74,9 @@ export default function EditPolicyPage() {
         // Version history is optional
       }
 
-      alert("Policy updated successfully!")
+      toast.success("Policy updated successfully!")
     } catch (error) {
-      alert(error instanceof Error ? error.message : "Failed to update policy")
+      toast.error(error instanceof Error ? error.message : "Failed to update policy")
     } finally {
       setIsSubmitting(false)
     }

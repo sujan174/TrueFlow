@@ -215,7 +215,7 @@ curl -X POST http://localhost:8443/api/v1/tokens/bulk \
 | `DynamicRoute` | ✅ | Smart model selection |
 | `ConditionalRoute` | ✅ | Condition-based routing |
 | `ValidateSchema` | ✅ | JSON Schema validation |
-| `ExternalGuardrail` | ✅ | Azure/AWS/LlamaGuard |
+| `ExternalGuardrail` | ✅ | Azure/AWS/LlamaGuard | Default `on_error: "deny"` for security |
 | `ToolScope` | ✅ | MCP tool filtering |
 | `BudgetAlert` | ✅ | Spend threshold alerts |
 
@@ -291,7 +291,7 @@ curl -X POST http://localhost:8443/api/v1/tokens/bulk \
 - SSRF protection
 - Threshold validation (MED-13)
 - Configurable timeouts
-- Fail-open/fail-closed modes
+- Fail-closed by default (`on_error: deny`), configurable to fail-open for non-critical use cases
 
 ### 5.4 Authentication & Authorization
 

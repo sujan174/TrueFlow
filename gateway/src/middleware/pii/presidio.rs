@@ -59,7 +59,10 @@ impl PresidioDetector {
         let client = Client::builder()
             .timeout(timeout)
             .build()
-            .unwrap_or_default();
+            .unwrap_or_else(|e| {
+                tracing::warn!("Failed to build Presidio HTTP client with timeout: {}. Using default client.", e);
+                Client::new()
+            });
 
         Self {
             endpoint: endpoint.trim_end_matches('/').to_string(),

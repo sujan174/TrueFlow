@@ -185,6 +185,33 @@ await guarded.post('/v1/chat/completions', { ... });
 
 ---
 
+## Guardrail Types
+
+The SDK exports TypeScript types for guardrail presets:
+
+```typescript
+import type { GuardrailPresetInfo, GuardrailPresetCategory } from 'trueflow';
+
+// Category type
+type GuardrailPresetCategory = "safety" | "privacy" | "compliance";
+
+// Preset info interface
+interface GuardrailPresetInfo {
+  name: string;              // Preset identifier (e.g., "pii_redaction")
+  description: string;       // Human-readable description
+  category: GuardrailPresetCategory;
+  patterns?: string[];       // PII patterns included
+  required_fields?: string[];
+  defaults?: Record<string, unknown>;
+  supports_header_override?: boolean;
+}
+
+// List presets with full type info
+const presets: GuardrailPresetInfo[] = await admin.guardrails.listPresets();
+```
+
+---
+
 ## BYOK (Bring Your Own Key)
 
 ```typescript

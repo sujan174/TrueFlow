@@ -106,4 +106,4 @@ export {
     PRESET_TOPIC_FENCE,
     PRESET_LENGTH_LIMIT,
 } from "./guardrail-presets.js";
-export type { GuardrailPreset } from "./guardrail-presets.js";
+export type { GuardrailPreset, GuardrailPresetInfo, GuardrailPresetCategory } from "./guardrail-presets.js";
