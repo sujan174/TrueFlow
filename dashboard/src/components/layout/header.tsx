@@ -1,6 +1,7 @@
 "use client"
 
 import { useTheme } from "next-themes"
+import { useEffect, useState } from "react"
 import { useRouter, usePathname } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import {
@@ -47,6 +48,11 @@ export function Header({ user }: HeaderProps) {
   const pathname = usePathname()
   const supabase = createClient()
   const { theme, setTheme } = useTheme()
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   const handleSignOut = async () => {
     // Clear project selection from localStorage to prevent stale data
@@ -123,30 +129,32 @@ export function Header({ user }: HeaderProps) {
           variant="ghost"
           size="icon-sm"
           onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-          title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
+          title="Toggle theme"
         >
-          {theme === "dark" ? (
-            <Sun className="h-4 w-4" />
+          {mounted ? (
+            theme === "dark" ? (
+              <Sun className="h-4 w-4" />
+            ) : (
+              <Moon className="h-4 w-4" />
+            )
           ) : (
-            <Moon className="h-4 w-4" />
+            <div className="h-4 w-4" />
           )}
         </Button>
 
         {/* User Dropdown */}
         {user && (
           <DropdownMenu>
-            <DropdownMenuTrigger>
-              <Button variant="ghost" size="icon-sm" className="relative">
-                <Avatar className="h-7 w-7">
-                  <AvatarImage
-                    src={user.user_metadata?.avatar_url}
-                    alt={user.email || ""}
-                  />
-                  <AvatarFallback className="bg-primary/10 text-primary text-xs font-medium">
-                    {user.email?.charAt(0).toUpperCase() || "U"}
-                  </AvatarFallback>
-                </Avatar>
-              </Button>
+            <DropdownMenuTrigger className="relative rounded-md p-1.5 hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+              <Avatar className="h-7 w-7">
+                <AvatarImage
+                  src={user.user_metadata?.avatar_url}
+                  alt={user.email || ""}
+                />
+                <AvatarFallback className="bg-primary/10 text-primary text-xs font-medium">
+                  {user.email?.charAt(0).toUpperCase() || "U"}
+                </AvatarFallback>
+              </Avatar>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
               <DropdownMenuLabel className="font-normal">

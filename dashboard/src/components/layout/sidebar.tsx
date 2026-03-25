@@ -17,6 +17,8 @@ import {
   X,
   FolderOpen,
   Wrench,
+  ClipboardCheck,
+  FileText,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -28,6 +30,8 @@ const navigation = [
   { name: "Credentials", href: "/credentials", icon: Shield },
   { name: "Policies", href: "/policies", icon: FileCheck },
   { name: "Guardrails", href: "/guardrails", icon: Filter },
+  { name: "Approvals", href: "/approvals", icon: ClipboardCheck },
+  { name: "Request Log", href: "/traces", icon: FileText },
   { name: "MCP Servers", href: "/mcp/servers", icon: Wrench },
 ]
 

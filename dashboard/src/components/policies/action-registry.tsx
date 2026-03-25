@@ -131,20 +131,18 @@ export function ActionRegistry({
     <div className="space-y-3">
       {/* Header */}
       <Collapsible open={isRegistryExpanded} onOpenChange={setIsRegistryExpanded}>
-        <CollapsibleTrigger asChild>
-          <button className="flex items-center gap-2 w-full text-left">
-            {isRegistryExpanded ? (
-              <ChevronDown className="h-4 w-4 text-muted-foreground" />
-            ) : (
-              <ChevronRight className="h-4 w-4 text-muted-foreground" />
-            )}
-            <Label className="text-sm font-medium cursor-pointer">
-              Active Actions
-            </Label>
-            <Badge variant={hasActions ? "default" : "secondary"}>
-              {totalActions}
-            </Badge>
-          </button>
+        <CollapsibleTrigger className="flex items-center gap-2 w-full text-left">
+          {isRegistryExpanded ? (
+            <ChevronDown className="h-4 w-4 text-muted-foreground" />
+          ) : (
+            <ChevronRight className="h-4 w-4 text-muted-foreground" />
+          )}
+          <Label className="text-sm font-medium cursor-pointer">
+            Active Actions
+          </Label>
+          <Badge variant={hasActions ? "default" : "secondary"}>
+            {totalActions}
+          </Badge>
         </CollapsibleTrigger>
 
         <CollapsibleContent>

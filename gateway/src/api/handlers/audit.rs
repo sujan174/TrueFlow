@@ -10,16 +10,16 @@ use axum::{
 use futures::stream::{self, Stream};
 use uuid::Uuid;
 
-use super::dtos::PaginationParams;
+use super::dtos::AuditFilterParams;
 use super::helpers::verify_project_ownership;
 use crate::api::AuthContext;
-use crate::store::postgres::{AuditLogDetailRow, AuditLogRow};
+use crate::store::postgres::{AuditFilter, AuditLogDetailRow, AuditLogRow};
 use crate::AppState;
 
 pub async fn list_audit_logs(
     State(state): State<Arc<AppState>>,
     Extension(auth): Extension<AuthContext>,
-    Query(params): Query<PaginationParams>,
+    Query(params): Query<AuditFilterParams>,
 ) -> Result<Json<Vec<AuditLogRow>>, StatusCode> {
     // Audit logs require explicit scope or read-all
     auth.require_scope("audit:read")
@@ -31,12 +31,26 @@ pub async fn list_audit_logs(
     let limit = params.limit.unwrap_or(50).clamp(1, 200); // 1 <= limit <= 200
     let offset = params.offset.unwrap_or(0).max(0); // non-negative
 
+    // Build filter struct from params
+    let filters = AuditFilter {
+        status: params.status,
+        token_id: params.token_id,
+        model: params.model,
+        policy_result: params.policy_result,
+        method: params.method,
+        path_contains: params.path_contains,
+        agent_name: params.agent_name,
+        error_type: params.error_type,
+        start_time: params.start_time,
+        end_time: params.end_time,
+    };
+
     let logs = state
         .db
-        .list_audit_logs(project_id, limit, offset)
+        .list_audit_logs_filtered(project_id, filters, limit, offset)
         .await
         .map_err(|e| {
-            tracing::error!("list_audit_logs failed: {}", e);
+            tracing::error!("list_audit_logs_filtered failed: {}", e);
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
 
@@ -48,7 +62,7 @@ pub async fn get_audit_log(
     State(state): State<Arc<AppState>>,
     Extension(auth): Extension<AuthContext>,
     Path(id_str): Path<String>,
-    Query(params): Query<PaginationParams>,
+    Query(params): Query<AuditFilterParams>,
 ) -> Result<Json<AuditLogDetailRow>, StatusCode> {
     auth.require_scope("audit:read")
         .map_err(|_| StatusCode::FORBIDDEN)?;
@@ -74,7 +88,7 @@ pub async fn get_audit_log(
 pub async fn stream_audit_logs(
     State(state): State<Arc<AppState>>,
     Extension(auth): Extension<AuthContext>,
-    Query(params): Query<PaginationParams>,
+    Query(params): Query<AuditFilterParams>,
 ) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
     // MED-1: Check auth before streaming
     let has_scope = auth.require_scope("audit:read").is_ok();
@@ -85,6 +99,20 @@ pub async fn stream_audit_logs(
         .await
         .is_ok();
     let authorized = has_scope && project_ok;
+
+    // Build filter struct (without time range for streaming - we use last_seen instead)
+    let filters = AuditFilter {
+        status: params.status,
+        token_id: params.token_id,
+        model: params.model,
+        policy_result: params.policy_result,
+        method: params.method,
+        path_contains: params.path_contains,
+        agent_name: params.agent_name,
+        error_type: params.error_type,
+        start_time: None, // Not used for streaming
+        end_time: None,
+    };
 
     // MED-1: Use an enum to track stream state - send error event then end if unauthorized
     enum StreamState {
@@ -97,10 +125,11 @@ pub async fn stream_audit_logs(
         (
             state,
             project_id,
+            filters,
             None::<chrono::DateTime<chrono::Utc>>,
             if authorized { StreamState::Active } else { StreamState::Unauthorized },
         ),
-        |(state, project_id, last_seen, stream_state)| async move {
+        |(state, project_id, filters, last_seen, stream_state)| async move {
             // MED-1: Handle unauthorized case - send single error event then end
             match stream_state {
                 StreamState::Unauthorized => {
@@ -110,7 +139,7 @@ pub async fn stream_audit_logs(
                     // Return error event and transition to done state
                     return Some((
                         Ok(error_event),
-                        (state, project_id, last_seen, StreamState::UnauthorizedDone),
+                        (state, project_id, filters, last_seen, StreamState::UnauthorizedDone),
                     ));
                 }
                 StreamState::UnauthorizedDone => {
@@ -125,7 +154,7 @@ pub async fn stream_audit_logs(
 
             let rows = state
                 .db
-                .list_audit_logs(project_id, 20, 0)
+                .list_audit_logs_filtered(project_id, filters.clone(), 20, 0)
                 .await
                 .unwrap_or_default();
 
@@ -143,13 +172,13 @@ pub async fn stream_audit_logs(
                 // Send a heartbeat comment to keep connection alive
                 Some((
                     Ok(Event::default().comment("heartbeat")),
-                    (state, project_id, next_cursor, StreamState::Active),
+                    (state, project_id, filters, next_cursor, StreamState::Active),
                 ))
             } else {
                 let data = serde_json::to_string(&new_rows).unwrap_or_default();
                 Some((
                     Ok(Event::default().data(data).event("audit")),
-                    (state, project_id, next_cursor, StreamState::Active),
+                    (state, project_id, filters, next_cursor, StreamState::Active),
                 ))
             }
         },

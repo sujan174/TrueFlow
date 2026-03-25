@@ -11,9 +11,10 @@ export function CostByModelCard() {
     async function fetchData() {
       try {
         const data = await getSpendByModel(168) // 7 days
-        setModels(data)
+        setModels(Array.isArray(data) ? data : [])
       } catch (error) {
         console.error("Failed to fetch spend by model:", error)
+        setModels([])
       } finally {
         setLoading(false)
       }

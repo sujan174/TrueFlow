@@ -74,6 +74,11 @@ import type {
   Rule,
   Action,
 } from "./types/policy"
+import type {
+  AuditLogRow as AuditLogRowType,
+  AuditLogDetailRow,
+  AuditFilters,
+} from "./types/audit"
 
 // Re-export types for consumers
 export type {
@@ -134,6 +139,13 @@ export type {
   PolicyResponse,
   Rule,
 }
+
+// Re-export audit types
+export type {
+  AuditLogRow as AuditLogRowType,
+  AuditLogDetailRow,
+  AuditFilters,
+} from "./types/audit"
 
 // Use local API proxy for client-side calls (handles auth server-side)
 interface FetchOptions {
@@ -273,6 +285,42 @@ export async function getLatencyTimeseries(hours = 24): Promise<LatencyTimeserie
 
 export async function getAuditLogs(limit = 50): Promise<AuditLogRow[]> {
   return gatewayFetch<AuditLogRow[]>(`/audit?limit=${limit}`, {
+    next: { revalidate: 30 },
+  })
+}
+
+// Audit log endpoints with filtering
+export async function listAuditLogs(
+  projectId: string,
+  filters?: AuditFilters,
+  limit = 50,
+  offset = 0
+): Promise<AuditLogRowType[]> {
+  const params = new URLSearchParams()
+  params.set("project_id", projectId)
+  params.set("limit", String(limit))
+  params.set("offset", String(offset))
+
+  if (filters) {
+    if (filters.status !== undefined) params.set("status", String(filters.status))
+    if (filters.token_id) params.set("token_id", filters.token_id)
+    if (filters.model) params.set("model", filters.model)
+    if (filters.policy_result) params.set("policy_result", filters.policy_result)
+    if (filters.method) params.set("method", filters.method)
+    if (filters.path_contains) params.set("path_contains", filters.path_contains)
+    if (filters.agent_name) params.set("agent_name", filters.agent_name)
+    if (filters.error_type) params.set("error_type", filters.error_type)
+    if (filters.start_time) params.set("start_time", filters.start_time)
+    if (filters.end_time) params.set("end_time", filters.end_time)
+  }
+
+  return gatewayFetch<AuditLogRowType[]>(`/audit?${params}`, {
+    next: { revalidate: 30 },
+  })
+}
+
+export async function getAuditLogDetail(id: string, projectId: string): Promise<AuditLogDetailRow> {
+  return gatewayFetch<AuditLogDetailRow>(`/audit/${id}?project_id=${projectId}`, {
     next: { revalidate: 30 },
   })
 }
@@ -560,9 +608,7 @@ export async function getHitlRejectionReasons(hours = 168): Promise<RejectionRea
 }
 
 export async function listApprovals(): Promise<ApprovalRequest[]> {
-  return gatewayFetch<ApprovalRequest[]>("/approvals", {
-    next: { revalidate: 30 },
-  })
+  return gatewayFetch<ApprovalRequest[]>("/approvals")
 }
 
 export async function decideApproval(

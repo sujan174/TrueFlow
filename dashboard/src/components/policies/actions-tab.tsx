@@ -45,6 +45,8 @@ import type {
   ActionTag,
   ActionWebhook,
   ActionOverride,
+  ActionRequireApproval,
+  ActionTransform,
   ActionType,
   RateLimitKey,
 } from "@/lib/types/policy"
@@ -565,7 +567,7 @@ function OverrideConfig({ value, onChange }: { value: ActionOverride | undefined
 }
 
 function RequireApprovalConfig({ value, onChange }: { value: Action | undefined; onChange: (updates: Partial<Action>) => void }) {
-  const config = value || { action: 'require_approval' as const, timeout: '30m', fallback: 'deny' }
+  const config = (value as ActionRequireApproval) || { action: 'require_approval' as const, timeout: '30m', fallback: 'deny' }
 
   return (
     <div className="grid grid-cols-2 gap-4">
@@ -598,7 +600,7 @@ function RequireApprovalConfig({ value, onChange }: { value: Action | undefined;
 }
 
 function TransformConfig({ value, onChange }: { value: Action | undefined; onChange: (updates: Partial<Action>) => void }) {
-  const config = value || { action: 'transform' as const, operations: [] }
+  const config = (value as ActionTransform) || { action: 'transform' as const, operations: [] }
 
   return (
     <div>

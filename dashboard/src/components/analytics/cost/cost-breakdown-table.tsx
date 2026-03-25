@@ -16,9 +16,10 @@ export function CostBreakdownTable() {
     async function fetchData() {
       try {
         const data = await getTokenSpendWithCaps(168) // 7 days
-        setTokens(data)
+        setTokens(Array.isArray(data) ? data : [])
       } catch (error) {
         console.error("Failed to fetch token spend:", error)
+        setTokens([])
       } finally {
         setLoading(false)
       }

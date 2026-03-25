@@ -20,6 +20,7 @@ import type {
   ConditionAll,
   ConditionAny,
   ConditionNot,
+  ConditionAlways,
   ConditionOperator,
 } from "@/lib/types/policy"
 import {
@@ -66,6 +67,10 @@ function isConditionAny(c: Condition): c is ConditionAny {
 
 function isConditionNot(c: Condition): c is ConditionNot {
   return 'not' in c
+}
+
+function isConditionAlways(c: Condition): c is ConditionAlways {
+  return 'always' in c
 }
 
 function createEmptyCondition(): ConditionCheck {
@@ -129,9 +134,37 @@ export function ConditionBuilder({ value, onChange }: ConditionBuilderProps) {
     return (
       <ConditionGroup
         value={value}
-        onChange={handleRootChange as (c: ConditionAll | ConditionAny) => void}
+        onChange={handleRootChange}
         depth={0}
       />
+    )
+  }
+
+  // If it's an "always" condition, show a simple toggle
+  if (isConditionAlways(value)) {
+    return (
+      <div className="bg-card border rounded-xl p-4">
+        <div className="flex items-center gap-3">
+          <Badge variant="secondary">Always</Badge>
+          <span className="text-sm text-muted-foreground">
+            This condition always {value.always ? 'matches' : 'does not match'}
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onChange({ always: !value.always })}
+          >
+            Toggle
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => onChange(createEmptyCondition())}
+          >
+            Convert to Check
+          </Button>
+        </div>
+      </div>
     )
   }
 
@@ -144,7 +177,7 @@ export function ConditionBuilder({ value, onChange }: ConditionBuilderProps) {
           <div className="flex gap-2">
             <TooltipProvider>
               <Tooltip>
-                <TooltipTrigger asChild>
+                <TooltipTrigger>
                   <Button variant="outline" size="sm" onClick={() => wrapInGroup('AND')}>
                     <Parentheses className="h-4 w-4 mr-1" />
                     Wrap in AND
@@ -362,13 +395,15 @@ function ConditionRow({ value, onChange, onRemove }: ConditionRowProps) {
   const fieldDef = FIELDS.find(f => f.name === value.field) || FIELDS[0]
   const availableOperators = fieldDef.operators
 
-  const handleFieldChange = (fieldName: string) => {
+  const handleFieldChange = (fieldName: string | null) => {
+    if (!fieldName) return
     const newFieldDef = FIELDS.find(f => f.name === fieldName) || FIELDS[0]
     const newOp = newFieldDef.operators.includes(value.op) ? value.op : newFieldDef.operators[0]
     onChange({ ...value, field: fieldName, op: newOp })
   }
 
-  const handleOperatorChange = (op: string) => {
+  const handleOperatorChange = (op: string | null) => {
+    if (!op) return
     onChange({ ...value, op: op as ConditionOperator })
   }
 
@@ -462,7 +497,7 @@ export function ConditionFieldReference({ onFieldClick }: FieldReferenceProps) {
         {FIELDS.map((field) => (
           <TooltipProvider key={field.name}>
             <Tooltip>
-              <TooltipTrigger asChild>
+              <TooltipTrigger>
                 <Button
                   variant="ghost"
                   size="sm"

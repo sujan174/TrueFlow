@@ -21,6 +21,9 @@ mod users;
 // SEC-10: Export LastAdminError for use in API handlers
 pub use api_keys::LastAdminError;
 
+// Export AuditFilter for audit log filtering
+pub use audit::AuditFilter;
+
 #[cfg(test)]
 mod tests;
 

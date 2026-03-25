@@ -703,7 +703,7 @@ impl PgStore {
                 COUNT(*)::bigint as total_tokens
             FROM tokens t
             LEFT JOIN spend_caps sc ON t.id = sc.token_id AND sc.period = 'monthly'
-            WHERE t.project_id = $1 AND t.revoked_at IS NULL
+            WHERE t.project_id = $1 AND t.is_active = true
             "#,
         )
         .bind(project_id)
@@ -883,7 +883,7 @@ impl PgStore {
         let rows = sqlx::query_as::<_, crate::models::analytics::TokenSpendWithCap>(
             r#"
             SELECT
-                t.id as token_id,
+                t.id::text as token_id,
                 t.name as token_name,
                 CASE
                     WHEN a.model ILIKE 'gpt-%' OR a.model ILIKE 'o1-%' OR a.model ILIKE 'o3-%' THEN 'OpenAI'
@@ -908,7 +908,7 @@ impl PgStore {
             FROM tokens t
             LEFT JOIN audit_logs a ON a.token_id = t.id AND a.created_at > now() - ($2 || ' hours')::interval
             LEFT JOIN spend_caps sc ON sc.token_id = t.id AND sc.period = 'monthly'
-            WHERE t.project_id = $1 AND t.revoked_at IS NULL
+            WHERE t.project_id = $1 AND t.is_active = true
             GROUP BY t.id, t.name, sc.limit_usd
             ORDER BY total_spend_usd DESC
             LIMIT 50

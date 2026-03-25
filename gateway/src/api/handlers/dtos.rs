@@ -141,6 +141,38 @@ pub struct PaginationParams {
     pub team_id: Option<Uuid>,
 }
 
+/// Filter parameters for audit log listing.
+/// All filters are optional and combined with AND logic.
+#[derive(Debug, Deserialize)]
+pub struct AuditFilterParams {
+    // Pagination
+    pub limit: Option<i64>,
+    pub offset: Option<i64>,
+    pub project_id: Option<Uuid>,
+
+    // Filters
+    /// Filter by HTTP status code (e.g., 200, 400, 500)
+    pub status: Option<i16>,
+    /// Filter by token ID
+    pub token_id: Option<String>,
+    /// Filter by model name (ILIKE match)
+    pub model: Option<String>,
+    /// Filter by policy result: "allow", "deny", "shadow_deny", "hitl_approved", etc.
+    pub policy_result: Option<String>,
+    /// Filter by HTTP method (GET, POST, etc.)
+    pub method: Option<String>,
+    /// Filter by path substring (ILIKE match)
+    pub path_contains: Option<String>,
+    /// Filter by agent name
+    pub agent_name: Option<String>,
+    /// Filter by error type (e.g., "rate_limit", "context_too_long")
+    pub error_type: Option<String>,
+    /// Filter to records created at or after this timestamp (ISO 8601)
+    pub start_time: Option<chrono::DateTime<chrono::Utc>>,
+    /// Filter to records created at or before this timestamp (ISO 8601)
+    pub end_time: Option<chrono::DateTime<chrono::Utc>>,
+}
+
 #[derive(Deserialize)]
 pub struct SpendBreakdownParams {
     pub project_id: Option<Uuid>,

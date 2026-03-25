@@ -142,10 +142,11 @@ export interface ActionSplit {
 
 export interface ActionDynamicRoute {
   action: 'dynamic_route'
-  strategy: 'lowest_cost' | 'lowest_latency' | 'round_robin'
+  strategy: 'lowest_cost' | 'lowest_latency' | 'round_robin' | 'least_busy' | 'weighted_random'
   pool: Array<{
     model: string
     upstream_url: string
+    weight?: number
   }>
   fallback?: {
     model: string
@@ -211,6 +212,9 @@ export type Action =
   | ActionConditionalRoute
   | ActionExternalGuardrail
   | ActionToolScope
+
+// Extract action type strings for type-safe action discrimination
+export type ActionType = Action['action']
 
 // Rule
 export interface Rule {
