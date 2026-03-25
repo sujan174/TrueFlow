@@ -12,8 +12,9 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Badge } from "@/components/ui/badge"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { Search, Brain, ArrowRightLeft, AlertCircle, Key, Settings, User, MapPin, Phone, Building2, Activity } from "lucide-react"
+import { Search, Brain, ArrowRightLeft, AlertCircle, Key, Settings, User, MapPin, Phone, Building2, Activity, Lock, Power } from "lucide-react"
 import type { ActionRedact, Condition, RedactDirection, RedactOnMatch } from "@/lib/types/policy"
 import { PII_REGEX_PATTERNS, PII_NLP_ENTITIES } from "@/lib/types/policy"
 
@@ -38,6 +39,8 @@ interface PresidioConfig {
 // ============================================================================
 
 export function PIITab({ value, onChange }: PIITabProps) {
+  const isEnabled = value !== null
+
   // Direction state
   const [direction, setDirection] = useState<RedactDirection>(
     value?.direction || 'both'
@@ -70,6 +73,20 @@ export function PIITab({ value, onChange }: PIITabProps) {
     direction: 'both',
     patterns: [],
     on_match: 'redact',
+  }
+
+  const toggleEnabled = (enabled: boolean) => {
+    if (enabled) {
+      // Create default action
+      onChange({
+        action: 'redact',
+        direction: 'both',
+        patterns: ['ssn', 'credit_card', 'email'],
+        on_match: 'redact',
+      })
+    } else {
+      onChange(null)
+    }
   }
 
   const updateAction = useCallback((updates: Partial<ActionRedact>) => {
@@ -105,7 +122,46 @@ export function PIITab({ value, onChange }: PIITabProps) {
 
   return (
     <div className="space-y-6">
-      {/* Direction Selection */}
+      {/* Enable Toggle */}
+      <div className="flex items-center justify-between p-4 bg-card border rounded-xl">
+        <div className="flex items-center gap-3">
+          <div className="p-2 rounded-lg bg-muted">
+            <Lock className="h-5 w-5" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium">PII Redaction</span>
+              {isEnabled && <Badge variant="default">Enabled</Badge>}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Detect and redact personally identifiable information
+            </p>
+          </div>
+        </div>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger>
+              <Button
+                type="button"
+                variant={isEnabled ? "default" : "outline"}
+                size="sm"
+                onClick={() => toggleEnabled(!isEnabled)}
+              >
+                <Power className="h-4 w-4 mr-1" />
+                {isEnabled ? 'Disable' : 'Enable'}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              {isEnabled ? 'Disable PII redaction' : 'Enable PII redaction'}
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      </div>
+
+      {/* Configuration (only shown when enabled) */}
+      {isEnabled && (
+        <>
+          {/* Direction Selection */}
       <div>
         <Label className="text-sm font-medium mb-3 block">Apply To</Label>
         <div className="flex gap-2">
@@ -154,7 +210,7 @@ export function PIITab({ value, onChange }: PIITabProps) {
                 return (
                   <TooltipProvider key={pattern.id}>
                     <Tooltip>
-                      <TooltipTrigger asChild>
+                      <TooltipTrigger>
                         <label className="flex items-center gap-2 text-sm cursor-pointer p-2 rounded-lg hover:bg-muted/50 transition-colors">
                           <Checkbox
                             checked={isSelected}
@@ -192,7 +248,7 @@ export function PIITab({ value, onChange }: PIITabProps) {
                 return (
                   <TooltipProvider key={entity.id}>
                     <Tooltip>
-                      <TooltipTrigger asChild>
+                      <TooltipTrigger>
                         <label className="flex items-center gap-2 text-sm cursor-pointer p-2 rounded-lg hover:bg-muted/50 transition-colors">
                           <Checkbox
                             checked={isSelected}
@@ -234,7 +290,7 @@ export function PIITab({ value, onChange }: PIITabProps) {
             return (
               <TooltipProvider key={action}>
                 <Tooltip>
-                  <TooltipTrigger asChild>
+                  <TooltipTrigger>
                     <Button
                       type="button"
                       variant={isSelected ? 'default' : 'outline'}
@@ -277,7 +333,7 @@ export function PIITab({ value, onChange }: PIITabProps) {
               <Label className="text-xs text-muted-foreground">Language</Label>
               <Select
                 value={presidioConfig.language}
-                onValueChange={(v) => handlePresidioConfigChange('language', v)}
+                onValueChange={(v) => v && handlePresidioConfigChange('language', v)}
               >
                 <SelectTrigger className="mt-1">
                   <SelectValue />
@@ -324,6 +380,8 @@ export function PIITab({ value, onChange }: PIITabProps) {
           }}
         />
       </div>
+        </>
+      )}
     </div>
   )
 }

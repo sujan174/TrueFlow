@@ -14,7 +14,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox"
 import { Badge } from "@/components/ui/badge"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { Shield, AlertTriangle, Code, MessageSquareWarning, Scale, Target, Puzzle, Mail, Building, Lock, Plus, Trash2 } from "lucide-react"
+import { Shield, AlertTriangle, Code, MessageSquareWarning, Scale, Target, Puzzle, Mail, Building, Lock, Plus, Trash2, Power } from "lucide-react"
 import type { ActionContentFilter, Rule, Condition } from "@/lib/types/policy"
 import { GUARDRAIL_CATEGORIES } from "@/lib/types/policy"
 
@@ -135,6 +135,8 @@ const GUARDRAIL_PRESETS: GuardrailPreset[] = [
 // ============================================================================
 
 export function GuardrailsTab({ value, onChange }: GuardrailsTabProps) {
+  const isEnabled = value !== null
+
   const [topicAllowlist, setTopicAllowlist] = useState(value?.topic_allowlist?.join('\n') || '')
   const [topicDenylist, setTopicDenylist] = useState(value?.topic_denylist?.join('\n') || '')
   const [customPatterns, setCustomPatterns] = useState<string[]>(value?.custom_patterns || [])
@@ -156,11 +158,27 @@ export function GuardrailsTab({ value, onChange }: GuardrailsTabProps) {
     risk_threshold: 0.5,
   }
 
+  const toggleEnabled = (enabled: boolean) => {
+    if (enabled) {
+      // Create default action
+      onChange({
+        action: 'content_filter',
+        block_jailbreak: true,
+        block_harmful: true,
+        block_code_injection: true,
+        risk_threshold: 0.5,
+      })
+    } else {
+      onChange(null)
+    }
+  }
+
   const updateConfig = useCallback((updates: Partial<ActionContentFilter>) => {
     onChange({ ...config, ...updates })
   }, [config, onChange])
 
-  const applyPreset = (presetId: string) => {
+  const applyPreset = (presetId: string | null) => {
+    if (!presetId) return
     const preset = GUARDRAIL_PRESETS.find(p => p.id === presetId)
     if (preset) {
       onChange({
@@ -209,7 +227,46 @@ export function GuardrailsTab({ value, onChange }: GuardrailsTabProps) {
 
   return (
     <div className="space-y-6">
-      {/* Preset Selector */}
+      {/* Enable Toggle */}
+      <div className="flex items-center justify-between p-4 bg-card border rounded-xl">
+        <div className="flex items-center gap-3">
+          <div className="p-2 rounded-lg bg-muted">
+            <Shield className="h-5 w-5" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium">Content Guardrails</span>
+              {isEnabled && <Badge variant="default">Enabled</Badge>}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Filter harmful content, jailbreaks, and more
+            </p>
+          </div>
+        </div>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger>
+              <Button
+                type="button"
+                variant={isEnabled ? "default" : "outline"}
+                size="sm"
+                onClick={() => toggleEnabled(!isEnabled)}
+              >
+                <Power className="h-4 w-4 mr-1" />
+                {isEnabled ? 'Disable' : 'Enable'}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              {isEnabled ? 'Disable content guardrails' : 'Enable content guardrails'}
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      </div>
+
+      {/* Configuration (only shown when enabled) */}
+      {isEnabled && (
+        <>
+          {/* Preset Selector */}
       <div className="flex items-center gap-3">
         <Label className="text-sm font-medium">Quick Preset</Label>
         <Select onValueChange={applyPreset}>
@@ -258,7 +315,7 @@ export function GuardrailsTab({ value, onChange }: GuardrailsTabProps) {
                 </div>
                 <TooltipProvider>
                   <Tooltip>
-                    <TooltipTrigger asChild>
+                    <TooltipTrigger>
                       <div>
                         <Checkbox
                           checked={enabled}
@@ -355,6 +412,8 @@ export function GuardrailsTab({ value, onChange }: GuardrailsTabProps) {
           (0.0 = least strict, 1.0 = most strict)
         </span>
       </div>
+        </>
+      )}
     </div>
   )
 }

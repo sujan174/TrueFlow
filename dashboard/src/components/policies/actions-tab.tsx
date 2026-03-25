@@ -15,6 +15,11 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Badge } from "@/components/ui/badge"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible"
+import {
   Check,
   X,
   Clock,
@@ -25,6 +30,8 @@ import {
   FileText,
   Tag,
   Link,
+  ChevronDown,
+  ChevronRight,
   type LucideIcon,
 } from "lucide-react"
 import type {
@@ -38,6 +45,7 @@ import type {
   ActionTag,
   ActionWebhook,
   ActionOverride,
+  ActionType,
   RateLimitKey,
 } from "@/lib/types/policy"
 
@@ -49,8 +57,6 @@ interface ActionsTabProps {
   value: Rule | null
   onChange: (rule: Rule | null) => void
 }
-
-type ActionType = Action['action']
 
 interface ActionConfig {
   type: ActionType
@@ -93,38 +99,80 @@ const ACTION_CATEGORIES = {
 // ============================================================================
 
 export function ActionsTab({ value, onChange }: ActionsTabProps) {
-  const [selectedActionType, setSelectedActionType] = useState<ActionType | null>(
-    value?.then ? (Array.isArray(value.then) ? value.then[0]?.action : value.then.action) : null
-  )
+  const [expandedConfigs, setExpandedConfigs] = useState<Set<ActionType>>(new Set())
 
-  const handleActionTypeSelect = (actionType: ActionType) => {
-    setSelectedActionType(actionType)
+  // Get current actions array
+  const currentActions = value?.then
+    ? (Array.isArray(value.then) ? value.then : [value.then])
+    : []
 
-    // Create a default action of the selected type
-    const defaultAction = createDefaultAction(actionType)
+  // Check if an action type is enabled
+  const isActionEnabled = (actionType: ActionType): boolean => {
+    return currentActions.some(a => a.action === actionType)
+  }
+
+  // Get an action by type
+  const getAction = <T extends Action>(actionType: ActionType): T | undefined => {
+    return currentActions.find(a => a.action === actionType) as T | undefined
+  }
+
+  // Toggle an action on/off
+  const toggleAction = (actionType: ActionType, enabled: boolean) => {
+    if (enabled) {
+      // Add default action
+      const defaultAction = createDefaultAction(actionType)
+      const newActions = [...currentActions, defaultAction]
+      onChange({
+        when: value?.when || { always: true },
+        then: newActions,
+      })
+      // Auto-expand config
+      setExpandedConfigs(prev => new Set(prev).add(actionType))
+    } else {
+      // Remove action
+      const newActions = currentActions.filter(a => a.action !== actionType)
+      onChange({
+        when: value?.when || { always: true },
+        then: newActions.length > 0 ? newActions : [],
+      })
+      // Collapse config
+      setExpandedConfigs(prev => {
+        const next = new Set(prev)
+        next.delete(actionType)
+        return next
+      })
+    }
+  }
+
+  // Update an existing action
+  const updateAction = useCallback((actionType: ActionType, updates: Partial<Action>) => {
+    const newActions = currentActions.map(a =>
+      a.action === actionType ? { ...a, ...updates } as Action : a
+    )
     onChange({
       when: value?.when || { always: true },
-      then: defaultAction,
+      then: newActions,
+    })
+  }, [currentActions, value?.when, onChange])
+
+  // Toggle config expansion
+  const toggleExpand = (actionType: ActionType) => {
+    setExpandedConfigs(prev => {
+      const next = new Set(prev)
+      if (next.has(actionType)) {
+        next.delete(actionType)
+      } else {
+        next.add(actionType)
+      }
+      return next
     })
   }
 
-  const updateAction = useCallback((actionUpdates: Partial<Action>) => {
-    if (!value || !selectedActionType) return
-
-    const currentAction = Array.isArray(value.then) ? value.then[0] : value.then
-    const updatedAction = { ...currentAction, ...actionUpdates } as Action
-
-    onChange({
-      ...value,
-      then: updatedAction,
-    })
-  }, [value, selectedActionType, onChange])
-
   return (
     <div className="space-y-6">
-      {/* Action Type Selector */}
+      {/* Action Type Toggles */}
       <div>
-        <Label className="text-sm font-medium mb-3 block">Select Action Type</Label>
+        <Label className="text-sm font-medium mb-3 block">Enable Actions</Label>
 
         {Object.entries(ACTION_CATEGORIES).map(([categoryKey, category]) => (
           <div key={categoryKey} className="mb-4">
@@ -134,31 +182,75 @@ export function ActionsTab({ value, onChange }: ActionsTabProps) {
               </h4>
               <span className="text-xs text-muted-foreground">- {category.description}</span>
             </div>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="space-y-2">
               {ACTION_CONFIGS.filter(a => a.category === categoryKey).map((action) => {
-                const isSelected = selectedActionType === action.type
+                const enabled = isActionEnabled(action.type)
+                const expanded = expandedConfigs.has(action.type)
                 const Icon = action.icon
+
                 return (
-                  <button
-                    key={action.type}
-                    type="button"
-                    onClick={() => handleActionTypeSelect(action.type)}
-                    className={`flex items-center gap-3 p-3 rounded-xl border text-left transition-all ${
-                      isSelected
-                        ? 'border-primary bg-primary/5 ring-2 ring-primary/20'
-                        : 'border-border bg-card hover:bg-muted/50'
-                    }`}
-                  >
-                    <div className={`p-2 rounded-lg ${isSelected ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'}`}>
-                      <Icon className="h-4 w-4" />
+                  <div key={action.type} className="border rounded-xl overflow-hidden">
+                    {/* Toggle Row */}
+                    <div
+                      className={`flex items-center gap-3 p-3 transition-colors ${
+                        enabled ? 'bg-primary/5' : 'bg-card hover:bg-muted/50'
+                      }`}
+                    >
+                      <Checkbox
+                        checked={enabled}
+                        onCheckedChange={(checked) => toggleAction(action.type, checked === true)}
+                      />
+                      <div className="p-2 rounded-lg bg-muted">
+                        <Icon className="h-4 w-4" />
+                      </div>
+                      <div className="flex-1">
+                        <span className={`text-sm font-medium ${enabled ? 'text-foreground' : 'text-muted-foreground'}`}>
+                          {action.label}
+                        </span>
+                        <p className="text-xs text-muted-foreground">{action.description}</p>
+                      </div>
+                      {enabled && (
+                        <>
+                          <Badge variant="default" className="text-xs">Enabled</Badge>
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger>
+                                <Button
+                                  variant="ghost"
+                                  size="icon-sm"
+                                  onClick={() => toggleExpand(action.type)}
+                                >
+                                  {expanded ? (
+                                    <ChevronDown className="h-4 w-4" />
+                                  ) : (
+                                    <ChevronRight className="h-4 w-4" />
+                                  )}
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                {expanded ? 'Hide configuration' : 'Show configuration'}
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        </>
+                      )}
                     </div>
-                    <div>
-                      <span className={`text-sm font-medium ${isSelected ? 'text-foreground' : 'text-muted-foreground'}`}>
-                        {action.label}
-                      </span>
-                      <p className="text-xs text-muted-foreground line-clamp-1">{action.description}</p>
-                    </div>
-                  </button>
+
+                    {/* Configuration Panel (collapsible) */}
+                    {enabled && (
+                      <Collapsible open={expanded} onOpenChange={() => toggleExpand(action.type)}>
+                        <CollapsibleContent>
+                          <div className="p-4 border-t bg-muted/30">
+                            <ActionConfigForm
+                              actionType={action.type}
+                              value={getAction(action.type)}
+                              onChange={(updates) => updateAction(action.type, updates)}
+                            />
+                          </div>
+                        </CollapsibleContent>
+                      </Collapsible>
+                    )}
+                  </div>
                 )
               })}
             </div>
@@ -166,17 +258,22 @@ export function ActionsTab({ value, onChange }: ActionsTabProps) {
         ))}
       </div>
 
-      {/* Action Configuration */}
-      {selectedActionType && (
+      {/* Active Actions Summary */}
+      {currentActions.length > 0 && (
         <div className="p-4 bg-card border rounded-xl">
-          <h4 className="text-sm font-medium mb-4">
-            Configure {ACTION_CONFIGS.find(a => a.type === selectedActionType)?.label}
-          </h4>
-          <ActionConfigForm
-            actionType={selectedActionType}
-            value={Array.isArray(value?.then) ? value?.then[0] : value?.then}
-            onChange={updateAction}
-          />
+          <h4 className="text-sm font-medium mb-2">Active Actions ({currentActions.length})</h4>
+          <div className="flex flex-wrap gap-2">
+            {currentActions.map((action, index) => {
+              const config = ACTION_CONFIGS.find(a => a.type === action.action)
+              const Icon = config?.icon || Check
+              return (
+                <Badge key={`${action.action}-${index}`} variant="secondary" className="gap-1.5">
+                  <Icon className="h-3 w-3" />
+                  {config?.label || action.action}
+                </Badge>
+              )
+            })}
+          </div>
         </div>
       )}
     </div>
@@ -215,6 +312,10 @@ function ActionConfigForm({ actionType, value, onChange }: ActionConfigFormProps
           This action explicitly allows the request to proceed. No configuration needed.
         </p>
       )
+    case 'require_approval':
+      return <RequireApprovalConfig value={value} onChange={onChange} />
+    case 'transform':
+      return <TransformConfig value={value} onChange={onChange} />
     default:
       return (
         <p className="text-sm text-muted-foreground">
@@ -237,7 +338,7 @@ function RateLimitConfig({ value, onChange }: { value: ActionRateLimit | undefin
         <Label className="text-xs text-muted-foreground">Time Window</Label>
         <Select
           value={config.window}
-          onValueChange={(v) => onChange({ window: v })}
+          onValueChange={(v) => v && onChange({ window: v })}
         >
           <SelectTrigger className="mt-1">
             <SelectValue />
@@ -264,7 +365,7 @@ function RateLimitConfig({ value, onChange }: { value: ActionRateLimit | undefin
         <Label className="text-xs text-muted-foreground">Rate Limit Key</Label>
         <Select
           value={config.key || 'token'}
-          onValueChange={(v) => onChange({ key: v as RateLimitKey })}
+          onValueChange={(v) => v && onChange({ key: v as RateLimitKey })}
         >
           <SelectTrigger className="mt-1">
             <SelectValue />
@@ -341,7 +442,7 @@ function LogConfig({ value, onChange }: { value: ActionLog | undefined; onChange
         <Label className="text-xs text-muted-foreground">Log Level</Label>
         <Select
           value={config.level || 'info'}
-          onValueChange={(v) => onChange({ level: v })}
+          onValueChange={(v) => v && onChange({ level: v })}
         >
           <SelectTrigger className="mt-1">
             <SelectValue />
@@ -459,6 +560,53 @@ function OverrideConfig({ value, onChange }: { value: ActionOverride | undefined
       <p className="text-xs text-muted-foreground mt-2">
         Override fields in the request body. Useful for forcing model downgrades or setting defaults.
       </p>
+    </div>
+  )
+}
+
+function RequireApprovalConfig({ value, onChange }: { value: Action | undefined; onChange: (updates: Partial<Action>) => void }) {
+  const config = value || { action: 'require_approval' as const, timeout: '30m', fallback: 'deny' }
+
+  return (
+    <div className="grid grid-cols-2 gap-4">
+      <div>
+        <Label className="text-xs text-muted-foreground">Timeout</Label>
+        <Input
+          value={config.timeout || '30m'}
+          onChange={(e) => onChange({ timeout: e.target.value })}
+          placeholder="30m"
+          className="mt-1"
+        />
+      </div>
+      <div>
+        <Label className="text-xs text-muted-foreground">Fallback Action</Label>
+        <Select
+          value={config.fallback || 'deny'}
+          onValueChange={(v) => v && onChange({ fallback: v })}
+        >
+          <SelectTrigger className="mt-1">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="deny">Deny</SelectItem>
+            <SelectItem value="allow">Allow</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+    </div>
+  )
+}
+
+function TransformConfig({ value, onChange }: { value: Action | undefined; onChange: (updates: Partial<Action>) => void }) {
+  const config = value || { action: 'transform' as const, operations: [] }
+
+  return (
+    <div>
+      <Label className="text-xs text-muted-foreground">Transform Operations</Label>
+      <p className="text-xs text-muted-foreground mt-1 mb-2">
+        Configure transform operations in JSON mode for full control.
+      </p>
+      <Badge variant="secondary">{config.operations?.length || 0} operations configured</Badge>
     </div>
   )
 }

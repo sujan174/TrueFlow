@@ -12,8 +12,9 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Badge } from "@/components/ui/badge"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { DollarSign, Zap, RefreshCw, BarChart3, Dice5, Plus, Trash2, Zap as Bolt } from "lucide-react"
+import { DollarSign, Zap, RefreshCw, BarChart3, Dice5, Plus, Trash2, Zap as Bolt, Route, Power } from "lucide-react"
 import type { ActionDynamicRoute, Condition } from "@/lib/types/policy"
 import { ROUTING_STRATEGIES } from "@/lib/types/policy"
 
@@ -72,6 +73,8 @@ const DEFAULT_CIRCUIT_BREAKER: CircuitBreakerConfig = {
 // ============================================================================
 
 export function RoutingTab({ value, onChange }: RoutingTabProps) {
+  const isEnabled = value !== null
+
   const [strategy, setStrategy] = useState<ActionDynamicRoute['strategy']>(
     value?.strategy || 'lowest_cost'
   )
@@ -85,6 +88,19 @@ export function RoutingTab({ value, onChange }: RoutingTabProps) {
   const [fallback, setFallback] = useState<string>(value?.fallback?.model || '')
   const [fallbackUrl, setFallbackUrl] = useState<string>(value?.fallback?.upstream_url || '')
   const [circuitBreaker, setCircuitBreaker] = useState<CircuitBreakerConfig>(DEFAULT_CIRCUIT_BREAKER)
+
+  const toggleEnabled = (enabled: boolean) => {
+    if (enabled) {
+      // Create default action
+      onChange({
+        action: 'dynamic_route',
+        strategy: 'lowest_cost',
+        pool: [],
+      })
+    } else {
+      onChange(null)
+    }
+  }
 
   const updateAction = useCallback((updates: Partial<ActionDynamicRoute>) => {
     if (value) {
@@ -147,7 +163,46 @@ export function RoutingTab({ value, onChange }: RoutingTabProps) {
 
   return (
     <div className="space-y-6">
-      {/* Strategy Selection */}
+      {/* Enable Toggle */}
+      <div className="flex items-center justify-between p-4 bg-card border rounded-xl">
+        <div className="flex items-center gap-3">
+          <div className="p-2 rounded-lg bg-muted">
+            <Route className="h-5 w-5" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium">Dynamic Routing</span>
+              {isEnabled && <Badge variant="default">Enabled</Badge>}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Route requests to multiple models with load balancing
+            </p>
+          </div>
+        </div>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger>
+              <Button
+                type="button"
+                variant={isEnabled ? "default" : "outline"}
+                size="sm"
+                onClick={() => toggleEnabled(!isEnabled)}
+              >
+                <Power className="h-4 w-4 mr-1" />
+                {isEnabled ? 'Disable' : 'Enable'}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              {isEnabled ? 'Disable dynamic routing' : 'Enable dynamic routing'}
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      </div>
+
+      {/* Configuration (only shown when enabled) */}
+      {isEnabled && (
+        <>
+          {/* Strategy Selection */}
       <div>
         <Label className="text-sm font-medium mb-3 block">Routing Strategy</Label>
         <div className="grid grid-cols-5 gap-2">
@@ -343,6 +398,8 @@ export function RoutingTab({ value, onChange }: RoutingTabProps) {
           />
         </div>
       </div>
+        </>
+      )}
     </div>
   )
 }
