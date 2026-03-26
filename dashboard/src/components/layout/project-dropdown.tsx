@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { ChevronDown, Check, Plus, Settings, FolderOpen } from "lucide-react"
+import { ChevronDown, Check, FolderOpen, Settings } from "lucide-react"
 import { useProject } from "@/contexts/project-context"
 import { cn } from "@/lib/utils"
 
@@ -29,12 +29,6 @@ export function ProjectDropdown() {
   const handleManageProjects = () => {
     setIsOpen(false)
     router.push("/settings/projects")
-  }
-
-  const handleNewProject = () => {
-    setIsOpen(false)
-    // For now, navigate to settings/projects to create
-    router.push("/settings/projects?action=new")
   }
 
   return (
@@ -81,20 +75,13 @@ export function ProjectDropdown() {
               ))}
             </div>
 
-            {/* Actions */}
+            {/* Manage Projects button */}
             <div className="border-t py-1">
               <button
-                onClick={handleNewProject}
-                className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted transition-colors"
-              >
-                <Plus className="w-4 h-4 text-muted-foreground" />
-                <span>New Project</span>
-              </button>
-              <button
                 onClick={handleManageProjects}
-                className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted transition-colors"
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
               >
-                <Settings className="w-4 h-4 text-muted-foreground" />
+                <Settings className="w-4 h-4" />
                 <span>Manage Projects</span>
               </button>
             </div>

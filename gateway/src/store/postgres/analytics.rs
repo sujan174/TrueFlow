@@ -403,6 +403,42 @@ impl PgStore {
         Ok(rows)
     }
 
+    /// Get experiment timeseries data for charts.
+    /// Groups audit logs by hour and variant for the specified experiment.
+    pub async fn get_experiment_timeseries(
+        &self,
+        project_id: Uuid,
+        experiment_name: &str,
+        hours: i32,
+    ) -> anyhow::Result<Vec<crate::models::analytics::ExperimentTimeseriesPoint>> {
+        // Dynamic bucket size based on range
+        let bucket = if hours <= 24 { "hour" } else { "day" };
+
+        let rows = sqlx::query_as::<_, crate::models::analytics::ExperimentTimeseriesPoint>(
+            r#"
+            SELECT
+                date_trunc($4, created_at) as bucket,
+                COALESCE(variant_name, 'baseline') as variant_name,
+                COUNT(*)::bigint as request_count,
+                COALESCE(AVG(response_latency_ms)::float8, 0.0) as avg_latency_ms,
+                COALESCE(SUM(cost_usd)::float8, 0.0) as total_cost_usd
+            FROM audit_logs
+            WHERE project_id = $1
+              AND experiment_name = $2
+              AND created_at > now() - ($3 || ' hours')::interval
+            GROUP BY 1, 2
+            ORDER BY 1 ASC, 2 ASC
+            "#,
+        )
+        .bind(project_id)
+        .bind(experiment_name)
+        .bind(hours.to_string())
+        .bind(bucket)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows)
+    }
+
     // ── User Attribution Analytics (SaaS Builder Support) ─────────────────────────
 
     /// Spend breakdown grouped by external_user_id (customer-level analytics).

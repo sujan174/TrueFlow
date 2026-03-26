@@ -5,11 +5,11 @@
 //! soft-deletes that policy. Results are aggregated from audit log data.
 
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     Extension, Json,
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -65,8 +65,23 @@ pub async fn create_experiment(
     auth.require_scope("experiments:write")?;
     let project_id = auth.default_project_id();
 
+    // Validate experiment name
+    if payload.name.is_empty() || payload.name.len() > 100 {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    // Prevent confusion with the reserved prefix
+    if payload.name.contains(EXPERIMENT_PREFIX) {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    // Validate variants
     if payload.variants.len() < 2 {
         return Err(StatusCode::BAD_REQUEST);
+    }
+    // Validate variant weights are non-zero
+    for v in &payload.variants {
+        if v.weight == 0 {
+            return Err(StatusCode::BAD_REQUEST);
+        }
     }
 
     // Build Split variants
@@ -350,6 +365,16 @@ pub async fn update_experiment(
         .strip_prefix(EXPERIMENT_PREFIX)
         .unwrap_or(&policy.name);
 
+    // Extract the original condition from the existing policy rules
+    // This preserves targeting conditions like model filters or user segments
+    let original_condition = policy
+        .rules
+        .as_array()
+        .and_then(|arr| arr.first())
+        .and_then(|rule| rule.get("when"))
+        .cloned()
+        .unwrap_or_else(|| serde_json::json!({"always": true}));
+
     // Build updated Split variants
     let split_variants: Vec<serde_json::Value> = payload
         .variants
@@ -367,8 +392,9 @@ pub async fn update_experiment(
         })
         .collect();
 
+    // Preserve the original condition when updating
     let rules = serde_json::json!([{
-        "when": {"always": true},
+        "when": original_condition,
         "then": {
             "action": "split",
             "experiment": experiment_name,
@@ -397,4 +423,86 @@ pub async fn update_experiment(
         "status": "running",
         "variants": split_variants,
     })))
+}
+
+// ── Timeseries Handler ─────────────────────────────────────────────
+
+/// Query parameters for timeseries endpoint
+#[derive(Debug, Deserialize)]
+pub struct TimeseriesQuery {
+    /// Number of hours to look back (default: 24, max: 168)
+    #[serde(default = "default_hours")]
+    pub range: i32,
+}
+
+fn default_hours() -> i32 {
+    24
+}
+
+/// Timeseries response point
+#[derive(Debug, Serialize)]
+pub struct TimeseriesPoint {
+    pub bucket: chrono::DateTime<chrono::Utc>,
+    pub variant_name: String,
+    pub request_count: i64,
+    pub avg_latency_ms: f64,
+    pub total_cost_usd: f64,
+}
+
+/// GET /experiments/:id/timeseries — timeseries data for charts.
+pub async fn get_experiment_timeseries(
+    State(state): State<Arc<AppState>>,
+    Extension(auth): Extension<AuthContext>,
+    Path(id): Path<Uuid>,
+    Query(query): Query<TimeseriesQuery>,
+) -> Result<Json<Vec<TimeseriesPoint>>, StatusCode> {
+    auth.require_scope("experiments:read")?;
+    let project_id = auth.default_project_id();
+
+    // Clamp hours to reasonable range
+    let hours = query.range.clamp(1, 168);
+
+    // Find the policy to get the experiment name
+    let policies = state
+        .db
+        .list_policies(project_id, 1000, 0)
+        .await
+        .map_err(|e| {
+            tracing::error!("get_experiment_timeseries failed: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    let policy = policies
+        .into_iter()
+        .find(|p| p.id == id && p.name.starts_with(EXPERIMENT_PREFIX))
+        .ok_or(StatusCode::NOT_FOUND)?;
+
+    let experiment_name = policy
+        .name
+        .strip_prefix(EXPERIMENT_PREFIX)
+        .unwrap_or(&policy.name);
+
+    // Fetch timeseries data
+    let timeseries = state
+        .db
+        .get_experiment_timeseries(project_id, experiment_name, hours)
+        .await
+        .map_err(|e| {
+            tracing::error!("get_experiment_timeseries query failed: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    // Convert to response format
+    let points: Vec<TimeseriesPoint> = timeseries
+        .into_iter()
+        .map(|p| TimeseriesPoint {
+            bucket: p.bucket,
+            variant_name: p.variant_name,
+            request_count: p.request_count,
+            avg_latency_ms: p.avg_latency_ms,
+            total_cost_usd: p.total_cost_usd,
+        })
+        .collect();
+
+    Ok(Json(points))
 }

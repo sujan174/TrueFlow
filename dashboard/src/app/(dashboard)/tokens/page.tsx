@@ -1,7 +1,9 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Plus, Key, MoreHorizontal, Trash2, Eye } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { Plus, Key, MoreHorizontal, Trash2, Eye, Users, Copy, Check } from "lucide-react"
+import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -10,11 +12,24 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { toast } from "sonner"
 import {
   listTokensWithParams,
   revokeToken,
+  createToken,
+  listTeams,
+  listCredentials,
   type TokenRow,
+  type Team,
+  type CredentialMeta,
 } from "@/lib/api"
 
 function formatRelativeTime(dateString: string): string {
@@ -63,23 +78,216 @@ function StatusBadge({ isActive }: { isActive: boolean }) {
   )
 }
 
+// Token Creation Modal
+function CreateTokenModal({
+  open,
+  onOpenChange,
+  teams,
+  credentials,
+  onSuccess,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  teams: Team[]
+  credentials: CredentialMeta[]
+  onSuccess: () => void
+}) {
+  const [name, setName] = useState("")
+  const [teamId, setTeamId] = useState("")
+  const [credentialId, setCredentialId] = useState("")
+  const [upstreamUrl, setUpstreamUrl] = useState("https://api.openai.com/v1")
+  const [externalUserId, setExternalUserId] = useState("")
+  const [purpose, setPurpose] = useState<"llm" | "tool" | "both">("llm")
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [createdToken, setCreatedToken] = useState<string | null>(null)
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setIsSubmitting(true)
+    try {
+      const response = await createToken({
+        name,
+        team_id: teamId || undefined,
+        credential_id: credentialId || undefined,
+        upstream_url: upstreamUrl,
+        external_user_id: externalUserId || undefined,
+        purpose,
+      })
+      setCreatedToken(response.token_id)
+      toast.success("Token created successfully")
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to create token")
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const handleClose = () => {
+    setName("")
+    setTeamId("")
+    setCredentialId("")
+    setUpstreamUrl("https://api.openai.com/v1")
+    setExternalUserId("")
+    setPurpose("llm")
+    setCreatedToken(null)
+    onOpenChange(false)
+    if (createdToken) {
+      onSuccess()
+    }
+  }
+
+  if (createdToken) {
+    return (
+      <Dialog open={open} onOpenChange={handleClose}>
+        <DialogContent className="sm:max-w-md" showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle className="text-green-600">Token Created</DialogTitle>
+            <DialogDescription>
+              Copy your token ID now. It will be shown in the list.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="bg-muted rounded-lg p-3 font-mono text-sm break-all">
+            <code className="text-xs">{createdToken}</code>
+          </div>
+          <DialogFooter>
+            <Button
+              onClick={handleClose}
+            >
+              Done
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    )
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={handleClose}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Create Token</DialogTitle>
+          <DialogDescription>
+            Create a new virtual API key for your gateway.
+          </DialogDescription>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="col-span-2">
+              <label className="text-sm font-medium">Name</label>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="w-full mt-1 px-3 py-2 text-sm border rounded-lg bg-background"
+                placeholder="My Token"
+                required
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Team</label>
+              <select
+                value={teamId}
+                onChange={(e) => setTeamId(e.target.value)}
+                className="w-full mt-1 px-3 py-2 text-sm border rounded-lg bg-background"
+              >
+                <option value="">No team</option>
+                {teams.map((team) => (
+                  <option key={team.id} value={team.id}>
+                    {team.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Purpose</label>
+              <select
+                value={purpose}
+                onChange={(e) => setPurpose(e.target.value as "llm" | "tool" | "both")}
+                className="w-full mt-1 px-3 py-2 text-sm border rounded-lg bg-background"
+              >
+                <option value="llm">LLM</option>
+                <option value="tool">Tool</option>
+                <option value="both">Both</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Credential</label>
+              <select
+                value={credentialId}
+                onChange={(e) => setCredentialId(e.target.value)}
+                className="w-full mt-1 px-3 py-2 text-sm border rounded-lg bg-background"
+              >
+                <option value="">Default</option>
+                {credentials.map((cred) => (
+                  <option key={cred.id} value={cred.id}>
+                    {cred.name} ({cred.provider})
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-sm font-medium">External User ID</label>
+              <input
+                type="text"
+                value={externalUserId}
+                onChange={(e) => setExternalUserId(e.target.value)}
+                className="w-full mt-1 px-3 py-2 text-sm border rounded-lg bg-background"
+                placeholder="user_123"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Upstream URL</label>
+              <input
+                type="url"
+                value={upstreamUrl}
+                onChange={(e) => setUpstreamUrl(e.target.value)}
+                className="w-full mt-1 px-3 py-2 text-sm border rounded-lg bg-background"
+                placeholder="https://api.openai.com/v1"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={handleClose}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={isSubmitting}>
+              {isSubmitting ? "Creating..." : "Create Token"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 export default function TokensPage() {
+  const router = useRouter()
   const [tokens, setTokens] = useState<TokenRow[]>([])
+  const [teams, setTeams] = useState<Team[]>([])
+  const [credentials, setCredentials] = useState<CredentialMeta[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [createModalOpen, setCreateModalOpen] = useState(false)
+
+  const fetchData = async () => {
+    try {
+      const [tokensData, teamsData, credsData] = await Promise.all([
+        listTokensWithParams({ limit: 100 }),
+        listTeams(),
+        listCredentials(),
+      ])
+      setTokens(tokensData)
+      setTeams(teamsData)
+      setCredentials(credsData)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load tokens")
+    } finally {
+      setLoading(false)
+    }
+  }
 
   useEffect(() => {
-    async function fetchTokens() {
-      try {
-        const data = await listTokensWithParams({ limit: 100 })
-        setTokens(data)
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load tokens")
-      } finally {
-        setLoading(false)
-      }
-    }
-    fetchTokens()
+    fetchData()
   }, [])
 
   const handleRevoke = async (id: string) => {
@@ -92,6 +300,9 @@ export default function TokensPage() {
       toast.error(err instanceof Error ? err.message : "Failed to revoke token")
     }
   }
+
+  // Create a map of team IDs to team names
+  const teamMap = new Map(teams.map((t) => [t.id, t.name]))
 
   return (
     <div className="flex-1 flex flex-col min-w-0">
@@ -106,7 +317,7 @@ export default function TokensPage() {
               Manage virtual API keys for your gateway
             </p>
           </div>
-          <Button className="gap-2">
+          <Button className="gap-2" onClick={() => setCreateModalOpen(true)}>
             <Plus className="h-4 w-4" />
             Create Token
           </Button>
@@ -135,6 +346,7 @@ export default function TokensPage() {
                   <th className="px-4 py-3 text-left">Name</th>
                   <th className="px-4 py-3 text-left">Token ID</th>
                   <th className="px-4 py-3 text-left">Purpose</th>
+                  <th className="px-4 py-3 text-left">Team</th>
                   <th className="px-4 py-3 text-left">Status</th>
                   <th className="px-4 py-3 text-left">External User</th>
                   <th className="px-4 py-3 text-left">Created</th>
@@ -145,7 +357,8 @@ export default function TokensPage() {
                 {tokens.map((token) => (
                   <tr
                     key={token.id}
-                    className="border-b last:border-0 hover:bg-muted/30 transition-colors"
+                    className="border-b last:border-0 hover:bg-muted/30 transition-colors cursor-pointer"
+                    onClick={() => router.push(`/tokens/${token.id}`)}
                   >
                     <td className="px-4 py-3">
                       <span className="text-sm font-medium">{token.name}</span>
@@ -157,6 +370,20 @@ export default function TokensPage() {
                     </td>
                     <td className="px-4 py-3">
                       <PurposeBadge purpose={token.purpose} />
+                    </td>
+                    <td className="px-4 py-3">
+                      {token.team_id ? (
+                        <Link
+                          href={`/settings/teams/${token.team_id}`}
+                          className="text-sm text-primary hover:underline flex items-center gap-1"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <Users className="h-3 w-3" />
+                          {teamMap.get(token.team_id) || token.team_id.slice(0, 8)}
+                        </Link>
+                      ) : (
+                        <span className="text-sm text-muted-foreground">—</span>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       <StatusBadge isActive={token.is_active} />
@@ -173,20 +400,23 @@ export default function TokensPage() {
                     </td>
                     <td className="px-4 py-3 text-right">
                       <DropdownMenu>
-                        <DropdownMenuTrigger>
+                        <DropdownMenuTrigger onClick={(e) => e.stopPropagation()}>
                           <Button variant="ghost" size="icon-sm">
                             <MoreHorizontal className="h-4 w-4" />
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => router.push(`/tokens/${token.id}`)}>
                             <Eye className="h-4 w-4 mr-2" />
                             View Details
                           </DropdownMenuItem>
                           {token.is_active && (
                             <DropdownMenuItem
                               className="text-destructive"
-                              onClick={() => handleRevoke(token.id)}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleRevoke(token.id)
+                              }}
                             >
                               <Trash2 className="h-4 w-4 mr-2" />
                               Revoke
@@ -202,6 +432,15 @@ export default function TokensPage() {
           )}
         </div>
       </div>
+
+      {/* Create Token Modal */}
+      <CreateTokenModal
+        open={createModalOpen}
+        onOpenChange={setCreateModalOpen}
+        teams={teams}
+        credentials={credentials}
+        onSuccess={fetchData}
+      />
     </div>
   )
 }

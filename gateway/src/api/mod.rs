@@ -544,6 +544,10 @@ pub fn api_router(state: Arc<AppState>) -> Router<Arc<AppState>> {
             get(experiment_handlers::get_experiment_results),
         )
         .route(
+            "/experiments/:id/timeseries",
+            get(experiment_handlers::get_experiment_timeseries),
+        )
+        .route(
             "/experiments/:id/stop",
             post(experiment_handlers::stop_experiment),
         )

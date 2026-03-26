@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Header } from "@/components/layout/header";
 import { ProjectProviderWrapper } from "@/components/layout/project-provider-wrapper";
+import { PermissionsProvider } from "@/contexts/permissions-context";
 
 export default async function DashboardLayout({
   children,
@@ -29,15 +30,17 @@ export default async function DashboardLayout({
 
   return (
     <ProjectProviderWrapper initialProjectId={lastProjectId}>
-      <div className="flex h-screen bg-background">
-        <Sidebar />
-        <div className="flex-1 flex flex-col min-w-0">
-          <Header user={user} />
-          <main className="flex-1 overflow-auto">
-            {children}
-          </main>
+      <PermissionsProvider>
+        <div className="flex h-screen bg-background">
+          <Sidebar />
+          <div className="flex-1 flex flex-col min-w-0">
+            <Header user={user} />
+            <main className="flex-1 overflow-auto">
+              {children}
+            </main>
+          </div>
         </div>
-      </div>
+      </PermissionsProvider>
     </ProjectProviderWrapper>
   );
 }

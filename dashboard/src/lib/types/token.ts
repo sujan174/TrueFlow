@@ -1,12 +1,16 @@
 // Token types - from gateway/src/store/postgres/types.rs
 
+// JSON value type - matches backend's serde_json::Value
+// Can be null, boolean, number, string, array, or object
+type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue }
+
 export interface TokenRow {
   id: string                    // tf_v1_xxx_tok_xxx format
   project_id: string
   name: string
   credential_id: string | null
   upstream_url: string
-  scopes: unknown               // JSON value
+  scopes: JsonValue             // JSON value
   policy_ids: string[]          // UUID array
   is_active: boolean            // true = active, false = revoked
   expires_at: string | null
@@ -14,12 +18,12 @@ export interface TokenRow {
   log_level: number             // 0=metadata, 1=redacted, 2=full
   upstreams: UpstreamTarget[] | null     // Multi-upstream config
   circuit_breaker: CircuitBreakerConfig | null
-  allowed_models: string[] | null
+  allowed_models: JsonValue     // JSON value (typically string[] or null)
   allowed_model_group_ids: string[] | null
   team_id: string | null
-  tags: string[] | null
-  mcp_allowed_tools: string[] | null
-  mcp_blocked_tools: string[] | null
+  tags: JsonValue               // JSON value (typically string[] or null)
+  mcp_allowed_tools: JsonValue  // JSON value (typically string[] or null)
+  mcp_blocked_tools: JsonValue  // JSON value (typically string[] or null)
   guardrail_header_mode: string | null
   external_user_id: string | null
   metadata: Record<string, unknown> | null
@@ -43,6 +47,7 @@ export interface CircuitBreakerConfig {
 }
 
 // CreateTokenRequest - from gateway/src/api/handlers/dtos.rs
+// Note: Backend uses serde_json::Value for flexibility, but we typically use arrays
 export interface CreateTokenRequest {
   name: string
   credential_id?: string
@@ -54,11 +59,11 @@ export interface CreateTokenRequest {
   circuit_breaker?: CircuitBreakerConfig
   fallback_url?: string
   upstreams?: UpstreamTarget[]
-  allowed_models?: string[]
+  allowed_models?: string[]     // Sent as JSON array to backend
   team_id?: string
-  tags?: string[]
-  mcp_allowed_tools?: string[]
-  mcp_blocked_tools?: string[]
+  tags?: string[]               // Sent as JSON array to backend
+  mcp_allowed_tools?: string[]  // Sent as JSON array to backend
+  mcp_blocked_tools?: string[]  // Sent as JSON array to backend
   external_user_id?: string
   metadata?: Record<string, unknown>
   purpose?: 'llm' | 'tool' | 'both'

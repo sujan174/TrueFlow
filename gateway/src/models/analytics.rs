@@ -67,6 +67,17 @@ pub struct ExperimentSummary {
     pub error_count: i64,
 }
 
+/// Experiment timeseries point for A/B testing charts.
+/// Provides per-variant metrics over time buckets.
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
+pub struct ExperimentTimeseriesPoint {
+    pub bucket: DateTime<Utc>,
+    pub variant_name: String,
+    pub request_count: i64,
+    pub avg_latency_ms: f64,
+    pub total_cost_usd: f64,
+}
+
 // ── Provider Analytics Types ──────────────────────────────────────
 
 /// Model usage breakdown for analytics dashboard

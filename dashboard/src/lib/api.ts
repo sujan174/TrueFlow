@@ -1895,3 +1895,119 @@ export async function renderPrompt(slug: string, data?: RenderRequest): Promise<
 export async function listPromptFolders(): Promise<string[]> {
   return gatewayFetch<string[]>("/prompts/folders")
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EXPERIMENTS API (A/B Testing)
+// ═══════════════════════════════════════════════════════════════════════════
+
+import type {
+  Experiment,
+  ExperimentVariant,
+  ExperimentResult,
+  ExperimentWithResults,
+  CreateExperimentRequest,
+  UpdateExperimentRequest,
+  ExperimentTimeseriesPoint,
+} from "./types/experiment"
+
+export type {
+  Experiment,
+  ExperimentVariant,
+  ExperimentResult,
+  ExperimentWithResults,
+  CreateExperimentRequest,
+  UpdateExperimentRequest,
+  ExperimentTimeseriesPoint,
+}
+
+/**
+ * List all experiments
+ */
+export async function listExperiments(): Promise<Experiment[]> {
+  return gatewayFetch<Experiment[]>("/experiments", {
+    next: { revalidate: 30 },
+  })
+}
+
+/**
+ * Get a single experiment with results
+ */
+export async function getExperiment(id: string): Promise<ExperimentWithResults> {
+  return gatewayFetch<ExperimentWithResults>(`/experiments/${id}`, {
+    next: { revalidate: 30 },
+  })
+}
+
+/**
+ * Create a new experiment
+ */
+export async function createExperiment(data: CreateExperimentRequest): Promise<Experiment> {
+  const response = await fetch("/api/gateway/experiments", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  })
+
+  if (!response.ok) {
+    const error = await response.text()
+    throw new Error(`Failed to create experiment: ${response.status} ${error}`)
+  }
+
+  return response.json()
+}
+
+/**
+ * Update experiment variants
+ */
+export async function updateExperiment(id: string, data: UpdateExperimentRequest): Promise<Experiment> {
+  const response = await fetch(`/api/gateway/experiments/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  })
+
+  if (!response.ok) {
+    const error = await response.text()
+    throw new Error(`Failed to update experiment: ${response.status} ${error}`)
+  }
+
+  return response.json()
+}
+
+/**
+ * Stop an experiment
+ */
+export async function stopExperiment(id: string): Promise<{ id: string; status: string }> {
+  const response = await fetch(`/api/gateway/experiments/${id}/stop`, {
+    method: "POST",
+  })
+
+  if (!response.ok) {
+    const error = await response.text()
+    throw new Error(`Failed to stop experiment: ${response.status} ${error}`)
+  }
+
+  return response.json()
+}
+
+/**
+ * Get experiment results (per-variant metrics)
+ */
+export async function getExperimentResults(id: string): Promise<ExperimentWithResults> {
+  return gatewayFetch<ExperimentWithResults>(`/experiments/${id}/results`, {
+    next: { revalidate: 30 },
+  })
+}
+
+/**
+ * Get experiment timeseries data for charts
+ */
+export async function getExperimentTimeseries(
+  id: string,
+  hours = 24
+): Promise<ExperimentTimeseriesPoint[]> {
+  return gatewayFetch<ExperimentTimeseriesPoint[]>(
+    `/experiments/${id}/timeseries?range=${hours}`,
+    { next: { revalidate: 60 } }
+  )
+}

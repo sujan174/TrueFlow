@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { createClient } from "@/lib/supabase/server"
 
 const GATEWAY_URL = process.env.GATEWAY_URL || "http://localhost:8443"
 const ADMIN_KEY = process.env.TRUEFLOW_ADMIN_KEY
@@ -18,8 +19,29 @@ export async function POST(request: NextRequest) {
     )
   }
 
+  // SECURITY: Validate the Supabase session before processing
+  // This prevents auth bypass attacks where an attacker could
+  // impersonate any user by sending their own supabase_id
+  const supabase = await createClient()
+  const { data: { user }, error: authError } = await supabase.auth.getUser()
+
+  if (authError || !user) {
+    return NextResponse.json(
+      { error: "Unauthorized" },
+      { status: 401 }
+    )
+  }
+
   try {
     const body: SyncUserRequest = await request.json()
+
+    // SECURITY: Ensure the authenticated user can only sync their own data
+    if (body.supabase_id !== user.id) {
+      return NextResponse.json(
+        { error: "Cannot sync other users" },
+        { status: 403 }
+      )
+    }
 
     // Validate required fields
     if (!body.supabase_id || !body.email) {

@@ -3,10 +3,7 @@
 import { useTheme } from "next-themes"
 import { useEffect, useState } from "react"
 import { useRouter, usePathname } from "next/navigation"
-import { createClient } from "@/lib/supabase/client"
 import {
-  LogOut,
-  User as UserIcon,
   Sun,
   Moon,
   Search,
@@ -14,14 +11,6 @@ import {
   Home,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { ProjectDropdown } from "@/components/layout/project-dropdown"
 import { cn } from "@/lib/utils"
@@ -41,26 +30,18 @@ const pageTitles: Record<string, string> = {
   "/settings/team": "Team Settings",
   "/settings/sso": "SSO Settings",
   "/settings/billing": "Billing",
+  "/settings/account": "Account",
 }
 
 export function Header({ user }: HeaderProps) {
   const router = useRouter()
   const pathname = usePathname()
-  const supabase = createClient()
   const { theme, setTheme } = useTheme()
   const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
     setMounted(true)
   }, [])
-
-  const handleSignOut = async () => {
-    // Clear project selection from localStorage to prevent stale data
-    localStorage.removeItem("trueflow_project_id")
-    await supabase.auth.signOut()
-    router.push("/login")
-    router.refresh()
-  }
 
   // Generate breadcrumbs
   const breadcrumbs = pathname
@@ -142,42 +123,23 @@ export function Header({ user }: HeaderProps) {
           )}
         </Button>
 
-        {/* User Dropdown */}
+        {/* User Avatar - links to account */}
         {user && (
-          <DropdownMenu>
-            <DropdownMenuTrigger className="relative rounded-md p-1.5 hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-              <Avatar className="h-7 w-7">
-                <AvatarImage
-                  src={user.user_metadata?.avatar_url}
-                  alt={user.email || ""}
-                />
-                <AvatarFallback className="bg-primary/10 text-primary text-xs font-medium">
-                  {user.email?.charAt(0).toUpperCase() || "U"}
-                </AvatarFallback>
-              </Avatar>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuLabel className="font-normal">
-                <div className="flex flex-col space-y-1">
-                  <p className="text-sm font-medium">{user.user_metadata?.name || "User"}</p>
-                  <p className="text-xs text-muted-foreground">{user.email}</p>
-                </div>
-              </DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => router.push("/settings/team")}>
-                <UserIcon className="mr-2 h-4 w-4" />
-                Profile
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                onClick={handleSignOut}
-                className="text-destructive focus:text-destructive"
-              >
-                <LogOut className="mr-2 h-4 w-4" />
-                Sign out
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <a
+            href="/settings/account"
+            className="relative rounded-md p-1.5 hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors"
+            title="Account settings"
+          >
+            <Avatar className="h-7 w-7">
+              <AvatarImage
+                src={user.user_metadata?.avatar_url}
+                alt={user.email || ""}
+              />
+              <AvatarFallback className="bg-primary/10 text-primary text-xs font-medium">
+                {user.email?.charAt(0).toUpperCase() || "U"}
+              </AvatarFallback>
+            </Avatar>
+          </a>
         )}
       </div>
     </header>

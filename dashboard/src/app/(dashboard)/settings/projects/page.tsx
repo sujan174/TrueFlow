@@ -18,8 +18,9 @@ import {
   MoreHorizontal,
   Pencil,
   Trash2,
-  Check,
   Loader2,
+  FolderOpen,
+  Check,
 } from "lucide-react"
 import {
   DropdownMenu,
@@ -27,9 +28,11 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Badge } from "@/components/ui/badge"
 import { updateProject, deleteProject, type Project } from "@/lib/api"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useRouter, useSearchParams, usePathname } from "next/navigation"
+import { cn } from "@/lib/utils"
+import { SettingsSidebar } from "../_components/settings-sidebar"
+import { usePermissions } from "@/contexts/permissions-context"
 
 function formatRelativeTime(dateString: string): string {
   const date = new Date(dateString)
@@ -47,6 +50,7 @@ function formatRelativeTime(dateString: string): string {
 }
 
 export default function ProjectsSettingsPage() {
+  const { isAdmin } = usePermissions()
   const { projects, selectedProject, selectProject, createProject, refreshProjects, isLoading } = useProject()
   const [showCreateDialog, setShowCreateDialog] = useState(false)
   const [showRenameDialog, setShowRenameDialog] = useState(false)
@@ -57,12 +61,11 @@ export default function ProjectsSettingsPage() {
   const [error, setError] = useState<string | null>(null)
   const router = useRouter()
   const searchParams = useSearchParams()
+  const pathname = usePathname()
 
-  // Check for action=new query param
   useEffect(() => {
     if (searchParams.get("action") === "new") {
       setShowCreateDialog(true)
-      // Clear the query param
       router.replace("/settings/projects")
     }
   }, [searchParams, router])
@@ -141,96 +144,115 @@ export default function ProjectsSettingsPage() {
   if (isLoading) {
     return (
       <div className="flex-1 flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
       </div>
     )
   }
 
   return (
-    <div className="flex-1 flex flex-col min-w-0">
-      <div className="flex-1 p-6 lg:p-8 flex flex-col gap-5 overflow-auto bg-background">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div className="flex flex-col gap-1">
-            <h1 className="text-2xl lg:text-3xl font-bold tracking-tight">
-              Projects
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              Manage your projects and their settings
-            </p>
-          </div>
-          <Button className="gap-2" onClick={() => setShowCreateDialog(true)}>
-            <FolderPlus className="h-4 w-4" />
-            New Project
-          </Button>
-        </div>
+    <div className="flex-1 flex min-w-0">
+      <SettingsSidebar />
 
-        {/* Projects List */}
-        <div className="bg-card border rounded-lg divide-y">
-          {projects.length === 0 ? (
-            <div className="p-8 text-center text-muted-foreground">
-              <FolderPlus className="h-10 w-10 mx-auto mb-3 opacity-50" />
-              <p>No projects yet</p>
-              <p className="text-sm">Create your first project to get started</p>
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col min-w-0 overflow-auto">
+        <div className="flex-1 p-6 lg:p-8">
+          {/* Header */}
+          <header className="flex items-start justify-between mb-8">
+            <div>
+              <h1 className="text-xl font-semibold tracking-tight">Projects</h1>
+              <p className="text-sm text-muted-foreground mt-1">
+                Create and manage projects for multi-tenant isolation
+              </p>
             </div>
-          ) : (
-            projects.map((project) => (
-              <div
-                key={project.id}
-                className="flex items-center justify-between p-4 hover:bg-muted/30 transition-colors"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="flex flex-col">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium">{project.name}</span>
-                      {selectedProject?.id === project.id && (
-                        <Badge variant="secondary" className="text-xs">
-                          Active
-                        </Badge>
-                      )}
-                    </div>
-                    <span className="text-xs text-muted-foreground">
-                      Created {project.created_at ? formatRelativeTime(project.created_at) : "N/A"}
-                    </span>
-                  </div>
-                </div>
+            {isAdmin && (
+              <Button onClick={() => setShowCreateDialog(true)} className="gap-2">
+                <FolderPlus className="h-4 w-4" />
+                New Project
+              </Button>
+            )}
+          </header>
 
-                <div className="flex items-center gap-2">
-                  {selectedProject?.id !== project.id && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => selectProject(project.id)}
-                    >
-                      Select
-                    </Button>
-                  )}
-                  <DropdownMenu>
-                    <DropdownMenuTrigger>
-                      <Button variant="ghost" size="icon-sm">
-                        <MoreHorizontal className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => openRenameDialog(project)}>
-                        <Pencil className="mr-2 h-4 w-4" />
-                        Rename
-                      </DropdownMenuItem>
-                      {projects.length > 1 && (
-                        <DropdownMenuItem
-                          onClick={() => openDeleteDialog(project)}
-                          className="text-destructive focus:text-destructive"
-                        >
-                          <Trash2 className="mr-2 h-4 w-4" />
-                          Delete
-                        </DropdownMenuItem>
-                      )}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+          {/* Projects List */}
+          <div className="border rounded-lg">
+            {projects.length === 0 ? (
+              <div className="p-12 text-center">
+                <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mx-auto mb-4">
+                  <FolderOpen className="h-6 w-6 text-muted-foreground" />
                 </div>
+                <p className="text-sm font-medium mb-1">No projects yet</p>
+                <p className="text-sm text-muted-foreground">
+                  Create your first project to get started
+                </p>
               </div>
-            ))
-          )}
+            ) : (
+              <div className="divide-y">
+                {projects.map((project) => (
+                  <div
+                    key={project.id}
+                    className="flex items-center justify-between p-4 hover:bg-muted/30 transition-colors"
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
+                        <FolderOpen className="h-5 w-5 text-muted-foreground" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium">{project.name}</span>
+                          {selectedProject?.id === project.id && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full bg-primary/10 text-primary">
+                              <Check className="h-3 w-3" />
+                              Active
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-xs text-muted-foreground">
+                          Created {project.created_at ? formatRelativeTime(project.created_at) : "N/A"}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      {selectedProject?.id !== project.id && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => selectProject(project.id)}
+                        >
+                          Select
+                        </Button>
+                      )}
+                      <DropdownMenu>
+                        <DropdownMenuTrigger>
+                          <Button variant="ghost" size="icon-sm">
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          {isAdmin && (
+                            <>
+                              <DropdownMenuItem onClick={() => openRenameDialog(project)}>
+                                <Pencil className="mr-2 h-4 w-4" />
+                                Rename
+                              </DropdownMenuItem>
+                              {projects.length > 1 && (
+                                <DropdownMenuItem
+                                  onClick={() => openDeleteDialog(project)}
+                                  className="text-destructive focus:text-destructive"
+                                >
+                                  <Trash2 className="mr-2 h-4 w-4" />
+                                  Delete
+                                </DropdownMenuItem>
+                              )}
+                            </>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -238,14 +260,14 @@ export default function ProjectsSettingsPage() {
       <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Create New Project</DialogTitle>
+            <DialogTitle>Create Project</DialogTitle>
             <DialogDescription>
               Enter a name for your new project.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="create-name">Project Name</Label>
+              <Label htmlFor="create-name">Name</Label>
               <Input
                 id="create-name"
                 value={name}
@@ -276,7 +298,7 @@ export default function ProjectsSettingsPage() {
                   Creating...
                 </>
               ) : (
-                "Create Project"
+                "Create"
               )}
             </Button>
           </DialogFooter>
@@ -294,7 +316,7 @@ export default function ProjectsSettingsPage() {
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="rename-name">Project Name</Label>
+              <Label htmlFor="rename-name">Name</Label>
               <Input
                 id="rename-name"
                 value={name}
@@ -325,7 +347,7 @@ export default function ProjectsSettingsPage() {
                   Saving...
                 </>
               ) : (
-                "Save Changes"
+                "Save"
               )}
             </Button>
           </DialogFooter>
@@ -338,9 +360,7 @@ export default function ProjectsSettingsPage() {
           <DialogHeader>
             <DialogTitle>Delete Project</DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete "{projectToEdit?.name}"? This action
-              cannot be undone. All associated tokens, policies, and credentials
-              will be deleted.
+              Are you sure you want to delete "{projectToEdit?.name}"? This action cannot be undone. All associated tokens, policies, and credentials will be deleted.
             </DialogDescription>
           </DialogHeader>
           {error && (
@@ -370,7 +390,7 @@ export default function ProjectsSettingsPage() {
                   Deleting...
                 </>
               ) : (
-                "Delete Project"
+                "Delete"
               )}
             </Button>
           </DialogFooter>

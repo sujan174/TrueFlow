@@ -39,9 +39,13 @@ export async function middleware(request: NextRequest) {
   // supabase.auth.getUser(). A simple mistake could make your application
   // vulnerable to attacks.
 
+  // SECURITY: Use getUser() instead of getSession() for proper JWT validation
+  // getSession() only reads cookies without verifying the JWT signature,
+  // which could allow session forgery attacks
   const {
-    data: { session },
-  } = await supabase.auth.getSession()
+    data: { user },
+    error,
+  } = await supabase.auth.getUser()
 
   // Public routes that don't require authentication
   const isPublicRoute =
@@ -51,7 +55,7 @@ export async function middleware(request: NextRequest) {
     request.nextUrl.pathname.startsWith('/api/auth') ||
     request.nextUrl.pathname === '/favicon.ico'
 
-  if (!session && !isPublicRoute) {
+  if ((error || !user) && !isPublicRoute) {
     // Redirect to login if not authenticated
     const url = request.nextUrl.clone()
     url.pathname = '/login'

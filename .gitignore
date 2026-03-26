@@ -48,3 +48,12 @@ docker-compose.override.yml
 
 # Claude Code local data (should never be committed)
 .claude-glm/
+.claude/
+.claude-flow/
+
+# Roadmap and notes
+roadmap.txt
+
+# Test artifacts
+tests/
+!gateway/tests/

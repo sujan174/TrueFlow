@@ -85,8 +85,17 @@ export default function TokenDetailPage() {
       ])
       setToken(tokenData)
       setGuardrailStatus(guardrails)
-      setMcpAllowedTools(tokenData.mcp_allowed_tools)
-      setMcpBlockedTools(tokenData.mcp_blocked_tools)
+      // Cast JSON arrays to string[] for local state (backend returns JSON but we expect arrays)
+      setMcpAllowedTools(
+        Array.isArray(tokenData.mcp_allowed_tools)
+          ? tokenData.mcp_allowed_tools as string[]
+          : null
+      )
+      setMcpBlockedTools(
+        Array.isArray(tokenData.mcp_blocked_tools)
+          ? tokenData.mcp_blocked_tools as string[]
+          : null
+      )
 
       // Filter policies attached to this token
       const tokenPolicyIds = new Set(tokenData.policy_ids || [])

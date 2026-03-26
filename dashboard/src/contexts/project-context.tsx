@@ -19,6 +19,17 @@ const ProjectContext = createContext<ProjectContextType | null>(null)
 
 const STORAGE_KEY = "trueflow_project_id"
 
+// Helper to safely access localStorage (SSR-safe)
+function getStoredProjectId(): string | null {
+  if (typeof window === 'undefined') return null
+  return localStorage.getItem(STORAGE_KEY)
+}
+
+function setStoredProjectId(id: string): void {
+  if (typeof window === 'undefined') return
+  localStorage.setItem(STORAGE_KEY, id)
+}
+
 interface ProjectProviderProps {
   children: ReactNode
   /** Last project ID from backend (passed from auth sync) */
@@ -45,15 +56,15 @@ export function ProjectProvider({ children, initialProjectId }: ProjectProviderP
       // 3. First project in list
       if (backendProjectId && data.some(p => p.id === backendProjectId)) {
         setSelectedProjectId(backendProjectId)
-        localStorage.setItem(STORAGE_KEY, backendProjectId)
+        setStoredProjectId(backendProjectId)
       } else {
-        const storedId = localStorage.getItem(STORAGE_KEY)
+        const storedId = getStoredProjectId()
         if (storedId && data.some(p => p.id === storedId)) {
           setSelectedProjectId(storedId)
         } else if (data.length > 0) {
           const firstId = data[0].id
           setSelectedProjectId(firstId)
-          localStorage.setItem(STORAGE_KEY, firstId)
+          setStoredProjectId(firstId)
         }
       }
     } catch (err) {
@@ -69,7 +80,7 @@ export function ProjectProvider({ children, initialProjectId }: ProjectProviderP
 
   const selectProject = useCallback(async (id: string) => {
     setSelectedProjectId(id)
-    localStorage.setItem(STORAGE_KEY, id)
+    setStoredProjectId(id)
 
     // Persist to backend (non-blocking, fallback to localStorage if it fails)
     try {

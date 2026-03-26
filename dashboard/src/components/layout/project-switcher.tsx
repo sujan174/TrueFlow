@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { ChevronDown, Check } from "lucide-react"
+import { ChevronDown, Check, FolderOpen } from "lucide-react"
 import { useProject } from "@/contexts/project-context"
 import { cn } from "@/lib/utils"
 
@@ -25,7 +25,10 @@ export function ProjectSwitcher() {
         onClick={() => setIsOpen(!isOpen)}
         className="w-full flex items-center justify-between h-9 px-3 bg-muted hover:bg-muted/80 rounded-lg text-foreground text-[13px] font-medium transition-colors"
       >
-        <span className="truncate">{selectedProject?.name || "Select project"}</span>
+        <div className="flex items-center gap-2">
+          <FolderOpen className="w-4 h-4 text-muted-foreground" />
+          <span className="truncate">{selectedProject?.name || "Select project"}</span>
+        </div>
         <ChevronDown className={cn("w-4 h-4 text-muted-foreground transition-transform", isOpen && "rotate-180")} />
       </button>
 
