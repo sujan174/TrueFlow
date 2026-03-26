@@ -147,10 +147,93 @@ export type {
   AuditFilters,
 } from "./types/audit"
 
+// Organization types
+import type {
+  Team,
+  TeamMember,
+  TeamSpend,
+  CreateTeamRequest,
+  UpdateTeamRequest,
+  ApiKey,
+  CreateApiKeyRequest,
+  CreateApiKeyResponse,
+  WhoAmIResponse,
+  ModelAccessGroup,
+  CreateModelAccessGroupRequest,
+  UpdateModelAccessGroupRequest,
+  User,
+} from "./types/organization"
+
+export type {
+  Team,
+  TeamMember,
+  TeamSpend,
+  CreateTeamRequest,
+  UpdateTeamRequest,
+  ApiKey,
+  CreateApiKeyRequest,
+  CreateApiKeyResponse,
+  WhoAmIResponse,
+  ModelAccessGroup,
+  CreateModelAccessGroupRequest,
+  UpdateModelAccessGroupRequest,
+  User,
+}
+
+// Session types
+import type {
+  SessionStatus,
+  SessionRow,
+  SessionDetail,
+  SessionEntity,
+  SessionFilters,
+  SessionRequest,
+  UpdateSessionStatusRequest,
+  SetSessionSpendCapRequest,
+} from "./types/session"
+
+export type {
+  SessionStatus,
+  SessionRow,
+  SessionDetail,
+  SessionEntity,
+  SessionFilters,
+  SessionRequest,
+  UpdateSessionStatusRequest,
+  SetSessionSpendCapRequest,
+}
+
 // Use local API proxy for client-side calls (handles auth server-side)
 interface FetchOptions {
   cache?: RequestCache
   next?: { revalidate?: number }
+}
+
+/**
+ * Error class for API errors with additional context
+ */
+class ApiError extends Error {
+  status: number
+  statusText: string
+  endpoint: string
+  responseBody?: string
+
+  constructor(
+    status: number,
+    statusText: string,
+    endpoint: string,
+    responseBody?: string
+  ) {
+    const message = responseBody
+      ? `API error ${status} ${statusText} for ${endpoint}: ${responseBody.slice(0, 200)}`
+      : `API error ${status} ${statusText} for ${endpoint}`
+    super(message)
+    this.name = 'ApiError'
+    this.status = status
+    this.statusText = statusText
+    this.endpoint = endpoint
+    this.responseBody = responseBody
+  }
 }
 
 async function gatewayFetch<T>(
@@ -165,10 +248,29 @@ async function gatewayFetch<T>(
   })
 
   if (!response.ok) {
-    throw new Error(`Gateway API error: ${response.status} ${response.statusText}`)
+    // Try to get error details from response body
+    let errorBody: string | undefined
+    try {
+      errorBody = await response.text()
+    } catch {
+      // Ignore text parsing errors
+    }
+    throw new ApiError(response.status, response.statusText, endpoint, errorBody)
   }
 
-  return response.json()
+  // Parse JSON with proper error handling
+  try {
+    const text = await response.text()
+    if (!text) {
+      // Empty response - return empty object for object types, undefined for others
+      return {} as T
+    }
+    return JSON.parse(text) as T
+  } catch (parseError) {
+    throw new Error(
+      `Failed to parse JSON response from ${endpoint}: ${parseError instanceof Error ? parseError.message : 'Unknown error'}`
+    )
+  }
 }
 
 // Analytics endpoints
@@ -1174,4 +1276,622 @@ export async function updateTokenMcpTools(
     const error = await response.text()
     throw new Error(`Failed to update MCP tools: ${response.status} ${error}`)
   }
+}
+
+// ── Teams API ──────────────────────────────────────────────────────────────
+
+export async function listTeams(): Promise<Team[]> {
+  return gatewayFetch<Team[]>("/teams", {
+    next: { revalidate: 30 },
+  })
+}
+
+export async function createTeam(data: CreateTeamRequest): Promise<Team> {
+  const response = await fetch("/api/gateway/teams", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  })
+
+  if (!response.ok) {
+    const error = await response.text()
+    throw new Error(`Failed to create team: ${response.status} ${error}`)
+  }
+
+  return response.json()
+}
+
+export async function updateTeam(id: string, data: UpdateTeamRequest): Promise<Team> {
+  const response = await fetch(`/api/gateway/teams/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  })
+
+  if (!response.ok) {
+    const error = await response.text()
+    throw new Error(`Failed to update team: ${response.status} ${error}`)
+  }
+
+  return response.json()
+}
+
+export async function deleteTeam(id: string): Promise<void> {
+  const response = await fetch(`/api/gateway/teams/${id}`, {
+    method: "DELETE",
+  })
+
+  if (!response.ok && response.status !== 204) {
+    throw new Error(`Failed to delete team: ${response.status}`)
+  }
+}
+
+export async function listTeamMembers(teamId: string): Promise<TeamMember[]> {
+  return gatewayFetch<TeamMember[]>(`/teams/${teamId}/members`, {
+    next: { revalidate: 30 },
+  })
+}
+
+export async function addTeamMember(
+  teamId: string,
+  data: { user_id: string; role?: string }
+): Promise<TeamMember> {
+  const response = await fetch(`/api/gateway/teams/${teamId}/members`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  })
+
+  if (!response.ok) {
+    const error = await response.text()
+    throw new Error(`Failed to add team member: ${response.status} ${error}`)
+  }
+
+  return response.json()
+}
+
+export async function removeTeamMember(teamId: string, userId: string): Promise<void> {
+  const response = await fetch(`/api/gateway/teams/${teamId}/members/${userId}`, {
+    method: "DELETE",
+  })
+
+  if (!response.ok && response.status !== 204) {
+    throw new Error(`Failed to remove team member: ${response.status}`)
+  }
+}
+
+export async function getTeamSpend(teamId: string): Promise<TeamSpend[]> {
+  return gatewayFetch<TeamSpend[]>(`/teams/${teamId}/spend`, {
+    next: { revalidate: 60 },
+  })
+}
+
+// ── API Keys (Auth) ────────────────────────────────────────────────────────
+
+export async function listApiKeys(): Promise<ApiKey[]> {
+  return gatewayFetch<ApiKey[]>("/auth/keys", {
+    next: { revalidate: 30 },
+  })
+}
+
+export async function createApiKey(data: CreateApiKeyRequest): Promise<CreateApiKeyResponse> {
+  const response = await fetch("/api/gateway/auth/keys", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  })
+
+  if (!response.ok) {
+    const error = await response.text()
+    throw new Error(`Failed to create API key: ${response.status} ${error}`)
+  }
+
+  return response.json()
+}
+
+export async function revokeApiKey(id: string): Promise<void> {
+  const response = await fetch(`/api/gateway/auth/keys/${id}`, {
+    method: "DELETE",
+  })
+
+  if (!response.ok && response.status !== 204) {
+    throw new Error(`Failed to revoke API key: ${response.status}`)
+  }
+}
+
+export interface UpdateApiKeyRequest {
+  name?: string
+  scopes?: string[]
+}
+
+export interface UpdateApiKeyResponse {
+  id: string
+  name: string
+  scopes: string[]
+  message: string
+}
+
+export async function updateApiKey(
+  id: string,
+  data: UpdateApiKeyRequest
+): Promise<UpdateApiKeyResponse> {
+  const response = await fetch(`/api/gateway/auth/keys/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  })
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}))
+    throw new Error(error.error?.message || `Failed to update API key: ${response.status}`)
+  }
+
+  return response.json()
+}
+
+export async function whoami(): Promise<WhoAmIResponse> {
+  return gatewayFetch<WhoAmIResponse>("/auth/whoami")
+}
+
+// ── Model Access Groups API ────────────────────────────────────────────────
+
+export async function listModelAccessGroups(): Promise<ModelAccessGroup[]> {
+  return gatewayFetch<ModelAccessGroup[]>("/model-access-groups", {
+    next: { revalidate: 30 },
+  })
+}
+
+export async function createModelAccessGroup(
+  data: CreateModelAccessGroupRequest
+): Promise<ModelAccessGroup> {
+  const response = await fetch("/api/gateway/model-access-groups", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  })
+
+  if (!response.ok) {
+    const error = await response.text()
+    throw new Error(`Failed to create model access group: ${response.status} ${error}`)
+  }
+
+  return response.json()
+}
+
+export async function updateModelAccessGroup(
+  id: string,
+  data: UpdateModelAccessGroupRequest
+): Promise<ModelAccessGroup> {
+  const response = await fetch(`/api/gateway/model-access-groups/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  })
+
+  if (!response.ok) {
+    const error = await response.text()
+    throw new Error(`Failed to update model access group: ${response.status} ${error}`)
+  }
+
+  return response.json()
+}
+
+export async function deleteModelAccessGroup(id: string): Promise<void> {
+  const response = await fetch(`/api/gateway/model-access-groups/${id}`, {
+    method: "DELETE",
+  })
+
+  if (!response.ok && response.status !== 204) {
+    throw new Error(`Failed to delete model access group: ${response.status}`)
+  }
+}
+
+// ── Users API (for team member selection) ──────────────────────────────────
+
+export async function listUsers(): Promise<User[]> {
+  return gatewayFetch<User[]>("/users", {
+    next: { revalidate: 60 },
+  })
+}
+
+// ── Settings Types ───────────────────────────────────────────────────
+
+import type {
+  GatewaySettings,
+  PricingEntry,
+  UpsertPricingRequest,
+  Webhook,
+  CreateWebhookRequest,
+  TestWebhookResponse,
+  Notification,
+  CacheStats,
+  ImportResult,
+} from "./types/settings"
+
+export type {
+  GatewaySettings,
+  PricingEntry,
+  UpsertPricingRequest,
+  Webhook,
+  CreateWebhookRequest,
+  TestWebhookResponse,
+  Notification,
+  CacheStats,
+  ImportResult,
+}
+
+// ── Settings API ──────────────────────────────────────────────────────
+
+export async function getSettings(): Promise<GatewaySettings> {
+  return gatewayFetch<GatewaySettings>("/settings")
+}
+
+export async function updateSettings(settings: Partial<GatewaySettings>): Promise<{ success: boolean }> {
+  const response = await fetch("/api/gateway/settings", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ settings }),
+  })
+  if (!response.ok) throw new Error(`Failed to update settings: ${response.status}`)
+  return response.json()
+}
+
+export async function getCacheStats(): Promise<CacheStats> {
+  return gatewayFetch<CacheStats>("/system/cache-stats")
+}
+
+export async function flushCache(): Promise<{ success: boolean; keys_deleted: number }> {
+  const response = await fetch("/api/gateway/system/flush-cache", { method: "POST" })
+  if (!response.ok) throw new Error(`Failed to flush cache: ${response.status}`)
+  return response.json()
+}
+
+// ── Pricing API ────────────────────────────────────────────────────────
+
+export async function listPricing(): Promise<PricingEntry[]> {
+  return gatewayFetch<PricingEntry[]>("/pricing")
+}
+
+export async function upsertPricing(data: UpsertPricingRequest): Promise<{ success: boolean }> {
+  const response = await fetch("/api/gateway/pricing", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  })
+  if (!response.ok) throw new Error(`Failed to upsert pricing: ${response.status}`)
+  return response.json()
+}
+
+export async function deletePricing(id: string): Promise<{ id: string; deleted: boolean }> {
+  const response = await fetch(`/api/gateway/pricing/${id}`, { method: "DELETE" })
+  if (!response.ok) throw new Error(`Failed to delete pricing: ${response.status}`)
+  return response.json()
+}
+
+// ── Webhooks API ───────────────────────────────────────────────────────
+
+export async function listWebhooks(): Promise<Webhook[]> {
+  return gatewayFetch<Webhook[]>("/webhooks")
+}
+
+export async function createWebhook(data: CreateWebhookRequest): Promise<Webhook> {
+  const response = await fetch("/api/gateway/webhooks", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  })
+  if (!response.ok) throw new Error(`Failed to create webhook: ${response.status}`)
+  return response.json()
+}
+
+export async function deleteWebhook(id: string): Promise<void> {
+  const response = await fetch(`/api/gateway/webhooks/${id}`, { method: "DELETE" })
+  if (!response.ok && response.status !== 204) throw new Error(`Failed to delete webhook: ${response.status}`)
+}
+
+export async function testWebhook(url: string): Promise<TestWebhookResponse> {
+  const response = await fetch("/api/gateway/webhooks/test", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ url }),
+  })
+  if (!response.ok) throw new Error(`Failed to test webhook: ${response.status}`)
+  return response.json()
+}
+
+// ── Notifications API ──────────────────────────────────────────────────
+
+export async function listNotifications(): Promise<Notification[]> {
+  return gatewayFetch<Notification[]>("/notifications")
+}
+
+export async function getUnreadCount(): Promise<{ count: number }> {
+  return gatewayFetch<{ count: number }>("/notifications/unread")
+}
+
+export async function markNotificationRead(id: string): Promise<{ success: boolean }> {
+  const response = await fetch(`/api/gateway/notifications/${id}/read`, { method: "POST" })
+  if (!response.ok) throw new Error(`Failed to mark notification read: ${response.status}`)
+  return response.json()
+}
+
+export async function markAllNotificationsRead(): Promise<{ success: boolean }> {
+  const response = await fetch("/api/gateway/notifications/read-all", { method: "POST" })
+  if (!response.ok) throw new Error(`Failed to mark all read: ${response.status}`)
+  return response.json()
+}
+
+// ── Config Export/Import API ───────────────────────────────────────────
+
+export async function exportConfig(format: "yaml" | "json" = "yaml"): Promise<string> {
+  const response = await fetch(`/api/gateway/config/export?format=${format}`)
+  if (!response.ok) throw new Error(`Failed to export config: ${response.status}`)
+  return response.text()
+}
+
+export async function importConfig(content: string, format: "yaml" | "json" = "yaml"): Promise<ImportResult> {
+  const contentType = format === "json" ? "application/json" : "application/yaml"
+  const response = await fetch("/api/gateway/config/import", {
+    method: "POST",
+    headers: { "Content-Type": contentType },
+    body: content,
+  })
+  if (!response.ok) throw new Error(`Failed to import config: ${response.status}`)
+  return response.json()
+}
+
+// ── PII Rehydrate API ──────────────────────────────────────────────────
+
+export async function rehydratePii(tokens: string[]): Promise<{ values: Record<string, string>; token_count: number }> {
+  const response = await fetch("/api/gateway/pii/rehydrate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ tokens }),
+  })
+  if (!response.ok) throw new Error(`Failed to rehydrate PII: ${response.status}`)
+  return response.json()
+}
+
+// ── Sessions API ────────────────────────────────────────────────────────
+
+export async function listSessions(
+  projectId: string,
+  filters?: SessionFilters,
+  limit = 50
+): Promise<SessionRow[]> {
+  const params = new URLSearchParams()
+  params.set("project_id", projectId)
+  params.set("limit", String(limit))
+  if (filters?.status) params.set("status", filters.status)
+  if (filters?.token_id) params.set("token_id", filters.token_id)
+  if (filters?.start_time) params.set("start_time", filters.start_time)
+  if (filters?.end_time) params.set("end_time", filters.end_time)
+
+  return gatewayFetch<SessionRow[]>(`/sessions?${params}`)
+}
+
+export async function getSession(sessionId: string, projectId: string): Promise<SessionDetail> {
+  const params = new URLSearchParams()
+  params.set("project_id", projectId)
+  return gatewayFetch<SessionDetail>(`/sessions/${sessionId}?${params}`)
+}
+
+export async function getSessionEntity(sessionId: string, projectId: string): Promise<SessionEntity> {
+  const params = new URLSearchParams()
+  params.set("project_id", projectId)
+  return gatewayFetch<SessionEntity>(`/sessions/${sessionId}/entity?${params}`)
+}
+
+export async function updateSessionStatus(
+  sessionId: string,
+  projectId: string,
+  status: "paused" | "active" | "completed"
+): Promise<SessionEntity> {
+  const params = new URLSearchParams()
+  params.set("project_id", projectId)
+  const response = await fetch(`/api/gateway/sessions/${sessionId}/status?${params}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ status }),
+  })
+  if (!response.ok) {
+    const error = await response.text()
+    throw new Error(`Failed to update session status: ${response.status} ${error}`)
+  }
+  return response.json()
+}
+
+export async function setSessionSpendCap(
+  sessionId: string,
+  projectId: string,
+  spendCapUsd: number | null
+): Promise<SessionEntity> {
+  const params = new URLSearchParams()
+  params.set("project_id", projectId)
+  const response = await fetch(`/api/gateway/sessions/${sessionId}/spend-cap?${params}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ spend_cap_usd: spendCapUsd }),
+  })
+  if (!response.ok) {
+    const error = await response.text()
+    throw new Error(`Failed to set session spend cap: ${response.status} ${error}`)
+  }
+  return response.json()
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PROMPT MANAGEMENT API
+// ═══════════════════════════════════════════════════════════════════════════
+
+import type {
+  PromptRow,
+  PromptVersionRow,
+  PromptListResponse,
+  PromptDetailResponse,
+  CreatePromptRequest,
+  CreatePromptResponse,
+  UpdatePromptRequest,
+  CreateVersionRequest,
+  CreateVersionResponse,
+  DeployRequest,
+  RenderRequest,
+  RenderResponse,
+} from "./types/prompt"
+
+export type {
+  PromptRow,
+  PromptVersionRow,
+  PromptListResponse,
+  PromptDetailResponse,
+  CreatePromptRequest,
+  CreatePromptResponse,
+  UpdatePromptRequest,
+  CreateVersionRequest,
+  CreateVersionResponse,
+  DeployRequest,
+  RenderRequest,
+  RenderResponse,
+}
+
+/**
+ * List all prompts with optional folder filter
+ */
+export async function listPrompts(folder?: string): Promise<PromptListResponse[]> {
+  const params = folder ? `?folder=${encodeURIComponent(folder)}` : ""
+  return gatewayFetch<PromptListResponse[]>(`/prompts${params}`)
+}
+
+/**
+ * Get a single prompt with all versions
+ */
+export async function getPrompt(id: string): Promise<PromptDetailResponse> {
+  return gatewayFetch<PromptDetailResponse>(`/prompts/${id}`)
+}
+
+/**
+ * Create a new prompt
+ */
+export async function createPrompt(data: CreatePromptRequest): Promise<CreatePromptResponse> {
+  const response = await fetch("/api/gateway/prompts", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  })
+
+  if (!response.ok) {
+    const error = await response.text()
+    throw new Error(`Failed to create prompt: ${response.status} ${error}`)
+  }
+
+  return response.json()
+}
+
+/**
+ * Update prompt metadata (name, description, folder, tags)
+ */
+export async function updatePrompt(id: string, data: UpdatePromptRequest): Promise<{ message: string }> {
+  const response = await fetch(`/api/gateway/prompts/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  })
+
+  if (!response.ok) {
+    const error = await response.text()
+    throw new Error(`Failed to update prompt: ${response.status} ${error}`)
+  }
+
+  return response.json()
+}
+
+/**
+ * Soft delete a prompt
+ */
+export async function deletePrompt(id: string): Promise<{ message: string }> {
+  const response = await fetch(`/api/gateway/prompts/${id}`, {
+    method: "DELETE",
+  })
+
+  if (!response.ok) {
+    const error = await response.text()
+    throw new Error(`Failed to delete prompt: ${response.status} ${error}`)
+  }
+
+  return response.json()
+}
+
+/**
+ * List all versions for a prompt
+ */
+export async function listPromptVersions(promptId: string): Promise<PromptVersionRow[]> {
+  return gatewayFetch<PromptVersionRow[]>(`/prompts/${promptId}/versions`)
+}
+
+/**
+ * Get a specific version
+ */
+export async function getPromptVersion(promptId: string, version: number): Promise<PromptVersionRow> {
+  return gatewayFetch<PromptVersionRow>(`/prompts/${promptId}/versions/${version}`)
+}
+
+/**
+ * Create a new version (immutable)
+ */
+export async function createPromptVersion(promptId: string, data: CreateVersionRequest): Promise<CreateVersionResponse> {
+  const response = await fetch(`/api/gateway/prompts/${promptId}/versions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  })
+
+  if (!response.ok) {
+    const error = await response.text()
+    throw new Error(`Failed to create version: ${response.status} ${error}`)
+  }
+
+  return response.json()
+}
+
+/**
+ * Deploy a version to a label (atomic label move)
+ */
+export async function deployPromptVersion(promptId: string, data: DeployRequest): Promise<{ message: string; version: number; label: string }> {
+  const response = await fetch(`/api/gateway/prompts/${promptId}/deploy`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  })
+
+  if (!response.ok) {
+    const error = await response.text()
+    throw new Error(`Failed to deploy version: ${response.status} ${error}`)
+  }
+
+  return response.json()
+}
+
+/**
+ * Render a prompt by slug with variables
+ */
+export async function renderPrompt(slug: string, data?: RenderRequest): Promise<RenderResponse> {
+  const response = await fetch(`/api/gateway/prompts/by-slug/${slug}/render`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data || {}),
+  })
+
+  if (!response.ok) {
+    const error = await response.text()
+    throw new Error(`Failed to render prompt: ${response.status} ${error}`)
+  }
+
+  return response.json()
+}
+
+/**
+ * List all unique folders
+ */
+export async function listPromptFolders(): Promise<string[]> {
+  return gatewayFetch<string[]>("/prompts/folders")
 }

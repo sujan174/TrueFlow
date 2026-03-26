@@ -26,6 +26,15 @@ export class ApiKeysResource {
         return (await res.json()) as JsonObject;
     }
 
+    /** Update an API key's name and/or scopes. */
+    async update(keyId: string, options: { name?: string; scopes?: string[] }): Promise<JsonObject> {
+        const body: Record<string, unknown> = {};
+        if (options.name !== undefined) body["name"] = options.name;
+        if (options.scopes !== undefined) body["scopes"] = options.scopes;
+        const res = await this.http.put(`/api/v1/auth/keys/${keyId}`, body);
+        return (await res.json()) as JsonObject;
+    }
+
     /** Get information about the current authentication context. */
     async whoami(): Promise<JsonObject> {
         const res = await this.http.get("/api/v1/auth/whoami");

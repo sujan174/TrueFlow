@@ -8,7 +8,7 @@ use axum::{
 use serde_json::json;
 use uuid::Uuid;
 
-use super::dtos::{CreateApiKeyRequest, CreateApiKeyResponse, WhoAmIResponse};
+use super::dtos::{CreateApiKeyRequest, CreateApiKeyResponse, UpdateApiKeyRequest, UpdateApiKeyResponse, WhoAmIResponse};
 use crate::api::AuthContext;
 use crate::store::postgres::LastAdminError;
 use crate::store::postgres::ApiKeyRow;
@@ -149,6 +149,54 @@ pub async fn revoke_api_key(
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(json!({ "error": { "code": "internal_server_error", "message": "Failed to revoke API key" } }))
+            ))
+        }
+    }
+}
+
+/// PUT /api/v1/auth/keys/:id — update an API key (name and/or scopes)
+pub async fn update_api_key(
+    State(state): State<Arc<AppState>>,
+    Extension(auth): Extension<AuthContext>,
+    Path(id): Path<Uuid>,
+    Json(payload): Json<UpdateApiKeyRequest>,
+) -> Result<Json<UpdateApiKeyResponse>, (StatusCode, Json<serde_json::Value>)> {
+    auth.require_role("admin").map_err(|s| {
+        (
+            s,
+            Json(json!({ "error": { "code": "forbidden", "message": "Admin role required" } })),
+        )
+    })?;
+    auth.require_scope("keys:manage").map_err(|_| {
+        (StatusCode::FORBIDDEN, Json(json!({ "error": { "code": "forbidden", "message": "Insufficient permissions: requires scope 'keys:manage'" } })))
+    })?;
+
+    // At least one field must be provided
+    if payload.name.is_none() && payload.scopes.is_none() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({ "error": { "code": "invalid_request", "message": "At least one of 'name' or 'scopes' must be provided" } })),
+        ));
+    }
+
+    match state.db.update_api_key(id, auth.org_id, payload.name.as_deref(), payload.scopes.as_ref()).await {
+        Ok(Some(updated_key)) => Ok(Json(UpdateApiKeyResponse {
+            id: updated_key.id,
+            name: updated_key.name,
+            scopes: updated_key.scopes.as_array()
+                .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+                .unwrap_or_default(),
+            message: "API key updated successfully".into(),
+        })),
+        Ok(None) => Err((
+            StatusCode::NOT_FOUND,
+            Json(json!({ "error": { "code": "not_found", "message": "API key not found" } })),
+        )),
+        Err(e) => {
+            tracing::error!("update_api_key failed: {}", e);
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": { "code": "internal_server_error", "message": "Failed to update API key" } }))
             ))
         }
     }

@@ -159,4 +159,51 @@ impl PgStore {
             .await?;
         Ok(())
     }
+
+    /// Update an API key's name and/or scopes.
+    /// Returns Some(ApiKeyRow) if updated, None if not found.
+    pub async fn update_api_key(
+        &self,
+        id: Uuid,
+        org_id: Uuid,
+        name: Option<&str>,
+        scopes: Option<&Vec<String>>,
+    ) -> anyhow::Result<Option<ApiKeyRow>> {
+        // Build dynamic query based on what fields are provided
+        let query = match (name, scopes) {
+            (Some(n), Some(s)) => {
+                let scopes_json = serde_json::to_value(s)?;
+                sqlx::query_as::<_, ApiKeyRow>(
+                    "UPDATE api_keys SET name = $1, scopes = $2, updated_at = NOW() WHERE id = $3 AND org_id = $4 AND is_active = true RETURNING *"
+                )
+                .bind(n)
+                .bind(scopes_json)
+                .bind(id)
+                .bind(org_id)
+            }
+            (Some(n), None) => {
+                sqlx::query_as::<_, ApiKeyRow>(
+                    "UPDATE api_keys SET name = $1, updated_at = NOW() WHERE id = $2 AND org_id = $3 AND is_active = true RETURNING *"
+                )
+                .bind(n)
+                .bind(id)
+                .bind(org_id)
+            }
+            (None, Some(s)) => {
+                let scopes_json = serde_json::to_value(s)?;
+                sqlx::query_as::<_, ApiKeyRow>(
+                    "UPDATE api_keys SET scopes = $1, updated_at = NOW() WHERE id = $2 AND org_id = $3 AND is_active = true RETURNING *"
+                )
+                .bind(scopes_json)
+                .bind(id)
+                .bind(org_id)
+            }
+            (None, None) => {
+                return Ok(None);
+            }
+        };
+
+        let result = query.fetch_optional(&self.pool).await?;
+        Ok(result)
+    }
 }

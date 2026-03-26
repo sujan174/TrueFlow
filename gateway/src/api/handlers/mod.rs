@@ -65,7 +65,7 @@ pub use self::notifications::{
 pub use self::services::{create_service, delete_service, list_services};
 
 // ── Re-exports: Auth / API Keys ─────────────────────────────
-pub use self::auth::{create_api_key, list_api_keys, revoke_api_key, whoami};
+pub use self::auth::{create_api_key, list_api_keys, revoke_api_key, update_api_key, whoami};
 
 // ── Re-exports: Analytics ───────────────────────────────────
 pub use self::analytics::{

@@ -58,6 +58,33 @@ class ApiKeysResource:
         raise_for_status(resp)
         return resp.json()
 
+    def update(
+        self,
+        key_id: str,
+        name: Optional[str] = None,
+        scopes: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Update an API Key's name and/or scopes.
+
+        Args:
+            key_id: The ID of the API key to update.
+            name: Optional new name for the key.
+            scopes: Optional new list of permission scopes.
+
+        Returns:
+            Dict containing the updated key details.
+        """
+        payload = {}
+        if name is not None:
+            payload["name"] = name
+        if scopes is not None:
+            payload["scopes"] = scopes
+
+        resp = self._client._http.put(f"/api/v1/auth/keys/{key_id}", json=payload)
+        raise_for_status(resp)
+        return resp.json()
+
     def whoami(self) -> Dict[str, Any]:
         """Get information about the current authentication context."""
         resp = self._client._http.get("/api/v1/auth/whoami")
@@ -102,6 +129,33 @@ class AsyncApiKeysResource:
 
     async def revoke(self, key_id: str) -> Dict[str, Any]:
         response = await self._client._http.delete(f"/api/v1/auth/keys/{key_id}")
+        raise_for_status(response)
+        return response.json()
+
+    async def update(
+        self,
+        key_id: str,
+        name: Optional[str] = None,
+        scopes: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Update an API Key's name and/or scopes.
+
+        Args:
+            key_id: The ID of the API key to update.
+            name: Optional new name for the key.
+            scopes: Optional new list of permission scopes.
+
+        Returns:
+            Dict containing the updated key details.
+        """
+        payload = {}
+        if name is not None:
+            payload["name"] = name
+        if scopes is not None:
+            payload["scopes"] = scopes
+
+        response = await self._client._http.put(f"/api/v1/auth/keys/{key_id}", json=payload)
         raise_for_status(response)
         return response.json()
 

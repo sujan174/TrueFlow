@@ -307,10 +307,24 @@ pub struct CreateApiKeyRequest {
     pub scopes: Option<Vec<String>>,
 }
 
+#[derive(Deserialize)]
+pub struct UpdateApiKeyRequest {
+    pub name: Option<String>,
+    pub scopes: Option<Vec<String>>,
+}
+
 #[derive(Serialize)]
 pub struct CreateApiKeyResponse {
     pub id: Uuid,
     pub key: String, // Only returned once
+    pub message: String,
+}
+
+#[derive(Serialize)]
+pub struct UpdateApiKeyResponse {
+    pub id: Uuid,
+    pub name: String,
+    pub scopes: Vec<String>,
     pub message: String,
 }
 

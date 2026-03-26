@@ -235,7 +235,7 @@ pub fn api_router(state: Arc<AppState>) -> Router<Arc<AppState>> {
             "/auth/keys",
             get(handlers::list_api_keys).post(handlers::create_api_key),
         )
-        .route("/auth/keys/:id", delete(handlers::revoke_api_key))
+        .route("/auth/keys/:id", delete(handlers::revoke_api_key).put(handlers::update_api_key))
         .route("/auth/whoami", get(handlers::whoami))
         // User management (Supabase Auth sync)
         .route("/auth/sync-user", post(handlers::sync_user))
