@@ -14,9 +14,10 @@ import {
 import { Checkbox } from "@/components/ui/checkbox"
 import { Badge } from "@/components/ui/badge"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { DollarSign, Zap, RefreshCw, BarChart3, Dice5, Plus, Trash2, Zap as Bolt, Route, Power } from "lucide-react"
+import { DollarSign, Zap, RefreshCw, BarChart3, Dice5, Plus, Trash2, Zap as Bolt, Route, Power, AlertTriangle } from "lucide-react"
 import type { ActionDynamicRoute, Condition } from "@/lib/types/policy"
 import { ROUTING_STRATEGIES } from "@/lib/types/policy"
+import { PROVIDER_PRESETS, detectProviderFromModel, isModelCompatible } from "@/lib/provider-presets"
 
 // ============================================================================
 // Types
@@ -32,6 +33,7 @@ interface ModelPoolEntry {
   upstream_url: string
   credential_id?: string
   weight: number
+  provider: string // Selected provider for this entry
 }
 
 interface CircuitBreakerConfig {
@@ -83,6 +85,7 @@ export function RoutingTab({ value, onChange }: RoutingTabProps) {
       model: p.model,
       upstream_url: p.upstream_url,
       weight: 100,
+      provider: 'OpenAI', // Default provider
     })) || []
   )
   const [fallback, setFallback] = useState<string>(value?.fallback?.model || '')
@@ -127,8 +130,9 @@ export function RoutingTab({ value, onChange }: RoutingTabProps) {
   const addModel = () => {
     const newEntry: ModelPoolEntry = {
       model: '',
-      upstream_url: '',
+      upstream_url: 'https://api.openai.com/v1',
       weight: 100,
+      provider: 'OpenAI',
     }
     setModelPool([...modelPool, newEntry])
   }
@@ -255,7 +259,7 @@ export function RoutingTab({ value, onChange }: RoutingTabProps) {
               <thead className="bg-muted/50 border-b">
                 <tr className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
                   <th className="px-4 py-3 text-left">Model</th>
-                  <th className="px-4 py-3 text-left">Upstream URL</th>
+                  <th className="px-4 py-3 text-left">Provider / Upstream URL</th>
                   {strategy === 'weighted_random' && (
                     <th className="px-4 py-3 text-center w-24">Weight</th>
                   )}
@@ -263,46 +267,108 @@ export function RoutingTab({ value, onChange }: RoutingTabProps) {
                 </tr>
               </thead>
               <tbody>
-                {modelPool.map((entry, index) => (
-                  <tr key={index} className="border-b last:border-0">
-                    <td className="p-2">
-                      <Input
-                        value={entry.model}
-                        onChange={(e) => updateModel(index, 'model', e.target.value)}
-                        placeholder="gpt-4o"
-                        className="border-0 bg-transparent h-8"
-                      />
-                    </td>
-                    <td className="p-2">
-                      <Input
-                        value={entry.upstream_url}
-                        onChange={(e) => updateModel(index, 'upstream_url', e.target.value)}
-                        placeholder="https://api.openai.com/v1"
-                        className="border-0 bg-transparent h-8"
-                      />
-                    </td>
-                    {strategy === 'weighted_random' && (
-                      <td className="p-2 text-center">
-                        <Input
-                          type="number"
-                          value={entry.weight}
-                          onChange={(e) => updateModel(index, 'weight', parseInt(e.target.value) || 0)}
-                          className="w-16 text-center border-0 bg-transparent h-8"
-                        />
+                {modelPool.map((entry, index) => {
+                  // Detect provider from model name for validation
+                  const detectedProvider = detectProviderFromModel(entry.model)
+                  const currentPreset = PROVIDER_PRESETS.find(p => p.name === entry.provider)
+                  const isValidModel = !entry.model || !currentPreset ||
+                    isModelCompatible(entry.model, currentPreset.allowed_models)
+
+                  return (
+                    <tr key={index} className="border-b last:border-0">
+                      <td className="p-2">
+                        <div className="flex flex-col gap-1">
+                          <Input
+                            value={entry.model}
+                            onChange={(e) => updateModel(index, 'model', e.target.value)}
+                            placeholder="gpt-4o"
+                            className={`border-0 bg-transparent h-8 ${!isValidModel ? 'ring-2 ring-destructive' : ''}`}
+                          />
+                          {entry.model && detectedProvider && (
+                            <span className="text-[10px] text-muted-foreground">
+                              Detected: {detectedProvider}
+                            </span>
+                          )}
+                          {entry.model && !isValidModel && currentPreset && (
+                            <span className="text-[10px] text-destructive flex items-center gap-1">
+                              <AlertTriangle className="h-3 w-3" />
+                              Model may not work with {entry.provider}
+                            </span>
+                          )}
+                        </div>
                       </td>
-                    )}
-                    <td className="p-2 text-center">
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        className="text-muted-foreground hover:text-destructive"
-                        onClick={() => removeModel(index)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
+                      <td className="p-2">
+                        <div className="flex flex-col gap-1">
+                          <Select
+                            value={entry.provider || ''}
+                            onValueChange={(val) => {
+                              const preset = PROVIDER_PRESETS.find(p => p.name === val)
+                              if (preset && val) {
+                                const newPool = [...modelPool]
+                                newPool[index] = {
+                                  ...newPool[index],
+                                  provider: val,
+                                  upstream_url: preset.url,
+                                }
+                                setModelPool(newPool)
+                                updateAction({
+                                  pool: newPool.map(p => ({
+                                    model: p.model,
+                                    upstream_url: p.upstream_url,
+                                  })),
+                                })
+                              }
+                            }}
+                          >
+                            <SelectTrigger className="border-0 bg-transparent h-8">
+                              <SelectValue placeholder="Select provider..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {PROVIDER_PRESETS.filter(p => p.name !== 'Custom').map((preset) => (
+                                <SelectItem key={preset.name} value={preset.name}>
+                                  {preset.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          {(!currentPreset || currentPreset.url === '') && (
+                            <Input
+                              value={entry.upstream_url}
+                              onChange={(e) => updateModel(index, 'upstream_url', e.target.value)}
+                              placeholder="https://api.openai.com/v1"
+                              className="border-0 bg-transparent h-8 mt-1"
+                            />
+                          )}
+                          {currentPreset && currentPreset.url && (
+                            <span className="text-[10px] text-muted-foreground font-mono truncate">
+                              {currentPreset.url}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      {strategy === 'weighted_random' && (
+                        <td className="p-2 text-center">
+                          <Input
+                            type="number"
+                            value={entry.weight}
+                            onChange={(e) => updateModel(index, 'weight', parseInt(e.target.value) || 0)}
+                            className="w-16 text-center border-0 bg-transparent h-8"
+                          />
+                        </td>
+                      )}
+                      <td className="p-2 text-center">
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          className="text-muted-foreground hover:text-destructive"
+                          onClick={() => removeModel(index)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>
@@ -366,21 +432,28 @@ export function RoutingTab({ value, onChange }: RoutingTabProps) {
         <Label className="text-sm font-medium">Fallback Model</Label>
         <p className="text-xs text-muted-foreground mb-2">Used when all models in pool fail</p>
         <div className="grid grid-cols-2 gap-3">
-          <Input
-            value={fallback}
-            onChange={(e) => {
-              setFallback(e.target.value)
-              if (e.target.value && fallbackUrl) {
-                updateAction({
-                  fallback: {
-                    model: e.target.value,
-                    upstream_url: fallbackUrl,
-                  },
-                })
-              }
-            }}
-            placeholder="gpt-3.5-turbo"
-          />
+          <div className="flex flex-col gap-1">
+            <Input
+              value={fallback}
+              onChange={(e) => {
+                setFallback(e.target.value)
+                if (e.target.value && fallbackUrl) {
+                  updateAction({
+                    fallback: {
+                      model: e.target.value,
+                      upstream_url: fallbackUrl,
+                    },
+                  })
+                }
+              }}
+              placeholder="gpt-3.5-turbo"
+            />
+            {fallback && detectProviderFromModel(fallback) && (
+              <span className="text-[10px] text-muted-foreground">
+                Detected: {detectProviderFromModel(fallback)}
+              </span>
+            )}
+          </div>
           <Input
             value={fallbackUrl}
             onChange={(e) => {

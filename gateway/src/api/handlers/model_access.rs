@@ -55,6 +55,18 @@ pub async fn create_model_access_group(
         return Err(StatusCode::BAD_REQUEST);
     }
 
+    // Validate model patterns are valid
+    if let Some(arr) = models.as_array() {
+        for v in arr {
+            if let Some(pattern) = v.as_str() {
+                if let Err(e) = crate::proxy::loadbalancer::validate_model_pattern(pattern) {
+                    tracing::warn!("create_model_access_group: invalid model pattern: {}", e);
+                    return Err(StatusCode::BAD_REQUEST);
+                }
+            }
+        }
+    }
+
     let row = sqlx::query_as::<_, crate::middleware::model_access::ModelAccessGroup>(
         r#"INSERT INTO model_access_groups (project_id, name, description, models)
            VALUES ($1, $2, $3, $4)
@@ -91,6 +103,20 @@ pub async fn update_model_access_group(
     let name = body.get("name").and_then(|v| v.as_str());
     let description = body.get("description").and_then(|v| v.as_str());
     let models = body.get("models");
+
+    // Validate model patterns if models is being updated
+    if let Some(models_json) = models {
+        if let Some(arr) = models_json.as_array() {
+            for v in arr {
+                if let Some(pattern) = v.as_str() {
+                    if let Err(e) = crate::proxy::loadbalancer::validate_model_pattern(pattern) {
+                        tracing::warn!("update_model_access_group: invalid model pattern: {}", e);
+                        return Err(StatusCode::BAD_REQUEST);
+                    }
+                }
+            }
+        }
+    }
 
     let row = sqlx::query_as::<_, crate::middleware::model_access::ModelAccessGroup>(
         r#"UPDATE model_access_groups SET

@@ -49,6 +49,10 @@ pub struct NewToken {
     pub circuit_breaker: Option<serde_json::Value>,
     /// Model access control: list of allowed model patterns (globs).
     pub allowed_models: Option<serde_json::Value>,
+    /// Provider access control: list of allowed provider names.
+    /// NULL = all providers allowed (backwards compatible).
+    /// Example: ["openai", "anthropic"]
+    pub allowed_providers: Option<Vec<String>>,
     /// Team assignment for attribution and budget tracking.
     pub team_id: Option<Uuid>,
     /// Tags for cost attribution and tracking.
@@ -100,6 +104,10 @@ pub struct TokenRow {
     pub allowed_models: Option<serde_json::Value>,
     /// References to named model_access_groups for reusable model restrictions.
     pub allowed_model_group_ids: Option<Vec<Uuid>>,
+    /// Provider access control: list of allowed provider names.
+    /// NULL = all providers allowed (backwards compatible).
+    /// Example: ["openai", "anthropic"]
+    pub allowed_providers: Option<Vec<String>>,
     /// Team this token belongs to (for attribution and budget tracking)
     pub team_id: Option<Uuid>,
     /// Tags for cost attribution and tracking

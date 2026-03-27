@@ -20,6 +20,7 @@ export interface TokenRow {
   circuit_breaker: CircuitBreakerConfig | null
   allowed_models: JsonValue     // JSON value (typically string[] or null)
   allowed_model_group_ids: string[] | null
+  allowed_providers: string[] | null  // Provider access control
   team_id: string | null
   tags: JsonValue               // JSON value (typically string[] or null)
   mcp_allowed_tools: JsonValue  // JSON value (typically string[] or null)
@@ -37,6 +38,10 @@ export interface UpstreamTarget {
   weight: number
   priority: number
   credential_id?: string | null
+  /** Model override - if set, replaces the request model when this upstream is selected */
+  model?: string | null
+  /** Glob patterns for model filtering - only route matching models to this upstream */
+  allowed_models?: string[] | null
 }
 
 export interface CircuitBreakerConfig {
@@ -50,7 +55,7 @@ export interface CircuitBreakerConfig {
 // Note: Backend uses serde_json::Value for flexibility, but we typically use arrays
 export interface CreateTokenRequest {
   name: string
-  credential_id?: string
+  credential_id?: string | null  // null = BYOK passthrough mode
   upstream_url: string
   project_id?: string
   policy_ids?: string[]
@@ -60,6 +65,7 @@ export interface CreateTokenRequest {
   fallback_url?: string
   upstreams?: UpstreamTarget[]
   allowed_models?: string[]     // Sent as JSON array to backend
+  allowed_providers?: string[]  // Provider access control
   team_id?: string
   tags?: string[]               // Sent as JSON array to backend
   mcp_allowed_tools?: string[]  // Sent as JSON array to backend

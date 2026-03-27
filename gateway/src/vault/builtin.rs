@@ -124,6 +124,10 @@ impl VaultCrypto {
 
 #[async_trait]
 impl super::SecretStore for BuiltinStore {
+    fn backend(&self) -> super::VaultBackend {
+        super::VaultBackend::Builtin
+    }
+
     async fn store(&self, plaintext: &str) -> anyhow::Result<String> {
         let (enc_dek, dek_nonce, enc_secret, secret_nonce) =
             self.crypto.encrypt_string(plaintext)?;
@@ -166,6 +170,14 @@ impl super::SecretStore for BuiltinStore {
             .bind(uuid::Uuid::parse_str(id)?)
             .bind(project_id)
             .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
+    async fn health_check(&self) -> anyhow::Result<()> {
+        // For builtin, just check we can ping the database
+        sqlx::query("SELECT 1")
+            .fetch_one(&self.pool)
             .await?;
         Ok(())
     }

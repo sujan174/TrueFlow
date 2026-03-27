@@ -15,6 +15,7 @@ pub mod oidc;
 pub mod pii;
 pub mod pii_vault;
 pub mod policy;
+pub mod policy_scope;
 pub mod rbac;
 pub mod redact;
 pub mod sanitize;

@@ -30,6 +30,10 @@ pub struct CreateTokenRequest {
     /// Model access control: list of allowed model patterns (globs).
     /// NULL = all models allowed (no restriction).
     pub allowed_models: Option<serde_json::Value>,
+    /// Provider access control: list of allowed provider names.
+    /// NULL = all providers allowed (no restriction).
+    /// Example: ["openai", "anthropic"]
+    pub allowed_providers: Option<Vec<String>>,
     /// Team this token belongs to (for attribution and budget tracking).
     pub team_id: Option<Uuid>,
     /// Tags for cost attribution and tracking.

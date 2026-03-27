@@ -1,5 +1,51 @@
 //! Shared utilities for TrueFlow.
 
+/// Glob pattern matching for model/provider names.
+/// Supports:
+/// - `*` matches any sequence of characters
+/// - `?` matches any single character
+/// - Literal characters match exactly (case-insensitive)
+///
+/// # Security
+/// Limits recursion depth to prevent stack overflow on malicious patterns.
+pub fn glob_match(pattern: &str, text: &str) -> bool {
+    // Case-insensitive matching for model names (GPT-4O == gpt-4o)
+    let pattern_lower: String = pattern.to_lowercase();
+    let text_lower: String = text.to_lowercase();
+    let pattern_chars: Vec<char> = pattern_lower.chars().collect();
+    let text_chars: Vec<char> = text_lower.chars().collect();
+
+    const MAX_DEPTH: usize = 256;
+
+    fn match_helper(pattern: &[char], text: &[char], depth: usize) -> bool {
+        // Prevent stack overflow on deeply nested wildcards
+        if depth > MAX_DEPTH {
+            tracing::warn!("glob_match exceeded max recursion depth");
+            return false;
+        }
+
+        match (pattern.first(), text.first()) {
+            (None, None) => true, // Both exhausted = match
+            (Some('*'), _) => {
+                // Try matching * with zero chars, or with one+ chars
+                match_helper(&pattern[1..], text, depth + 1)
+                    || (!text.is_empty() && match_helper(pattern, &text[1..], depth + 1))
+            }
+            (Some('?'), Some(_)) => {
+                // ? matches exactly one char
+                match_helper(&pattern[1..], &text[1..], depth + 1)
+            }
+            (Some(p), Some(t)) if *p == *t => {
+                // Exact match, advance both
+                match_helper(&pattern[1..], &text[1..], depth + 1)
+            }
+            _ => false,
+        }
+    }
+
+    match_helper(&pattern_chars, &text_chars, 0)
+}
+
 /// SEC: Validate that a webhook URL from a policy definition is safe to call.
 /// Blocks private IPs (v4 + v6), cloud metadata endpoints, and non-HTTP(S) schemes.
 /// Returns `true` if `ip` is a public, routable IP address.

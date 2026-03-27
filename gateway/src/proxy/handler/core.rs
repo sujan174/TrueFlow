@@ -164,7 +164,7 @@ pub async fn proxy_handler(
         .to_string();
 
     // -- 1. Extract virtual token --
-    let token_str = extract_bearer_token(&headers)?;
+    let token_str = extract_virtual_token(&headers)?;
 
     // -- 2. Resolve token --
     let token = state
@@ -1988,6 +1988,14 @@ pub async fn proxy_handler(
         // Loadbalancer: use weighted routing. Fallback to upstream_url if JSONB is empty.
         let mut lb_upstreams = proxy::loadbalancer::parse_upstreams(token.upstreams.as_ref());
 
+        // Extract model early for model-aware LB selection (clone to avoid borrow issues)
+        let request_model: String = parsed_body
+            .as_ref()
+            .and_then(|b| b.get("model"))
+            .and_then(|m| m.as_str())
+            .unwrap_or("")
+            .to_string();
+
         if lb_upstreams.is_empty() {
             // Legacy/Single upstream mode: create a single target from upstream_url
             lb_upstreams.push(proxy::loadbalancer::UpstreamTarget {
@@ -1995,26 +2003,55 @@ pub async fn proxy_handler(
                 weight: 100,
                 priority: 1,
                 credential_id: None, // Will fallback to token.credential_id below
+                model: None,
+                allowed_models: None,
             });
         }
 
         // DEBUG LOGGING
-        tracing::info!(token_id = %token.id, upstream_count = lb_upstreams.len(), "Calling LB select");
+        tracing::debug!(token_id = %token.id, upstream_count = lb_upstreams.len(), request_model = request_model, "Calling LB select_with_model");
 
-        // Always route through LB to ensure health tracking
-        if let Some(idx) = state.lb.select(&token.id, &lb_upstreams, &cb_config) {
+        // Use model-aware LB selection if we have a model in the request
+        let lb_result = if request_model.is_empty() {
+            // No model in request, fall back to regular selection
+            state.lb.select(&token.id, &lb_upstreams, &cb_config)
+                .map(|idx| (idx, None))
+        } else {
+            // Model-aware selection with filtering
+            state.lb.select_with_model(&token.id, &lb_upstreams, &cb_config, &request_model)
+        };
+
+        // Route based on LB result
+        if let Some((idx, model_override)) = lb_result {
             let target = &lb_upstreams[idx];
-            tracing::info!(token_id = %token.id, selected_url = %target.url, "LB selected target");
+            tracing::info!(token_id = %token.id, selected_url = %target.url, model_override = ?model_override, "LB selected target");
+
+            // Apply model override if set
+            if let Some(ref override_model) = model_override {
+                if let Some(ref mut body_val) = parsed_body {
+                    if let Some(obj) = body_val.as_object_mut() {
+                        obj.insert("model".into(), serde_json::json!(override_model));
+                        tracing::info!(
+                            original_model = request_model,
+                            override_model = override_model,
+                            upstream = target.url,
+                            "Model override applied for upstream"
+                        );
+                    }
+                }
+            }
+
             // Use target-specific credential if set, otherwise token default
             let effective_cred_id = target.credential_id.or(token.credential_id);
             Ok((effective_cred_id, target.url.clone(), path.clone()))
         } else {
-            // All upstreams unhealthy — return error instead of flooding a broken upstream
-            tracing::error!(token_id = %token.id, "all upstreams unhealthy, circuit breaker open");
+            // All upstreams unhealthy or no compatible upstream
+            tracing::error!(token_id = %token.id, request_model = request_model, "all upstreams unhealthy or no compatible upstream for model");
             Err(AppError::AllUpstreamsExhausted {
                 details: Some(serde_json::json!({
-                    "reason": "all_upstreams_unhealthy",
+                    "reason": "all_upstreams_unhealthy_or_incompatible",
                     "token_id": token.id,
+                    "requested_model": request_model,
                 })),
             })
         }
@@ -2274,6 +2311,49 @@ pub async fn proxy_handler(
         proxy::model_router::Provider::Unknown
     };
 
+    // ── Provider Access Control ─────────────────────────────────────
+    // Validate that the detected provider is allowed for this token.
+    if detected_provider != proxy::model_router::Provider::Unknown {
+        let provider_name = format!("{:?}", detected_provider).to_lowercase();
+        if let Err(reason) = middleware::model_access::check_provider_access(
+            &provider_name,
+            token.allowed_providers.as_deref(),
+        ) {
+            tracing::warn!(
+                token_id = %token.id,
+                provider = %provider_name,
+                model = %detected_model,
+                "Provider access denied: {}",
+                reason
+            );
+            let mut audit = base_audit(
+                request_id,
+                token.project_id,
+                &token.id,
+                agent_name,
+                method.as_str(),
+                &path,
+                &upstream_url,
+                &policies,
+                hitl_required,
+                hitl_decision,
+                hitl_latency_ms,
+                user_id,
+                tenant_id,
+                external_request_id,
+                session_id,
+                parent_span_id,
+                custom_properties,
+                token.external_user_id.clone(),
+                Some(token.purpose.clone()),
+            );
+            audit.upstream_status = Some(403);
+            audit.response_latency_ms = start.elapsed().as_millis() as u64;
+            audit.emit(&state);
+            return Err(AppError::Forbidden(reason));
+        }
+    }
+
     // Translate request body if needed (OpenAI → Anthropic/Gemini)
     let router_translated = if let Some(ref body_val) = parsed_body {
         proxy::model_router::translate_request(detected_provider, body_val)
@@ -2293,6 +2373,27 @@ pub async fn proxy_handler(
             .and_then(|m| m.as_str())
             .unwrap_or(&detected_model);
         let dyn_provider = proxy::model_router::detect_provider(dyn_model, &dyn_url);
+
+        // Validate DynamicRoute target provider is allowed
+        if dyn_provider != proxy::model_router::Provider::Unknown {
+            let dyn_provider_name = format!("{:?}", dyn_provider).to_lowercase();
+            if let Err(reason) = middleware::model_access::check_provider_access(
+                &dyn_provider_name,
+                token.allowed_providers.as_deref(),
+            ) {
+                tracing::warn!(
+                    token_id = %token.id,
+                    provider = %dyn_provider_name,
+                    model = %dyn_model,
+                    "DynamicRoute provider not allowed: {}",
+                    reason
+                );
+                return Err(AppError::Forbidden(format!(
+                    "Policy tried to route to unauthorized provider '{}': {}",
+                    dyn_provider_name, reason
+                )));
+            }
+        }
 
         if dyn_provider != proxy::model_router::Provider::OpenAI
             && dyn_provider != proxy::model_router::Provider::Unknown
@@ -2396,12 +2497,8 @@ pub async fn proxy_handler(
     // Build upstream headers
     let mut upstream_headers = reqwest::header::HeaderMap::new();
 
-    // Track injection mode for audit logging
-    let _injection_mode_str: String;
-
     if let Some(ref cred) = injected_cred {
         // === Credential injection mode ===
-        _injection_mode_str = cred.mode.clone();
 
         let header_name: reqwest::header::HeaderName = cred.header.parse().map_err(|_| {
             AppError::Internal(anyhow::anyhow!("invalid injection_header: {}", cred.header))
@@ -2446,27 +2543,69 @@ pub async fn proxy_handler(
             }
         }
     } else {
-        // === Passthrough mode ===
-        // Forward the agent's own authorization via X-Real-Authorization or X-Upstream-Authorization
-        _injection_mode_str = "passthrough".to_string();
+        // === Passthrough (BYOK) mode ===
+        // Token has no stored credential - user must provide their API key.
+        // The X-TF-Real-Auth header is the standard way to pass the real API key.
+        //
+        // For backward compatibility, we also accept:
+        // - X-Real-Authorization (legacy)
+        // - X-Upstream-Authorization (legacy)
+        // - x-api-key (Anthropic SDK compatibility)
+        //
+        // Priority:
+        // 1. X-TF-Real-Auth (recommended standard)
+        // 2. X-Real-Authorization (legacy)
+        // 3. X-Upstream-Authorization (legacy)
+        // 4. x-api-key (Anthropic SDK - passes through as-is)
 
         let real_auth = headers
-            .get("X-Real-Authorization")
+            .get("X-TF-Real-Auth")
+            .or_else(|| headers.get("X-Real-Authorization"))
             .or_else(|| headers.get("X-Upstream-Authorization"))
-            .and_then(|v| v.to_str().ok());
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.to_string());
+
+        // Check if we have any auth headers before the if-let
+        let has_auth = real_auth.is_some() || headers.contains_key("x-api-key");
 
         if let Some(auth_value) = real_auth {
+            // For X-TF-Real-Auth, the value is expected to be "Bearer sk-xxx"
+            // Forward it directly as the Authorization header to the upstream
             upstream_headers.insert(
                 "authorization",
-                reqwest::header::HeaderValue::from_str(auth_value).map_err(|_| {
+                reqwest::header::HeaderValue::from_str(&auth_value).map_err(|_| {
                     AppError::Internal(anyhow::anyhow!(
-                        "invalid auth header in X-Real-Authorization"
+                        "invalid auth header in passthrough mode"
                     ))
                 })?,
             );
         }
-        // If no real auth header provided, forward without Authorization.
-        // This supports upstream APIs that don't require auth (e.g., public endpoints).
+
+        // BYOK mode for Anthropic SDK: forward x-api-key header if present
+        // The Anthropic SDK sends api_key as x-api-key header, not Authorization
+        // This passes through unchanged
+        if let Some(api_key) = headers
+            .get("x-api-key")
+            .and_then(|v| v.to_str().ok())
+        {
+            upstream_headers.insert(
+                "x-api-key",
+                reqwest::header::HeaderValue::from_str(api_key).map_err(|_| {
+                    AppError::Internal(anyhow::anyhow!(
+                        "invalid x-api-key header in passthrough mode"
+                    ))
+                })?,
+            );
+        }
+
+        // Log warning if no auth headers provided for passthrough token
+        // (user may have misconfigured their request)
+        if !has_auth {
+            tracing::warn!(
+                token_id = %token.id,
+                "Passthrough token used without X-TF-Real-Auth header. Request may fail at upstream."
+            );
+        }
     }
 
     upstream_headers.insert(
@@ -2604,6 +2743,8 @@ pub async fn proxy_handler(
             credential_id: None,
             weight: 100,
             priority: 1,
+            model: None,
+            allowed_models: None,
         }];
         state.lb.ensure_health(&token.id, &synthetic);
     }
@@ -4217,7 +4358,34 @@ pub async fn proxy_handler(
         .map_err(|e| AppError::Internal(anyhow::anyhow!("response build failed: {}", e)))
 }
 
-fn extract_bearer_token(headers: &HeaderMap) -> Result<String, AppError> {
+/// Extract virtual token from either X-TrueFlow-Auth header or Authorization header.
+///
+/// Priority:
+/// 1. X-TrueFlow-Auth header (recommended for BYOK mode)
+/// 2. Authorization header with Bearer tf_v1_* prefix (existing flow)
+///
+/// This enables BYOK (Bring Your Own Key) mode where users send:
+/// - X-TrueFlow-Auth: tf_v1_xxx (virtual token for policy/observability)
+/// - Authorization: Bearer sk-real-key (their real API key)
+fn extract_virtual_token(headers: &HeaderMap) -> Result<String, AppError> {
+    // Priority 1: X-TrueFlow-Auth header
+    if let Some(tf_auth) = headers
+        .get("x-trueflow-auth")
+        .and_then(|v| v.to_str().ok())
+    {
+        let token = tf_auth.trim();
+        if token.starts_with("tf_v1_") {
+            return Ok(token.to_string());
+        }
+        // Invalid format in X-TrueFlow-Auth - reject explicitly
+        tracing::warn!(
+            token_prefix = %token.chars().take(10).collect::<String>(),
+            "proxy: X-TrueFlow-Auth header present but not a valid tf_v1_ token"
+        );
+        return Err(AppError::TokenNotFound);
+    }
+
+    // Priority 2: Authorization header with tf_v1_ prefix (existing flow)
     let auth = headers
         .get("authorization")
         .and_then(|v| v.to_str().ok())
@@ -4231,4 +4399,78 @@ fn extract_bearer_token(headers: &HeaderMap) -> Result<String, AppError> {
         return Err(AppError::TokenNotFound);
     }
     Ok(token)
+}
+
+// ── Unit Tests ──────────────────────────────────────────────────────────────
+#[cfg(test)]
+mod extract_token_tests {
+    use super::*;
+    use axum::http::{header, HeaderMap, HeaderValue};
+
+    fn make_headers(auth: Option<&'static str>, tf_auth: Option<&'static str>) -> HeaderMap {
+        let mut headers = HeaderMap::new();
+        if let Some(a) = auth {
+            headers.insert(header::AUTHORIZATION, HeaderValue::from_static(a));
+        }
+        if let Some(t) = tf_auth {
+            headers.insert("x-trueflow-auth", HeaderValue::from_static(t));
+        }
+        headers
+    }
+
+    #[test]
+    fn test_x_trueflow_auth_takes_priority() {
+        let headers = make_headers(
+            Some("Bearer tf_v1_auth_token"),
+            Some("tf_v1_tf_auth_token"),
+        );
+        let result = extract_virtual_token(&headers).unwrap();
+        assert_eq!(result, "tf_v1_tf_auth_token");
+    }
+
+    #[test]
+    fn test_authorization_fallback_when_no_x_trueflow_auth() {
+        let headers = make_headers(Some("Bearer tf_v1_auth_token"), None);
+        let result = extract_virtual_token(&headers).unwrap();
+        assert_eq!(result, "tf_v1_auth_token");
+    }
+
+    #[test]
+    fn test_real_api_key_in_auth_rejected_without_x_trueflow_auth() {
+        let headers = make_headers(Some("Bearer sk-real-api-key"), None);
+        let result = extract_virtual_token(&headers);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_x_trueflow_auth_with_invalid_format_rejected() {
+        let headers = make_headers(None, Some("invalid-token-format"));
+        let result = extract_virtual_token(&headers);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_no_auth_headers_returns_error() {
+        let headers = make_headers(None, None);
+        let result = extract_virtual_token(&headers);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_x_trueflow_auth_with_real_key_in_auth() {
+        // BYOK mode: X-TrueFlow-Auth has virtual token, Authorization has real key
+        let headers = make_headers(
+            Some("Bearer sk-proj-real-key"),
+            Some("tf_v1_virtual_token"),
+        );
+        let result = extract_virtual_token(&headers).unwrap();
+        assert_eq!(result, "tf_v1_virtual_token");
+    }
+
+    #[test]
+    fn test_authorization_without_bearer_prefix_rejected() {
+        let headers = make_headers(Some("tf_v1_token_without_bearer"), None);
+        let result = extract_virtual_token(&headers);
+        assert!(result.is_err());
+    }
 }

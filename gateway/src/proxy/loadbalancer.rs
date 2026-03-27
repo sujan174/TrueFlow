@@ -17,6 +17,16 @@ pub struct UpstreamTarget {
     pub weight: u32,
     #[serde(default = "default_priority")]
     pub priority: u32,
+    /// Model to use when routing to this upstream.
+    /// If set, overrides the request model when this upstream is selected.
+    /// Enables safe cross-provider failover (e.g., claude-sonnet → gpt-4o).
+    #[serde(default)]
+    pub model: Option<String>,
+    /// Model patterns this upstream supports (glob matching).
+    /// If empty or None, accepts all models (backwards compatible).
+    /// Example: ["gpt-*", "o1-*", "text-*"]
+    #[serde(default)]
+    pub allowed_models: Option<Vec<String>>,
 }
 
 fn default_weight() -> u32 {
@@ -24,6 +34,79 @@ fn default_weight() -> u32 {
 }
 fn default_priority() -> u32 {
     1
+}
+
+impl UpstreamTarget {
+    /// Check if this upstream supports the given model.
+    /// Returns true if:
+    /// - `allowed_models` is empty/None (backwards compatible, accepts all)
+    /// - Any pattern in `allowed_models` matches the model via glob matching
+    pub fn supports_model(&self, model: &str) -> bool {
+        match &self.allowed_models {
+            Some(patterns) if !patterns.is_empty() => {
+                patterns.iter().any(|p| crate::utils::glob_match(p, model))
+            }
+            _ => true, // No patterns = accept all models
+        }
+    }
+}
+
+/// Validate a model glob pattern.
+/// Returns Ok(()) if valid, Err(reason) if invalid.
+///
+/// # Validation Rules
+/// - Pattern cannot be empty
+/// - Pattern cannot contain invalid characters (only alphanumeric, `-`, `_`, `.`, `*`, `?`)
+/// - Warns on excessive wildcards (more than 3 consecutive or more than 5 total)
+pub fn validate_model_pattern(pattern: &str) -> Result<(), String> {
+    // Check for empty string
+    if pattern.is_empty() || pattern.trim().is_empty() {
+        return Err("Model pattern cannot be empty or whitespace".to_string());
+    }
+
+    // Check for invalid characters
+    // Allow: alphanumeric, hyphens, underscores, dots, asterisks, question marks
+    let valid_chars: std::collections::HashSet<char> =
+        "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.*?"
+            .chars()
+            .collect();
+
+    for ch in pattern.chars() {
+        if !valid_chars.contains(&ch) {
+            return Err(format!(
+                "Model pattern '{}' contains invalid character '{}'. Allowed: letters, numbers, hyphens (-), underscores (_), dots (.), asterisks (*), question marks (?)",
+                pattern, ch
+            ));
+        }
+    }
+
+    // Check for excessive consecutive wildcards (more than 3)
+    if pattern.contains("***") || pattern.contains("****") {
+        tracing::warn!(
+            "Model pattern '{}' has excessive consecutive wildcards. Use a single * to match any characters.",
+            pattern
+        );
+    }
+
+    // Check for excessive total wildcards (more than 5)
+    let wildcard_count = pattern.chars().filter(|&c| c == '*').count();
+    if wildcard_count > 5 {
+        tracing::warn!(
+            "Model pattern '{}' has {} wildcards. Consider simplifying.",
+            pattern, wildcard_count
+        );
+    }
+
+    Ok(())
+}
+
+/// Validate a list of model patterns.
+/// Returns Ok(()) if all patterns are valid, Err(reason) if any is invalid.
+pub fn validate_model_patterns(patterns: &[String]) -> Result<(), String> {
+    for pattern in patterns {
+        validate_model_pattern(pattern)?;
+    }
+    Ok(())
 }
 
 // ── Circuit Breaker Config ─────────────────────────────────────
@@ -283,6 +366,84 @@ impl LoadBalancer {
         }
 
         None
+    }
+
+    /// Select the best upstream target that supports the given model.
+    /// This is the model-aware version of `select()` that filters upstreams
+    /// by their `allowed_models` patterns before applying health/weight logic.
+    ///
+    /// Returns a tuple of (index, model_override) where:
+    /// - `index`: The selected upstream index into the `upstreams` slice
+    /// - `model_override`: The model to use if the upstream has a `model` field set
+    ///
+    /// If no upstreams support the model, returns `None`.
+    pub fn select_with_model(
+        &self,
+        token_id: &str,
+        upstreams: &[UpstreamTarget],
+        config: &CircuitBreakerConfig,
+        requested_model: &str,
+    ) -> Option<(usize, Option<String>)> {
+        // Filter upstreams that support the requested model
+        let compatible_indices: Vec<usize> = upstreams
+            .iter()
+            .enumerate()
+            .filter(|(_, u)| u.supports_model(requested_model))
+            .map(|(i, _)| i)
+            .collect();
+
+        if compatible_indices.is_empty() {
+            tracing::warn!(
+                token_id = token_id,
+                requested_model = requested_model,
+                "No upstream supports the requested model"
+            );
+            return None;
+        }
+
+        // If only one compatible upstream, return it directly
+        if compatible_indices.len() == 1 {
+            let idx = compatible_indices[0];
+            // Still need to check health
+            self.ensure_health(token_id, upstreams);
+            let cooldown = config.recovery_cooldown_secs;
+            let health = self.health.get(token_id);
+            let health_vec = health.as_ref().map(|h| h.value());
+
+            if self.is_healthy_at(
+                health_vec,
+                idx,
+                &upstreams[idx].url,
+                cooldown,
+                config.half_open_max_requests,
+            ) || !config.enabled
+            {
+                return Some((idx, upstreams[idx].model.clone()));
+            }
+
+            // Try recovery
+            if self.check_recovery(token_id, &upstreams[idx].url, cooldown) {
+                return Some((idx, upstreams[idx].model.clone()));
+            }
+
+            return None;
+        }
+
+        // Build a filtered upstreams slice for the existing select logic
+        // We need to map back to original indices
+        let filtered_upstreams: Vec<UpstreamTarget> = compatible_indices
+            .iter()
+            .map(|&i| upstreams[i].clone())
+            .collect();
+
+        // Use the existing select logic on filtered upstreams
+        let filtered_idx = self.select(token_id, &filtered_upstreams, config)?;
+
+        // Map back to original index
+        let original_idx = compatible_indices[filtered_idx];
+        let model_override = upstreams[original_idx].model.clone();
+
+        Some((original_idx, model_override))
     }
 
     /// Mark an upstream as failed. Opens the circuit once `config.failure_threshold` failures accumulate.
@@ -671,6 +832,8 @@ mod tests {
                 credential_id: None,
                 weight: 100,
                 priority: 1,
+                model: None,
+                allowed_models: None,
             })
             .collect()
     }
@@ -721,12 +884,16 @@ mod tests {
                 credential_id: None,
                 weight: 100,
                 priority: 1,
+                model: None,
+                allowed_models: None,
             },
             UpstreamTarget {
                 url: "https://backup.com".into(),
                 credential_id: None,
                 weight: 100,
                 priority: 1,
+                model: None,
+                allowed_models: None,
             },
         ];
 
@@ -789,12 +956,16 @@ mod tests {
                 credential_id: None,
                 weight: 100,
                 priority: 1,
+                model: None,
+                allowed_models: None,
             },
             UpstreamTarget {
                 url: "https://backup.com".into(),
                 credential_id: None,
                 weight: 100,
                 priority: 2, // lower priority (higher number)
+                model: None,
+                allowed_models: None,
             },
         ];
 
@@ -814,12 +985,16 @@ mod tests {
                 credential_id: None,
                 weight: 100,
                 priority: 1,
+                model: None,
+                allowed_models: None,
             },
             UpstreamTarget {
                 url: "https://backup.com".into(),
                 credential_id: None,
                 weight: 100,
                 priority: 2,
+                model: None,
+                allowed_models: None,
             },
         ];
 
@@ -844,12 +1019,16 @@ mod tests {
                 credential_id: None,
                 weight: 70,
                 priority: 1,
+                model: None,
+                allowed_models: None,
             },
             UpstreamTarget {
                 url: "https://light.com".into(),
                 credential_id: None,
                 weight: 30,
                 priority: 1,
+                model: None,
+                allowed_models: None,
             },
         ];
 
@@ -901,12 +1080,16 @@ mod tests {
                 credential_id: None,
                 weight: 100,
                 priority: 1,
+                model: None,
+                allowed_models: None,
             },
             UpstreamTarget {
                 url: "https://b.com".into(),
                 credential_id: None,
                 weight: 100,
                 priority: 1,
+                model: None,
+                allowed_models: None,
             },
         ];
 
@@ -967,12 +1150,16 @@ mod tests {
                 credential_id: None,
                 weight: 100,
                 priority: 1,
+                model: None,
+                allowed_models: None,
             },
             UpstreamTarget {
                 url: "https://backup.com".into(),
                 credential_id: None,
                 weight: 100,
                 priority: 1,
+                model: None,
+                allowed_models: None,
             },
         ];
 
@@ -1020,12 +1207,16 @@ mod tests {
                 credential_id: None,
                 weight: 100,
                 priority: 1,
+                model: None,
+                allowed_models: None,
             },
             UpstreamTarget {
                 url: "https://backup.com".into(),
                 credential_id: None,
                 weight: 100,
                 priority: 1,
+                model: None,
+                allowed_models: None,
             },
         ];
 
@@ -1066,12 +1257,16 @@ mod tests {
                 credential_id: None,
                 weight: 100,
                 priority: 1,
+                model: None,
+                allowed_models: None,
             },
             UpstreamTarget {
                 url: "https://backup.com".into(),
                 credential_id: None,
                 weight: 100,
                 priority: 1,
+                model: None,
+                allowed_models: None,
             },
         ];
 
@@ -1101,12 +1296,16 @@ mod tests {
                 credential_id: None,
                 weight: 100,
                 priority: 1,
+                model: None,
+                allowed_models: None,
             },
             UpstreamTarget {
                 url: "https://backup.com".into(),
                 credential_id: None,
                 weight: 100,
                 priority: 1,
+                model: None,
+                allowed_models: None,
             },
         ];
 
@@ -1187,12 +1386,16 @@ mod tests {
                 credential_id: None,
                 weight: 100,
                 priority: 1,
+                model: None,
+                allowed_models: None,
             },
             UpstreamTarget {
                 url: "https://backup.azure.com".into(),
                 credential_id: None,
                 weight: 100,
                 priority: 1,
+                model: None,
+                allowed_models: None,
             },
         ];
         lb.select("tok_prod", &upstreams, &config);
@@ -1233,12 +1436,16 @@ mod tests {
                 credential_id: None,
                 weight: 100,
                 priority: 1,
+                model: None,
+                allowed_models: None,
             },
             UpstreamTarget {
                 url: "https://b.com".into(),
                 credential_id: None,
                 weight: 100,
                 priority: 1,
+                model: None,
+                allowed_models: None,
             },
         ];
         lb.select("tok1", &upstreams, &config);
@@ -1269,12 +1476,16 @@ mod tests {
                 credential_id: None,
                 weight: 100,
                 priority: 1,
+                model: None,
+                allowed_models: None,
             },
             UpstreamTarget {
                 url: "https://backup.com".into(),
                 credential_id: None,
                 weight: 100,
                 priority: 2,
+                model: None,
+                allowed_models: None,
             },
         ];
         lb.select("tok1", &upstreams, &config);
@@ -1379,5 +1590,255 @@ mod tests {
         lb.mark_failed("tok", &upstreams[0].url, &config);
         lb.mark_failed("tok", &upstreams[0].url, &config);
         lb.mark_healthy("tok", &upstreams[0].url);
+    }
+
+    // ── Model Filtering & Glob Matching ───────────────────────────
+
+    #[test]
+    fn test_glob_match_exact() {
+        assert!(crate::utils::glob_match("gpt-4o", "gpt-4o"));
+        assert!(!crate::utils::glob_match("gpt-4o", "gpt-4o-mini"));
+    }
+
+    #[test]
+    fn test_glob_match_wildcard_suffix() {
+        assert!(crate::utils::glob_match("gpt-*", "gpt-4o"));
+        assert!(crate::utils::glob_match("gpt-*", "gpt-4"));
+        assert!(crate::utils::glob_match("gpt-*", "gpt-3.5-turbo"));
+        assert!(!crate::utils::glob_match("gpt-*", "claude-3-opus"));
+    }
+
+    #[test]
+    fn test_glob_match_wildcard_prefix() {
+        assert!(crate::utils::glob_match("*-opus", "claude-3-opus"));
+        assert!(crate::utils::glob_match("*-opus", "gpt-opus"));
+        assert!(!crate::utils::glob_match("*-opus", "claude-3-sonnet"));
+    }
+
+    #[test]
+    fn test_glob_match_wildcard_middle() {
+        assert!(crate::utils::glob_match("claude-*-opus", "claude-3-opus"));
+        assert!(crate::utils::glob_match("claude-*-opus", "claude-sonnet-4-opus"));
+    }
+
+    #[test]
+    fn test_glob_match_multiple_wildcards() {
+        assert!(crate::utils::glob_match("*-*-*", "gpt-4-turbo"));
+        assert!(crate::utils::glob_match("gemini-*.*", "gemini-1.5"));
+    }
+
+    #[test]
+    fn test_glob_match_single_char() {
+        assert!(crate::utils::glob_match("gpt-?", "gpt-4"));
+        assert!(!crate::utils::glob_match("gpt-?", "gpt-4o"));
+    }
+
+    #[test]
+    fn test_glob_match_accept_all() {
+        assert!(crate::utils::glob_match("*", "gpt-4o"));
+        assert!(crate::utils::glob_match("*", "claude-3-opus"));
+        assert!(crate::utils::glob_match("*", "gemini-1.5-pro"));
+    }
+
+    #[test]
+    fn test_glob_match_case_insensitive() {
+        // Model names should be case-insensitive (GPT-4O == gpt-4o)
+        assert!(crate::utils::glob_match("gpt-*", "GPT-4O"));
+        assert!(crate::utils::glob_match("GPT-*", "gpt-4o"));
+        assert!(crate::utils::glob_match("CLAUDE-*", "claude-3-opus"));
+    }
+
+    #[test]
+    fn test_glob_match_empty_model() {
+        assert!(crate::utils::glob_match("*", ""));
+        assert!(!crate::utils::glob_match("gpt-*", ""));
+        assert!(!crate::utils::glob_match("", "gpt-4o"));
+        assert!(crate::utils::glob_match("", "")); // Both empty = match
+    }
+
+    #[test]
+    fn test_glob_match_excessive_wildcards() {
+        // Should not panic or hang with excessive wildcards
+        assert!(crate::utils::glob_match("*****", "gpt-4o"));
+        assert!(crate::utils::glob_match("*-*-*-*-*", "a-b-c-d-e"));
+    }
+
+    #[test]
+    fn test_glob_match_unicode() {
+        // Unicode characters in model names
+        assert!(crate::utils::glob_match("*", "模型-测试"));
+        assert!(crate::utils::glob_match("模型-*", "模型-测试"));
+    }
+
+    #[test]
+    fn test_upstream_supports_model_no_patterns() {
+        let upstream = UpstreamTarget {
+            url: "https://api.example.com".into(),
+            credential_id: None,
+            weight: 100,
+            priority: 1,
+            model: None,
+            allowed_models: None,
+        };
+        // No patterns = accept all models
+        assert!(upstream.supports_model("gpt-4o"));
+        assert!(upstream.supports_model("claude-3-opus"));
+        assert!(upstream.supports_model("gemini-1.5-pro"));
+    }
+
+    #[test]
+    fn test_upstream_supports_model_with_patterns() {
+        let upstream = UpstreamTarget {
+            url: "https://api.openai.com".into(),
+            credential_id: None,
+            weight: 100,
+            priority: 1,
+            model: None,
+            allowed_models: Some(vec!["gpt-*".into(), "o1-*".into()]),
+        };
+        assert!(upstream.supports_model("gpt-4o"));
+        assert!(upstream.supports_model("gpt-3.5-turbo"));
+        assert!(upstream.supports_model("o1-preview"));
+        assert!(!upstream.supports_model("claude-3-opus"));
+        assert!(!upstream.supports_model("gemini-1.5-pro"));
+    }
+
+    #[test]
+    fn test_select_with_model_filters_compatible() {
+        let lb = LoadBalancer::new();
+        let config = CircuitBreakerConfig::default();
+        let upstreams = vec![
+            UpstreamTarget {
+                url: "https://api.openai.com".into(),
+                credential_id: None,
+                weight: 100,
+                priority: 1,
+                model: None,
+                allowed_models: Some(vec!["gpt-*".into()]),
+            },
+            UpstreamTarget {
+                url: "https://api.anthropic.com".into(),
+                credential_id: None,
+                weight: 100,
+                priority: 1,
+                model: None,
+                allowed_models: Some(vec!["claude-*".into()]),
+            },
+        ];
+
+        // Request for gpt-4o should select OpenAI (index 0)
+        let result = lb.select_with_model("tok1", &upstreams, &config, "gpt-4o");
+        assert_eq!(result, Some((0, None)));
+
+        // Request for claude-3-opus should select Anthropic (index 1)
+        let result = lb.select_with_model("tok1", &upstreams, &config, "claude-3-opus");
+        assert_eq!(result, Some((1, None)));
+    }
+
+    #[test]
+    fn test_select_with_model_no_match_returns_none() {
+        let lb = LoadBalancer::new();
+        let config = CircuitBreakerConfig::default();
+        let upstreams = vec![
+            UpstreamTarget {
+                url: "https://api.openai.com".into(),
+                credential_id: None,
+                weight: 100,
+                priority: 1,
+                model: None,
+                allowed_models: Some(vec!["gpt-*".into()]),
+            },
+        ];
+
+        // Request for claude should return None (no compatible upstream)
+        let result = lb.select_with_model("tok1", &upstreams, &config, "claude-3-opus");
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_select_with_model_model_override() {
+        let lb = LoadBalancer::new();
+        let config = CircuitBreakerConfig::default();
+        let upstreams = vec![
+            UpstreamTarget {
+                url: "https://api.openai.com".into(),
+                credential_id: None,
+                weight: 100,
+                priority: 1,
+                model: Some("gpt-4o-mini".into()), // Override to cheaper model
+                allowed_models: Some(vec!["*".into()]),
+            },
+        ];
+
+        let result = lb.select_with_model("tok1", &upstreams, &config, "gpt-4o");
+        assert_eq!(result, Some((0, Some("gpt-4o-mini".into()))));
+    }
+
+    #[test]
+    fn test_select_with_model_failover_respects_filter() {
+        let lb = LoadBalancer::new();
+        let config = CircuitBreakerConfig::default();
+        let upstreams = vec![
+            UpstreamTarget {
+                url: "https://api.openai.com".into(),
+                credential_id: None,
+                weight: 100,
+                priority: 1,
+                model: None,
+                allowed_models: Some(vec!["gpt-*".into()]),
+            },
+            UpstreamTarget {
+                url: "https://api.anthropic.com".into(),
+                credential_id: None,
+                weight: 100,
+                priority: 2, // Lower priority (fallback)
+                model: Some("claude-sonnet-4-20250514".into()), // Model override for failover
+                allowed_models: Some(vec!["gpt-*".into()]), // Accept gpt requests
+            },
+        ];
+
+        // Initialize health
+        lb.select_with_model("tok1", &upstreams, &config, "gpt-4o");
+
+        // Fail OpenAI
+        for _ in 0..config.failure_threshold {
+            lb.mark_failed("tok1", "https://api.openai.com", &config);
+        }
+
+        // Now should failover to Anthropic with model override
+        let result = lb.select_with_model("tok1", &upstreams, &config, "gpt-4o");
+        assert_eq!(result, Some((1, Some("claude-sonnet-4-20250514".into()))));
+    }
+
+    // ── Model Pattern Validation Tests ─────────────────────────────
+
+    #[test]
+    fn test_validate_model_pattern_valid() {
+        assert!(validate_model_pattern("gpt-4o").is_ok());
+        assert!(validate_model_pattern("gpt-*").is_ok());
+        assert!(validate_model_pattern("*-preview").is_ok());
+        assert!(validate_model_pattern("claude-*-opus").is_ok());
+        assert!(validate_model_pattern("*").is_ok());
+        assert!(validate_model_pattern("model?").is_ok());
+    }
+
+    #[test]
+    fn test_validate_model_pattern_empty() {
+        assert!(validate_model_pattern("").is_err());
+        assert!(validate_model_pattern("   ").is_err());
+    }
+
+    #[test]
+    fn test_validate_model_pattern_invalid_chars() {
+        assert!(validate_model_pattern("gpt=4").is_err()); // = not allowed
+        assert!(validate_model_pattern("model/4").is_err()); // / not allowed
+        assert!(validate_model_pattern("model\\4").is_err()); // \ not allowed
+        assert!(validate_model_pattern("model[4]").is_err()); // [] not allowed
+    }
+
+    #[test]
+    fn test_validate_model_patterns_list() {
+        assert!(validate_model_patterns(&["gpt-*".into(), "claude-*".into()]).is_ok());
+        assert!(validate_model_patterns(&["gpt-*".into(), "".into()]).is_err());
     }
 }

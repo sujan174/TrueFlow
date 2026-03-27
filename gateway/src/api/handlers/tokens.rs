@@ -113,6 +113,79 @@ pub async fn create_token(
         if unique.len() != urls.len() {
             return Err(StatusCode::UNPROCESSABLE_ENTITY);
         }
+        // Validate allowed_models patterns in upstreams
+        for upstream in upstreams {
+            if let Some(ref patterns) = upstream.allowed_models {
+                if let Err(e) = crate::proxy::loadbalancer::validate_model_patterns(patterns) {
+                    tracing::warn!("create_token: invalid model pattern: {}", e);
+                    return Err(StatusCode::BAD_REQUEST);
+                }
+            }
+        }
+    }
+
+    // Validate allowed_models patterns on token
+    if let Some(ref patterns_json) = payload.allowed_models {
+        if let Some(arr) = patterns_json.as_array() {
+            for v in arr {
+                if let Some(pattern) = v.as_str() {
+                    if let Err(e) = crate::proxy::loadbalancer::validate_model_pattern(pattern) {
+                        tracing::warn!("create_token: invalid allowed_models pattern: {}", e);
+                        return Err(StatusCode::BAD_REQUEST);
+                    }
+                }
+            }
+        }
+    }
+
+    // BYOK (Passthrough) mode validation: single provider only
+    // When credential_id is None, the token operates in passthrough mode
+    // which only supports a single provider (set via upstream_url)
+    if payload.credential_id.is_none() {
+        // Check upstreams - should be None or have exactly one entry
+        if let Some(ref upstreams) = payload.upstreams {
+            if upstreams.len() > 1 {
+                tracing::warn!(
+                    "create_token: BYOK token cannot have multiple upstreams (got {})",
+                    upstreams.len()
+                );
+                return Err(StatusCode::BAD_REQUEST);
+            }
+        }
+
+        // Check allowed_providers - should be None or have exactly one entry
+        if let Some(ref providers) = payload.allowed_providers {
+            if providers.len() > 1 {
+                tracing::warn!(
+                    "create_token: BYOK token cannot have multiple allowed_providers (got {})",
+                    providers.len()
+                );
+                return Err(StatusCode::BAD_REQUEST);
+            }
+        }
+    }
+
+    // Validate that policies' routing targets are within token's allowed scope
+    if let Some(ref policy_uuids) = payload.policy_ids {
+        if !policy_uuids.is_empty() {
+            let policies = state
+                .db
+                .get_policies_for_token(project_id, policy_uuids)
+                .await
+                .map_err(|e| {
+                    tracing::error!("create_token: failed to load policies: {}", e);
+                    StatusCode::INTERNAL_SERVER_ERROR
+                })?;
+
+            if let Err(e) = crate::middleware::policy_scope::validate_policies_against_token_scope(
+                &policies,
+                payload.allowed_providers.as_deref(),
+                payload.allowed_models.as_ref(),
+            ) {
+                tracing::warn!("create_token: policy-token scope validation failed: {}", e);
+                return Err(StatusCode::BAD_REQUEST);
+            }
+        }
     }
 
     // Generate token ID
@@ -135,6 +208,7 @@ pub async fn create_token(
         log_level: resolved_log_level,
         circuit_breaker: payload.circuit_breaker,
         allowed_models: payload.allowed_models,
+        allowed_providers: payload.allowed_providers,
         team_id: payload.team_id,
         tags: payload.tags,
         mcp_allowed_tools: payload.mcp_allowed_tools,
@@ -370,6 +444,71 @@ pub async fn bulk_create_tokens(
         let token_id = format!("tf_v1_{}_tok_{}", proj_short, hex::encode(random_bytes));
 
         let name = token_req.name.clone();
+
+        // Validate allowed_models patterns
+        let mut validation_error: Option<String> = None;
+        if let Some(ref patterns_json) = token_req.allowed_models {
+            if let Some(arr) = patterns_json.as_array() {
+                for v in arr {
+                    if let Some(pattern) = v.as_str() {
+                        if let Err(e) = crate::proxy::loadbalancer::validate_model_pattern(pattern) {
+                            validation_error = Some(format!("Invalid allowed_models pattern: {}", e));
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        // Validate upstreams allowed_models
+        if validation_error.is_none() {
+            if let Some(ref upstreams) = token_req.upstreams {
+                for upstream in upstreams {
+                    if let Some(ref patterns) = upstream.allowed_models {
+                        if let Err(e) = crate::proxy::loadbalancer::validate_model_patterns(patterns) {
+                            validation_error = Some(format!("Invalid upstream allowed_models: {}", e));
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        if let Some(err) = validation_error {
+            failed.push(BulkTokenFailure {
+                name,
+                error: err,
+            });
+            continue;
+        }
+
+        // Validate that policies' routing targets are within token's allowed scope
+        if let Some(ref policy_uuids) = token_req.policy_ids {
+            if !policy_uuids.is_empty() {
+                match state.db.get_policies_for_token(proj, policy_uuids).await {
+                    Ok(policies) => {
+                        if let Err(e) = crate::middleware::policy_scope::validate_policies_against_token_scope(
+                            &policies,
+                            token_req.allowed_providers.as_deref(),
+                            token_req.allowed_models.as_ref(),
+                        ) {
+                            validation_error = Some(format!("Policy-token scope validation failed: {}", e));
+                        }
+                    }
+                    Err(e) => {
+                        validation_error = Some(format!("Failed to load policies: {}", e));
+                    }
+                }
+            }
+        }
+
+        if let Some(err) = validation_error {
+            failed.push(BulkTokenFailure {
+                name,
+                error: err,
+            });
+            continue;
+        }
+
         let new_token = crate::store::postgres::NewToken {
             id: token_id.clone(),
             project_id: proj,
@@ -381,6 +520,7 @@ pub async fn bulk_create_tokens(
             log_level: token_req.resolved_log_level(),
             circuit_breaker: token_req.circuit_breaker.clone(),
             allowed_models: token_req.allowed_models.clone(),
+            allowed_providers: token_req.allowed_providers.clone(),
             team_id: token_req.team_id,
             tags: token_req.tags.clone(),
             mcp_allowed_tools: token_req.mcp_allowed_tools.clone(),

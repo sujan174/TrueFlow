@@ -5,8 +5,8 @@ use uuid::Uuid;
 impl PgStore {
     pub async fn insert_token(&self, token: &NewToken) -> anyhow::Result<()> {
         sqlx::query(
-            r#"INSERT INTO tokens (id, project_id, name, credential_id, upstream_url, scopes, policy_ids, log_level, circuit_breaker, allowed_models, team_id, tags, mcp_allowed_tools, mcp_blocked_tools, external_user_id, metadata, purpose)
-               VALUES ($1, $2, $3, $4, $5, $6, $7, COALESCE($8, 1::SMALLINT), $9, $10, $11, COALESCE($12, '{}'::jsonb), $13, $14, $15, COALESCE($16, '{}'::jsonb), COALESCE($17, 'llm'))"#
+            r#"INSERT INTO tokens (id, project_id, name, credential_id, upstream_url, scopes, policy_ids, log_level, circuit_breaker, allowed_models, allowed_providers, team_id, tags, mcp_allowed_tools, mcp_blocked_tools, external_user_id, metadata, purpose)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, COALESCE($8, 1::SMALLINT), $9, $10, $11, $12, COALESCE($13, '{}'::jsonb), $14, $15, $16, $17, COALESCE($18, '{}'::jsonb), COALESCE($19, 'llm'))"#
         )
         .bind(&token.id)
         .bind(token.project_id)
@@ -18,6 +18,7 @@ impl PgStore {
         .bind(token.log_level)
         .bind(&token.circuit_breaker)
         .bind(&token.allowed_models)
+        .bind(&token.allowed_providers)
         .bind(token.team_id)
         .bind(&token.tags)
         .bind(&token.mcp_allowed_tools)
@@ -33,7 +34,7 @@ impl PgStore {
 
     pub async fn get_token(&self, token_id: &str) -> anyhow::Result<Option<TokenRow>> {
         let row = sqlx::query_as::<_, TokenRow>(
-            "SELECT id, project_id, name, credential_id, upstream_url, scopes, policy_ids, is_active, expires_at, created_at, COALESCE(log_level, 1::SMALLINT) as log_level, upstreams, circuit_breaker, allowed_models, allowed_model_group_ids, team_id, tags, mcp_allowed_tools, mcp_blocked_tools, guardrail_header_mode, external_user_id, metadata, COALESCE(purpose, 'llm') as purpose FROM tokens WHERE id = $1"
+            "SELECT id, project_id, name, credential_id, upstream_url, scopes, policy_ids, is_active, expires_at, created_at, COALESCE(log_level, 1::SMALLINT) as log_level, upstreams, circuit_breaker, allowed_models, allowed_model_group_ids, allowed_providers, team_id, tags, mcp_allowed_tools, mcp_blocked_tools, guardrail_header_mode, external_user_id, metadata, COALESCE(purpose, 'llm') as purpose FROM tokens WHERE id = $1"
         )
         .bind(token_id)
         .fetch_optional(&self.pool)
@@ -50,7 +51,7 @@ impl PgStore {
     ) -> anyhow::Result<Vec<TokenRow>> {
         let limit = limit.clamp(1, 1000); // Cap at 1000, minimum 1
         let rows = sqlx::query_as::<_, TokenRow>(
-            "SELECT id, project_id, name, credential_id, upstream_url, scopes, policy_ids, is_active, expires_at, created_at, COALESCE(log_level, 1::SMALLINT) as log_level, upstreams, circuit_breaker, allowed_models, allowed_model_group_ids, team_id, tags, mcp_allowed_tools, mcp_blocked_tools, guardrail_header_mode, external_user_id, metadata, COALESCE(purpose, 'llm') as purpose FROM tokens WHERE project_id = $1 AND is_active = true ORDER BY created_at DESC LIMIT $2 OFFSET $3"
+            "SELECT id, project_id, name, credential_id, upstream_url, scopes, policy_ids, is_active, expires_at, created_at, COALESCE(log_level, 1::SMALLINT) as log_level, upstreams, circuit_breaker, allowed_models, allowed_model_group_ids, allowed_providers, team_id, tags, mcp_allowed_tools, mcp_blocked_tools, guardrail_header_mode, external_user_id, metadata, COALESCE(purpose, 'llm') as purpose FROM tokens WHERE project_id = $1 AND is_active = true ORDER BY created_at DESC LIMIT $2 OFFSET $3"
         )
         .bind(project_id)
         .bind(limit)
@@ -156,6 +157,7 @@ impl PgStore {
             log_level: Some(log_level),
             circuit_breaker: None,
             allowed_models: None,
+            allowed_providers: None,
             team_id: None,
             tags: None,
             mcp_allowed_tools: None,
@@ -183,7 +185,7 @@ impl PgStore {
         let rows = if let Some(ext_user) = external_user_id {
             if let Some(tid) = team_id {
                 sqlx::query_as::<_, TokenRow>(
-                    "SELECT id, project_id, name, credential_id, upstream_url, scopes, policy_ids, is_active, expires_at, created_at, COALESCE(log_level, 1::SMALLINT) as log_level, upstreams, circuit_breaker, allowed_models, allowed_model_group_ids, team_id, tags, mcp_allowed_tools, mcp_blocked_tools, guardrail_header_mode, external_user_id, metadata, COALESCE(purpose, 'llm') as purpose FROM tokens WHERE project_id = $1 AND external_user_id = $2 AND team_id = $3 AND is_active = true ORDER BY created_at DESC LIMIT $4 OFFSET $5"
+                    "SELECT id, project_id, name, credential_id, upstream_url, scopes, policy_ids, is_active, expires_at, created_at, COALESCE(log_level, 1::SMALLINT) as log_level, upstreams, circuit_breaker, allowed_models, allowed_model_group_ids, allowed_providers, team_id, tags, mcp_allowed_tools, mcp_blocked_tools, guardrail_header_mode, external_user_id, metadata, COALESCE(purpose, 'llm') as purpose FROM tokens WHERE project_id = $1 AND external_user_id = $2 AND team_id = $3 AND is_active = true ORDER BY created_at DESC LIMIT $4 OFFSET $5"
                 )
                 .bind(project_id)
                 .bind(ext_user)
@@ -194,7 +196,7 @@ impl PgStore {
                 .await?
             } else {
                 sqlx::query_as::<_, TokenRow>(
-                    "SELECT id, project_id, name, credential_id, upstream_url, scopes, policy_ids, is_active, expires_at, created_at, COALESCE(log_level, 1::SMALLINT) as log_level, upstreams, circuit_breaker, allowed_models, allowed_model_group_ids, team_id, tags, mcp_allowed_tools, mcp_blocked_tools, guardrail_header_mode, external_user_id, metadata, COALESCE(purpose, 'llm') as purpose FROM tokens WHERE project_id = $1 AND external_user_id = $2 AND is_active = true ORDER BY created_at DESC LIMIT $3 OFFSET $4"
+                    "SELECT id, project_id, name, credential_id, upstream_url, scopes, policy_ids, is_active, expires_at, created_at, COALESCE(log_level, 1::SMALLINT) as log_level, upstreams, circuit_breaker, allowed_models, allowed_model_group_ids, allowed_providers, team_id, tags, mcp_allowed_tools, mcp_blocked_tools, guardrail_header_mode, external_user_id, metadata, COALESCE(purpose, 'llm') as purpose FROM tokens WHERE project_id = $1 AND external_user_id = $2 AND is_active = true ORDER BY created_at DESC LIMIT $3 OFFSET $4"
                 )
                 .bind(project_id)
                 .bind(ext_user)
@@ -205,7 +207,7 @@ impl PgStore {
             }
         } else if let Some(tid) = team_id {
             sqlx::query_as::<_, TokenRow>(
-                "SELECT id, project_id, name, credential_id, upstream_url, scopes, policy_ids, is_active, expires_at, created_at, COALESCE(log_level, 1::SMALLINT) as log_level, upstreams, circuit_breaker, allowed_models, allowed_model_group_ids, team_id, tags, mcp_allowed_tools, mcp_blocked_tools, guardrail_header_mode, external_user_id, metadata, COALESCE(purpose, 'llm') as purpose FROM tokens WHERE project_id = $1 AND team_id = $2 AND is_active = true ORDER BY created_at DESC LIMIT $3 OFFSET $4"
+                "SELECT id, project_id, name, credential_id, upstream_url, scopes, policy_ids, is_active, expires_at, created_at, COALESCE(log_level, 1::SMALLINT) as log_level, upstreams, circuit_breaker, allowed_models, allowed_model_group_ids, allowed_providers, team_id, tags, mcp_allowed_tools, mcp_blocked_tools, guardrail_header_mode, external_user_id, metadata, COALESCE(purpose, 'llm') as purpose FROM tokens WHERE project_id = $1 AND team_id = $2 AND is_active = true ORDER BY created_at DESC LIMIT $3 OFFSET $4"
             )
             .bind(project_id)
             .bind(tid)

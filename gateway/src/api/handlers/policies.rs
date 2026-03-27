@@ -100,6 +100,15 @@ pub async fn create_policy(
         ).into_response();
     }
 
+    // Validate model patterns in routing actions
+    if let Err(e) = validate_routing_actions(&payload.rules) {
+        tracing::warn!("create_policy: invalid routing action: {}", e);
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({ "error": e })),
+        ).into_response();
+    }
+
     match state
         .db
         .insert_policy(
@@ -160,6 +169,14 @@ pub async fn update_policy(
     // Validate phase if provided
     if let Some(ref phase) = payload.phase {
         if phase != "pre" && phase != "post" {
+            return Err(StatusCode::BAD_REQUEST);
+        }
+    }
+
+    // Validate model patterns in routing actions if rules are being updated
+    if let Some(ref rules) = payload.rules {
+        if let Err(e) = validate_routing_actions(rules) {
+            tracing::warn!("update_policy: invalid routing action: {}", e);
             return Err(StatusCode::BAD_REQUEST);
         }
     }
@@ -248,4 +265,40 @@ pub async fn list_policy_versions(
     })?;
 
     Ok(Json(versions))
+}
+
+/// Validate model patterns in routing actions within policy rules.
+/// Checks dynamic_route and conditional_route actions for valid model patterns.
+fn validate_routing_actions(rules: &serde_json::Value) -> Result<(), String> {
+    if let Some(arr) = rules.as_array() {
+        for rule in arr {
+            if let Some(actions) = rule.get("actions").and_then(|a| a.as_array()) {
+                for action in actions {
+                    // Check dynamic_route action
+                    if let Some(pool) = action.get("pool").and_then(|p| p.as_array()) {
+                        for entry in pool {
+                            // Validate model field if present
+                            if let Some(model) = entry.get("model").and_then(|m| m.as_str()) {
+                                if !model.is_empty() {
+                                    crate::proxy::loadbalancer::validate_model_pattern(model)?;
+                                }
+                            }
+                        }
+                    }
+                    // Check conditional_route action
+                    if let Some(routes) = action.get("routes").and_then(|r| r.as_array()) {
+                        for route in routes {
+                            // Validate model field if present
+                            if let Some(model) = route.get("model").and_then(|m| m.as_str()) {
+                                if !model.is_empty() {
+                                    crate::proxy::loadbalancer::validate_model_pattern(model)?;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
 }

@@ -129,10 +129,107 @@ class TrueFlowClient:
 
     # ── Passthrough / BYOK ─────────────────────────────────────
 
+    @classmethod
+    def byok(
+        cls,
+        virtual_token: str,
+        real_api_key: str,
+        gateway_url: Optional[str] = None,
+        agent_name: Optional[str] = None,
+        **kwargs,
+    ) -> "TrueFlowClient":
+        """
+        Create a client for BYOK (Bring Your Own Key) mode.
+
+        In BYOK mode, you keep control of your API keys while using
+        TrueFlow's observability and policy enforcement. Your virtual
+        token identifies the token configuration, and you provide your
+        real API key with each request.
+
+        Args:
+            virtual_token: Your TrueFlow virtual token (tf_v1_...).
+            real_api_key: Your real upstream API key (e.g., sk-...).
+            gateway_url: URL of the TrueFlow gateway.
+            agent_name: Optional agent name for logging.
+            **kwargs: Additional arguments passed to httpx.Client.
+
+        Returns:
+            TrueFlowClient configured for BYOK mode.
+
+        Example::
+
+            # Use directly
+            client = TrueFlowClient.byok(
+                virtual_token="tf_v1_xxx",
+                real_api_key="sk-proj-my-openai-key",
+                gateway_url="https://gateway.example.com"
+            )
+
+            resp = client._http.post("/v1/chat/completions", json={...})
+
+            # Use with OpenAI SDK
+            import openai
+
+            client = TrueFlowClient.byok(
+                virtual_token="tf_v1_xxx",
+                real_api_key="sk-proj-my-openai-key",
+            )
+
+            openai_client = openai.OpenAI(
+                api_key="dummy",  # Will be overridden
+                base_url=client.gateway_url,
+                default_headers={
+                    "X-TrueFlow-Auth": client._virtual_token,
+                    "X-TF-Real-Auth": f"Bearer {client._real_api_key}",
+                }
+            )
+
+        Note:
+            The token must have credential_id=NULL and upstream_url set
+            to your target provider (e.g., https://api.openai.com/v1).
+            BYOK mode only supports a single provider per token.
+        """
+        instance = cls.__new__(cls)
+        instance.api_key = virtual_token  # Virtual token as primary api_key
+        instance._virtual_token = virtual_token
+        instance._real_api_key = real_api_key
+        instance.gateway_url = (gateway_url or os.environ.get("TRUEFLOW_GATEWAY_URL", "http://localhost:8443")).rstrip("/")
+        instance._agent_name = agent_name
+
+        # Headers for BYOK mode:
+        # - X-TrueFlow-Auth: Virtual token (identifies the token config)
+        # - X-TF-Real-Auth: Real API key (passed to upstream provider)
+        headers = {
+            "X-TrueFlow-Auth": virtual_token,
+            "X-TF-Real-Auth": f"Bearer {real_api_key}",
+        }
+        if agent_name:
+            headers["X-TrueFlow-Agent-Name"] = agent_name
+
+        from . import __version__
+        headers["X-TrueFlow-SDK-Version"] = __version__
+
+        timeout = kwargs.pop("timeout", 30.0)
+        max_retries = kwargs.pop("max_retries", 2)
+        if "transport" not in kwargs and max_retries > 0:
+            kwargs["transport"] = httpx.HTTPTransport(retries=max_retries)
+
+        instance._http = httpx.Client(
+            base_url=instance.gateway_url,
+            headers=headers,
+            timeout=timeout,
+            **kwargs,
+        )
+        return instance
+
     @contextmanager
     def with_upstream_key(self, key: str, header: str = "Bearer"):
         """
-        Context manager for Passthrough (BYOK) mode.
+        Context manager for Passthrough (BYOK) mode (deprecated).
+
+        .. deprecated:: 0.5.0
+            Use :meth:`TrueFlowClient.byok()` instead, which provides a
+            cleaner API with the standard X-TF-Real-Auth header.
 
         When the token has no stored credential, the gateway forwards
         whatever key you supply here directly to the upstream as the
@@ -147,11 +244,20 @@ class TrueFlowClient:
 
             with client.with_upstream_key("sk-my-openai-key") as byok:
                 resp = byok.post("/v1/chat/completions", json={...})
+
+        Note:
+            Prefer TrueFlowClient.byok() for new code.
         """
+        import warnings
+        warnings.warn(
+            "with_upstream_key() is deprecated. Use TrueFlowClient.byok() instead.",
+            DeprecationWarning,
+            stacklevel=2
+        )
         auth_value = f"{header} {key}" if header else key
         scoped = _ScopedClient(
             self._http,
-            extra_headers={"X-Real-Authorization": auth_value},
+            extra_headers={"X-TF-Real-Auth": auth_value},
         )
         try:
             yield scoped

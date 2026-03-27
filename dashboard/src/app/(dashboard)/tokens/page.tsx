@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { Plus, Key, MoreHorizontal, Trash2, Eye, Users, Copy, Check } from "lucide-react"
+import { Plus, Key, MoreHorizontal, Trash2, Eye, Users, Copy, Check, ChevronDown, GripVertical, ArrowUpDown } from "lucide-react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -31,6 +31,9 @@ import {
   type Team,
   type CredentialMeta,
 } from "@/lib/api"
+import { PROVIDER_PRESETS } from "@/lib/provider-presets"
+import { TokenModeSelector, type TokenMode } from "@/components/tokens/token-mode-selector"
+import { ByokBadge } from "@/components/tokens/byok-badge"
 
 function formatRelativeTime(dateString: string): string {
   const date = new Date(dateString)
@@ -92,14 +95,53 @@ function CreateTokenModal({
   credentials: CredentialMeta[]
   onSuccess: () => void
 }) {
+  const [tokenMode, setTokenMode] = useState<TokenMode>("managed")
   const [name, setName] = useState("")
   const [teamId, setTeamId] = useState("")
   const [credentialId, setCredentialId] = useState("")
+  const [selectedProvider, setSelectedProvider] = useState("OpenAI")
   const [upstreamUrl, setUpstreamUrl] = useState("https://api.openai.com/v1")
   const [externalUserId, setExternalUserId] = useState("")
   const [purpose, setPurpose] = useState<"llm" | "tool" | "both">("llm")
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [createdToken, setCreatedToken] = useState<string | null>(null)
+
+  // Provider-level access control
+  const [selectedProviders, setSelectedProviders] = useState<string[]>(["OpenAI"])
+
+  // Get the currently selected preset
+  const currentPreset = PROVIDER_PRESETS.find(p => p.name === selectedProvider) || PROVIDER_PRESETS[0]
+
+  const handleProviderChange = (providerName: string) => {
+    const preset = PROVIDER_PRESETS.find(p => p.name === providerName)
+    if (preset) {
+      setSelectedProvider(providerName)
+      if (preset.url) {
+        setUpstreamUrl(preset.url)
+      }
+    }
+  }
+
+  // Toggle provider selection
+  const toggleProvider = (providerName: string) => {
+    setSelectedProviders(prev => {
+      if (prev.includes(providerName)) {
+        // Don't allow deselecting all providers
+        if (prev.length === 1) return prev
+        return prev.filter(p => p !== providerName)
+      } else {
+        return [...prev, providerName]
+      }
+    })
+  }
+
+  // Move provider up in priority
+  const moveProviderUp = (index: number) => {
+    if (index === 0) return
+    const newProviders = [...selectedProviders]
+    ;[newProviders[index - 1], newProviders[index]] = [newProviders[index], newProviders[index - 1]]
+    setSelectedProviders(newProviders)
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -108,10 +150,12 @@ function CreateTokenModal({
       const response = await createToken({
         name,
         team_id: teamId || undefined,
-        credential_id: credentialId || undefined,
+        credential_id: tokenMode === "passthrough" ? null : credentialId || undefined,
         upstream_url: upstreamUrl,
         external_user_id: externalUserId || undefined,
         purpose,
+        // Include allowed_providers from selected providers
+        allowed_providers: selectedProviders.map(p => p.toLowerCase()),
       })
       setCreatedToken(response.token_id)
       toast.success("Token created successfully")
@@ -123,12 +167,15 @@ function CreateTokenModal({
   }
 
   const handleClose = () => {
+    setTokenMode("managed")
     setName("")
     setTeamId("")
     setCredentialId("")
+    setSelectedProvider("OpenAI")
     setUpstreamUrl("https://api.openai.com/v1")
     setExternalUserId("")
     setPurpose("llm")
+    setSelectedProviders(["OpenAI"])
     setCreatedToken(null)
     onOpenChange(false)
     if (createdToken) {
@@ -171,6 +218,9 @@ function CreateTokenModal({
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Token Mode Selector */}
+          <TokenModeSelector value={tokenMode} onChange={setTokenMode} />
+
           <div className="grid grid-cols-2 gap-3">
             <div className="col-span-2">
               <label className="text-sm font-medium">Name</label>
@@ -183,6 +233,110 @@ function CreateTokenModal({
                 required
               />
             </div>
+
+            {/* Provider Selection */}
+            <div className="col-span-2">
+              <label className="text-sm font-medium">Allowed Providers</label>
+              <p className="text-xs text-muted-foreground mb-2">
+                Select providers this token can access. Drag to set failover priority.
+              </p>
+              <div className="space-y-2 mt-2">
+                {/* Selected providers with priority */}
+                {selectedProviders.length > 0 && (
+                  <div className="space-y-1.5 mb-3">
+                    {selectedProviders.map((providerName, index) => {
+                      const preset = PROVIDER_PRESETS.find(p => p.name === providerName) || PROVIDER_PRESETS[0]
+                      const priorityLabel = index === 0 ? "Primary" : `Backup ${index}`
+                      return (
+                        <div
+                          key={providerName}
+                          className="flex items-center gap-2 p-2 border rounded-lg bg-muted/30"
+                        >
+                          <GripVertical className="h-4 w-4 text-muted-foreground cursor-grab" />
+                          <Badge
+                            variant={index === 0 ? "default" : "secondary"}
+                            className="text-[10px] min-w-[60px] justify-center"
+                          >
+                            {priorityLabel}
+                          </Badge>
+                          <span className="text-sm font-medium flex-1">{providerName}</span>
+                          <div className="flex items-center gap-1">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon-sm"
+                              disabled={index === 0}
+                              onClick={() => moveProviderUp(index)}
+                              className="h-6 w-6"
+                            >
+                              <ArrowUpDown className="h-3 w-3" />
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon-sm"
+                              onClick={() => toggleProvider(providerName)}
+                              className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+
+                {/* Provider dropdown to add more */}
+                <select
+                  value=""
+                  onChange={(e) => {
+                    if (e.target.value && !selectedProviders.includes(e.target.value)) {
+                      setSelectedProviders([...selectedProviders, e.target.value])
+                    }
+                    e.target.value = ""
+                  }}
+                  className="w-full px-3 py-2 text-sm border rounded-lg bg-background"
+                >
+                  <option value="">+ Add provider...</option>
+                  {PROVIDER_PRESETS.filter(p => !selectedProviders.includes(p.name)).map((preset) => (
+                    <option key={preset.name} value={preset.name}>
+                      {preset.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Models for each selected provider */}
+            {selectedProviders.length > 0 && (
+              <div className="col-span-2">
+                <label className="text-sm font-medium text-muted-foreground">Available Models by Provider</label>
+                <div className="mt-2 space-y-2">
+                  {selectedProviders.map((providerName) => {
+                    const preset = PROVIDER_PRESETS.find(p => p.name === providerName) || PROVIDER_PRESETS[0]
+                    return (
+                      <div key={providerName} className="p-2 border rounded-lg bg-muted/20">
+                        <span className="text-xs font-medium">{providerName}</span>
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {preset.allowed_models.slice(0, 5).map((pattern) => (
+                            <Badge key={pattern} variant="outline" className="text-[10px] font-mono">
+                              {pattern}
+                            </Badge>
+                          ))}
+                          {preset.allowed_models.length > 5 && (
+                            <Badge variant="outline" className="text-[10px]">
+                              +{preset.allowed_models.length - 5} more
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
             <div>
               <label className="text-sm font-medium">Team</label>
               <select
@@ -210,21 +364,29 @@ function CreateTokenModal({
                 <option value="both">Both</option>
               </select>
             </div>
-            <div>
-              <label className="text-sm font-medium">Credential</label>
-              <select
-                value={credentialId}
-                onChange={(e) => setCredentialId(e.target.value)}
-                className="w-full mt-1 px-3 py-2 text-sm border rounded-lg bg-background"
-              >
-                <option value="">Default</option>
-                {credentials.map((cred) => (
-                  <option key={cred.id} value={cred.id}>
-                    {cred.name} ({cred.provider})
-                  </option>
-                ))}
-              </select>
-            </div>
+            {tokenMode === "managed" && (
+              <div>
+                <label className="text-sm font-medium">Credential</label>
+                <select
+                  value={credentialId}
+                  onChange={(e) => setCredentialId(e.target.value)}
+                  className="w-full mt-1 px-3 py-2 text-sm border rounded-lg bg-background"
+                  required
+                >
+                  <option value="">Select credential...</option>
+                  {credentials.map((cred) => (
+                    <option key={cred.id} value={cred.id}>
+                      {cred.name} ({cred.provider})
+                    </option>
+                  ))}
+                </select>
+                {credentials.length === 0 && (
+                  <p className="text-xs text-amber-600 mt-1">
+                    No credentials available. Create one first or use Passthrough mode.
+                  </p>
+                )}
+              </div>
+            )}
             <div>
               <label className="text-sm font-medium">External User ID</label>
               <input
@@ -235,16 +397,21 @@ function CreateTokenModal({
                 placeholder="user_123"
               />
             </div>
-            <div>
-              <label className="text-sm font-medium">Upstream URL</label>
-              <input
-                type="url"
-                value={upstreamUrl}
-                onChange={(e) => setUpstreamUrl(e.target.value)}
-                className="w-full mt-1 px-3 py-2 text-sm border rounded-lg bg-background"
-                placeholder="https://api.openai.com/v1"
-              />
-            </div>
+
+            {/* Custom URL for providers like Azure/Bedrock/Custom */}
+            {(!currentPreset.url || selectedProvider === "Custom") && (
+              <div className="col-span-2">
+                <label className="text-sm font-medium">Upstream URL</label>
+                <input
+                  type="url"
+                  value={upstreamUrl}
+                  onChange={(e) => setUpstreamUrl(e.target.value)}
+                  className="w-full mt-1 px-3 py-2 text-sm border rounded-lg bg-background"
+                  placeholder="https://api.provider.com/v1"
+                  required
+                />
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={handleClose}>
@@ -361,7 +528,10 @@ export default function TokensPage() {
                     onClick={() => router.push(`/tokens/${token.id}`)}
                   >
                     <td className="px-4 py-3">
-                      <span className="text-sm font-medium">{token.name}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium">{token.name}</span>
+                        {!token.credential_id && <ByokBadge />}
+                      </div>
                     </td>
                     <td className="px-4 py-3">
                       <code className="text-xs text-muted-foreground font-mono">

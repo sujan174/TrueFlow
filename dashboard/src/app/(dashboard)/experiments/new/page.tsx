@@ -61,16 +61,16 @@ export default function NewExperimentPage() {
   }
 
   const updateVariant = (id: string, field: keyof VariantInput, value: string | number) => {
-    setVariants(variants.map((v) => {
+    setVariants(variants.map((v): VariantInput => {
       if (v.id !== id) return v
 
       // Validate JSON on bodyFields change
       if (field === "bodyFields") {
         const jsonError = validateJson(value as string)
-        return { ...v, [field]: value, bodyFieldsError: jsonError }
+        return { ...v, [field]: value, bodyFieldsError: jsonError } as VariantInput
       }
 
-      return { ...v, [field]: value }
+      return { ...v, [field]: value } as VariantInput
     }))
   }
 

@@ -734,6 +734,7 @@ async fn handle_token_command(
                 log_level: Some(1),    // Default to redacted logging for CLI
                 circuit_breaker: None, // Use gateway defaults
                 allowed_models: None,
+                allowed_providers: None,
                 team_id: None,
                 tags: None,
                 mcp_allowed_tools: None,

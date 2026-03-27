@@ -49,6 +49,12 @@ class TokensResource:
         upstreams: Optional[List[Any]] = None,  # List[Upstream | dict]
         log_level: Optional[str] = None,        # "metadata" | "redacted" | "full"
         expires_at: Optional[str] = None,       # ISO8601 timestamp string
+        allowed_providers: Optional[List[str]] = None,  # Provider access control
+        allowed_models: Optional[List[str]] = None,     # Model access control (glob patterns)
+        team_id: Optional[str] = None,
+        external_user_id: Optional[str] = None,
+        tags: Optional[List[str]] = None,
+        purpose: Optional[str] = None,  # "llm" | "tool" | "both"
     ) -> TokenCreateResponse:
         """
         Create a new virtual token.
@@ -71,6 +77,15 @@ class TokensResource:
                 objects and/or raw dicts. Takes precedence over ``fallback_url``.
             log_level: Log verbosity for this token — ``"metadata"``, ``"redacted"``,
                 or ``"full"``. Defaults to the gateway global setting.
+            expires_at: Optional ISO8601 timestamp for token expiry.
+            allowed_providers: Optional list of provider names this token can access.
+                Examples: ``["openai", "anthropic"]``. If not set, all providers are allowed.
+            allowed_models: Optional list of glob patterns for models this token can use.
+                Examples: ``["gpt-4*", "claude-*"]``. If not set, all models are allowed.
+            team_id: Optional team ID for team-level access control.
+            external_user_id: Optional external user ID for SaaS builders.
+            tags: Optional list of tags for organization and filtering.
+            purpose: Token purpose — ``"llm"``, ``"tool"``, or ``"both"``.
 
         Returns:
             A TokenCreateResponse containing the ``token_id`` and metadata.
@@ -97,6 +112,18 @@ class TokensResource:
             payload["log_level_name"] = log_level
         if expires_at:
             payload["expires_at"] = expires_at
+        if allowed_providers:
+            payload["allowed_providers"] = allowed_providers
+        if allowed_models:
+            payload["allowed_models"] = allowed_models
+        if team_id:
+            payload["team_id"] = team_id
+        if external_user_id:
+            payload["external_user_id"] = external_user_id
+        if tags:
+            payload["tags"] = tags
+        if purpose:
+            payload["purpose"] = purpose
         resp = self._client._http.post("/api/v1/tokens", json=payload)
         raise_for_status(resp)
         return TokenCreateResponse(**resp.json())
@@ -275,6 +302,12 @@ class AsyncTokensResource:
         upstreams: Optional[List[Any]] = None,  # List[Upstream | dict]
         log_level: Optional[str] = None,        # "metadata" | "redacted" | "full"
         expires_at: Optional[str] = None,       # ISO8601 timestamp string
+        allowed_providers: Optional[List[str]] = None,  # Provider access control
+        allowed_models: Optional[List[str]] = None,     # Model access control (glob patterns)
+        team_id: Optional[str] = None,
+        external_user_id: Optional[str] = None,
+        tags: Optional[List[str]] = None,
+        purpose: Optional[str] = None,  # "llm" | "tool" | "both"
     ) -> TokenCreateResponse:
         """
         Create a new virtual token.
@@ -295,6 +328,14 @@ class AsyncTokensResource:
             log_level: Log verbosity for this token — ``"metadata"``, ``"redacted"``,
                 or ``"full"``. Defaults to the gateway global setting.
             expires_at: Optional ISO8601 timestamp for token expiry.
+            allowed_providers: Optional list of provider names this token can access.
+                Examples: ``["openai", "anthropic"]``. If not set, all providers are allowed.
+            allowed_models: Optional list of glob patterns for models this token can use.
+                Examples: ``["gpt-4*", "claude-*"]``. If not set, all models are allowed.
+            team_id: Optional team ID for team-level access control.
+            external_user_id: Optional external user ID for SaaS builders.
+            tags: Optional list of tags for organization and filtering.
+            purpose: Token purpose — ``"llm"``, ``"tool"``, or ``"both"``.
 
         Returns:
             A TokenCreateResponse containing the 'token_id' and metadata.
@@ -321,6 +362,18 @@ class AsyncTokensResource:
             payload["log_level_name"] = log_level
         if expires_at:
             payload["expires_at"] = expires_at
+        if allowed_providers:
+            payload["allowed_providers"] = allowed_providers
+        if allowed_models:
+            payload["allowed_models"] = allowed_models
+        if team_id:
+            payload["team_id"] = team_id
+        if external_user_id:
+            payload["external_user_id"] = external_user_id
+        if tags:
+            payload["tags"] = tags
+        if purpose:
+            payload["purpose"] = purpose
         resp = await self._client._http.post("/api/v1/tokens", json=payload)
         raise_for_status(resp)
         return TokenCreateResponse(**resp.json())

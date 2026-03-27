@@ -9,6 +9,8 @@ pub(crate) const REDACTED_HEADER_NAMES: &[&str] = &[
     "x-api-key",
     "x-real-authorization",
     "x-upstream-authorization",
+    "x-trueflow-auth",   // BYOK: virtual token header
+    "x-tf-real-auth",    // BYOK: real API key header
     "proxy-authorization",
 ];
 
@@ -71,6 +73,10 @@ mod tests {
         assert!(is_sensitive_header("proxy-authorization"));
         assert!(is_sensitive_header("x-real-authorization"));
         assert!(is_sensitive_header("x-upstream-authorization"));
+        assert!(is_sensitive_header("x-trueflow-auth"));
+        assert!(is_sensitive_header("X-TrueFlow-Auth"));
+        assert!(is_sensitive_header("x-tf-real-auth"));
+        assert!(is_sensitive_header("X-TF-Real-Auth"));
     }
 
     #[test]

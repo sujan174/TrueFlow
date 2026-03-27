@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Plus, Key, MoreHorizontal, Trash2, Shield } from "lucide-react"
+import { Plus, Key, MoreHorizontal, Trash2, Shield, Check } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -10,12 +10,22 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { toast } from "sonner"
 import {
   listCredentials,
+  createCredential,
   deleteCredential,
   type CredentialMeta,
 } from "@/lib/api"
+import { PROVIDER_PRESETS } from "@/lib/provider-presets"
 
 function formatRelativeTime(dateString: string): string {
   const date = new Date(dateString)
@@ -45,22 +55,187 @@ const providerLabels: Record<string, string> = {
   ollama: "Ollama",
 }
 
+// Map UI provider names to backend provider IDs
+const providerIdMap: Record<string, string> = {
+  "OpenAI": "openai",
+  "Anthropic": "anthropic",
+  "Google Gemini": "gemini",
+  "Azure OpenAI": "azure",
+  "AWS Bedrock": "bedrock",
+  "Cohere": "cohere",
+  "Mistral": "mistral",
+  "Groq": "groq",
+  "Together AI": "together",
+  "OpenRouter": "openrouter",
+  "Ollama": "ollama",
+}
+
+// Credential Creation Modal
+function CreateCredentialModal({
+  open,
+  onOpenChange,
+  onSuccess,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onSuccess: () => void
+}) {
+  const [name, setName] = useState("")
+  const [selectedProvider, setSelectedProvider] = useState("OpenAI")
+  const [apiKey, setApiKey] = useState("")
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [created, setCreated] = useState(false)
+
+  const currentPreset = PROVIDER_PRESETS.find(p => p.name === selectedProvider) || PROVIDER_PRESETS[0]
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setIsSubmitting(true)
+    try {
+      await createCredential({
+        name,
+        provider: providerIdMap[selectedProvider] || selectedProvider.toLowerCase(),
+        secret: apiKey,
+      })
+      setCreated(true)
+      toast.success("Credential created successfully")
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to create credential")
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const handleClose = () => {
+    if (created) {
+      onSuccess()
+    }
+    setName("")
+    setSelectedProvider("OpenAI")
+    setApiKey("")
+    setCreated(false)
+    onOpenChange(false)
+  }
+
+  if (created) {
+    return (
+      <Dialog open={open} onOpenChange={handleClose}>
+        <DialogContent className="sm:max-w-md" showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle className="text-green-600 flex items-center gap-2">
+              <Check className="h-5 w-5" />
+              Credential Created
+            </DialogTitle>
+            <DialogDescription>
+              Your API key has been encrypted and stored securely. You can now use it when creating tokens.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button onClick={handleClose}>Done</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    )
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={handleClose}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Add Credential</DialogTitle>
+          <DialogDescription>
+            Store an upstream provider API key securely.
+          </DialogDescription>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-3">
+            <div>
+              <label className="text-sm font-medium">Name</label>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="w-full mt-1 px-3 py-2 text-sm border rounded-lg bg-background"
+                placeholder="My OpenAI Key"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="text-sm font-medium">Provider</label>
+              <select
+                value={selectedProvider}
+                onChange={(e) => setSelectedProvider(e.target.value)}
+                className="w-full mt-1 px-3 py-2 text-sm border rounded-lg bg-background"
+              >
+                {PROVIDER_PRESETS.filter(p => p.name !== "Custom").map((preset) => (
+                  <option key={preset.name} value={preset.name}>
+                    {preset.name}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-muted-foreground mt-1">{currentPreset.description}</p>
+            </div>
+
+            {/* Supported Models */}
+            <div>
+              <label className="text-sm font-medium text-muted-foreground">Supported Models</label>
+              <div className="flex flex-wrap gap-1.5 mt-1">
+                {currentPreset.allowed_models.map((pattern) => (
+                  <Badge key={pattern} variant="outline" className="text-xs font-mono">
+                    {pattern}
+                  </Badge>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="text-sm font-medium">API Key</label>
+              <input
+                type="password"
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                className="w-full mt-1 px-3 py-2 text-sm border rounded-lg bg-background font-mono"
+                placeholder="sk-..."
+                required
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Encrypted with AES-256-GCM and never shown after creation.
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={handleClose}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={isSubmitting}>
+              {isSubmitting ? "Creating..." : "Create Credential"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 export default function CredentialsPage() {
   const [credentials, setCredentials] = useState<CredentialMeta[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [createModalOpen, setCreateModalOpen] = useState(false)
+
+  const fetchCredentials = async () => {
+    try {
+      const data = await listCredentials()
+      setCredentials(data)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load credentials")
+    } finally {
+      setLoading(false)
+    }
+  }
 
   useEffect(() => {
-    async function fetchCredentials() {
-      try {
-        const data = await listCredentials()
-        setCredentials(data)
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load credentials")
-      } finally {
-        setLoading(false)
-      }
-    }
     fetchCredentials()
   }, [])
 
@@ -88,7 +263,7 @@ export default function CredentialsPage() {
               Securely store upstream provider API keys
             </p>
           </div>
-          <Button className="gap-2">
+          <Button className="gap-2" onClick={() => setCreateModalOpen(true)}>
             <Plus className="h-4 w-4" />
             Add Credential
           </Button>
@@ -185,6 +360,13 @@ export default function CredentialsPage() {
           )}
         </div>
       </div>
+
+      {/* Create Credential Modal */}
+      <CreateCredentialModal
+        open={createModalOpen}
+        onOpenChange={setCreateModalOpen}
+        onSuccess={fetchCredentials}
+      />
     </div>
   )
 }

@@ -143,6 +143,36 @@ pub fn model_matches(model: &str, pattern: &str) -> bool {
     true
 }
 
+/// Check whether a detected provider is allowed by the token's provider restrictions.
+///
+/// Returns `Ok(())` if the provider is allowed, or `Err(reason)` if denied.
+pub fn check_provider_access(
+    detected_provider: &str,
+    allowed_providers: Option<&[String]>,
+) -> Result<(), String> {
+    // If no provider restriction configured, allow all providers (backwards compatible)
+    if let Some(allowed) = allowed_providers {
+        if allowed.is_empty() {
+            return Ok(()); // Empty array means no restriction
+        }
+
+        let detected_lower = detected_provider.to_lowercase();
+        for allowed_provider in allowed {
+            if allowed_provider.to_lowercase() == detected_lower {
+                return Ok(());
+            }
+        }
+
+        return Err(format!(
+            "Provider '{}' is not allowed by this API key. Allowed providers: [{}]",
+            detected_provider,
+            allowed.join(", ")
+        ));
+    }
+
+    Ok(())
+}
+
 /// Resolve model patterns from a list of group IDs by querying the database.
 /// 6C-3 FIX: Scoped by project_id to prevent cross-tenant group resolution.
 pub async fn resolve_group_models(
@@ -298,5 +328,37 @@ mod tests {
         assert!(err.contains("claude-3-opus"));
         assert!(err.contains("not allowed"));
         assert!(err.contains("gpt-4o"));
+    }
+
+    // ── check_provider_access ─────────────────────────────────────
+
+    #[test]
+    fn test_null_allowed_providers_permits_all() {
+        assert!(check_provider_access("openai", None).is_ok());
+        assert!(check_provider_access("anthropic", None).is_ok());
+        assert!(check_provider_access("gemini", None).is_ok());
+    }
+
+    #[test]
+    fn test_empty_provider_array_permits_all() {
+        let empty: Vec<String> = vec![];
+        assert!(check_provider_access("openai", Some(&empty)).is_ok());
+    }
+
+    #[test]
+    fn test_allowed_provider() {
+        let allowed = vec!["openai".to_string(), "anthropic".to_string()];
+        assert!(check_provider_access("openai", Some(&allowed)).is_ok());
+        assert!(check_provider_access("anthropic", Some(&allowed)).is_ok());
+        assert!(check_provider_access("OPENAI", Some(&allowed)).is_ok()); // case insensitive
+    }
+
+    #[test]
+    fn test_denied_provider() {
+        let allowed = vec!["openai".to_string()];
+        let err = check_provider_access("anthropic", Some(&allowed)).unwrap_err();
+        assert!(err.contains("anthropic"));
+        assert!(err.contains("not allowed"));
+        assert!(err.contains("openai"));
     }
 }

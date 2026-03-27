@@ -1267,6 +1267,9 @@ fn test_blocking_check_routes_to_actions_not_async() {
 
 #[test]
 fn test_mixed_blocking_and_async_rules() {
+    // HIGH-4: When a Deny action is encountered, processing stops immediately
+    // (short-circuit). No further rules are evaluated, including async ones.
+    // This is intentional for security and efficiency.
     let method = Method::POST;
     let uri: Uri = "/test".parse().unwrap();
     let headers = HeaderMap::new();
@@ -1300,12 +1303,46 @@ fn test_mixed_blocking_and_async_rules() {
 
     let outcome = evaluate_policies(&[policy], &ctx, &Phase::Pre);
 
+    // HIGH-4: Deny short-circuits, so only 1 action and NO async_triggered
     assert_eq!(outcome.actions.len(), 1, "expected 1 blocking action");
-    assert_eq!(outcome.async_triggered.len(), 1, "expected 1 async action");
+    assert_eq!(outcome.async_triggered.len(), 0, "deny short-circuits, no async rules processed");
     match &outcome.actions[0].action {
         Action::Deny { status, .. } => assert_eq!(*status, 429),
         _ => panic!("expected Deny action"),
     }
+}
+
+#[test]
+fn test_async_rule_processed_when_no_deny() {
+    // When there's no deny, async rules should be processed correctly
+    let method = Method::POST;
+    let uri: Uri = "/test".parse().unwrap();
+    let headers = HeaderMap::new();
+    let ctx = make_ctx(&method, "/test", &uri, &headers, None);
+
+    let policy = Policy {
+        id: Uuid::new_v4(),
+        name: "async-only-policy".to_string(),
+        mode: PolicyMode::Enforce,
+        phase: Phase::Pre,
+        retry: None,
+        rules: vec![
+            Rule {
+                when: Condition::Always { always: true },
+                then: vec![Action::Log {
+                    level: "info".to_string(),
+                    tags: HashMap::new(),
+                }],
+                async_check: true,
+            },
+        ],
+    };
+
+    let outcome = evaluate_policies(&[policy], &ctx, &Phase::Pre);
+
+    // No deny, so async rule should be processed
+    assert_eq!(outcome.actions.len(), 0, "no blocking actions");
+    assert_eq!(outcome.async_triggered.len(), 1, "expected 1 async action");
     match &outcome.async_triggered[0].action {
         Action::Log { level, .. } => assert_eq!(level, "info"),
         _ => panic!("expected Log action"),
