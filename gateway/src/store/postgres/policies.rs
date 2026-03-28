@@ -3,6 +3,23 @@ use super::PgStore;
 use uuid::Uuid;
 
 impl PgStore {
+    /// Fetch a single policy by ID within a project scope.
+    /// Returns None if the policy doesn't exist or doesn't belong to the project.
+    pub async fn get_policy_by_id(
+        &self,
+        id: Uuid,
+        project_id: Uuid,
+    ) -> anyhow::Result<Option<PolicyRow>> {
+        let row = sqlx::query_as::<_, PolicyRow>(
+            "SELECT id, project_id, name, mode, phase, rules, retry, is_active, created_at, token_id FROM policies WHERE id = $1 AND project_id = $2 AND is_active = true"
+        )
+        .bind(id)
+        .bind(project_id)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(row)
+    }
+
     pub async fn get_policies_for_token(
         &self,
         project_id: Uuid,
@@ -16,7 +33,7 @@ impl PgStore {
         // Without this, PostgreSQL returns rows in arbitrary order, causing
         // non-deterministic behavior when multiple policies have conflicting rules.
         let rows = sqlx::query_as::<_, PolicyRow>(
-            "SELECT id, project_id, name, mode, phase, rules, retry, is_active, created_at FROM policies WHERE id = ANY($1) AND project_id = $2 AND is_active = true ORDER BY created_at ASC, id ASC"
+            "SELECT id, project_id, name, mode, phase, rules, retry, is_active, created_at, token_id FROM policies WHERE id = ANY($1) AND project_id = $2 AND is_active = true ORDER BY created_at ASC, id ASC"
         )
         .bind(policy_ids)
         .bind(project_id)
@@ -52,6 +69,7 @@ impl PgStore {
             policies.push(crate::models::policy::Policy {
                 id: row.id,
                 name: row.name,
+                token_id: row.token_id.clone(),
                 phase,
                 mode,
                 rules,
@@ -70,7 +88,7 @@ impl PgStore {
     ) -> anyhow::Result<Vec<PolicyRow>> {
         let limit = limit.clamp(1, 1000); // Cap at 1000, minimum 1
         let rows = sqlx::query_as::<_, PolicyRow>(
-            "SELECT id, project_id, name, mode, phase, rules, retry, is_active, created_at FROM policies WHERE project_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3"
+            "SELECT id, project_id, name, mode, phase, rules, retry, is_active, created_at, token_id FROM policies WHERE project_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3"
         )
         .bind(project_id)
         .bind(limit)
@@ -88,10 +106,11 @@ impl PgStore {
         phase: &str,
         rules: serde_json::Value,
         retry: Option<serde_json::Value>,
+        token_id: &str,
     ) -> anyhow::Result<Uuid> {
         let id = sqlx::query_scalar::<_, Uuid>(
-            r#"INSERT INTO policies (project_id, name, mode, phase, rules, retry)
-               VALUES ($1, $2, $3, $4, $5, $6)
+            r#"INSERT INTO policies (project_id, name, mode, phase, rules, retry, token_id)
+               VALUES ($1, $2, $3, $4, $5, $6, $7)
                RETURNING id"#,
         )
         .bind(project_id)
@@ -100,6 +119,7 @@ impl PgStore {
         .bind(phase)
         .bind(rules)
         .bind(retry)
+        .bind(token_id)
         .fetch_one(&self.pool)
         .await?;
         Ok(id)

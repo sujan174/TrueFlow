@@ -128,6 +128,8 @@ pub enum PolicyCommands {
     Create {
         #[arg(long)]
         name: String,
+        #[arg(long)]
+        token_id: String,
         #[arg(long, default_value = "enforce")]
         mode: String,
         #[arg(long, default_value = "pre")]
@@ -166,7 +168,11 @@ pub enum ConfigCommands {
         #[arg(short, long)]
         file: Option<String>,
         /// Gateway URL
-        #[arg(long, env = "TRUEFLOW_GATEWAY_URL", default_value = "http://localhost:8443")]
+        #[arg(
+            long,
+            env = "TRUEFLOW_GATEWAY_URL",
+            default_value = "http://localhost:8443"
+        )]
         gateway_url: String,
         /// Admin or API key for authentication
         #[arg(long, env = "TRUEFLOW_ADMIN_KEY")]
@@ -182,7 +188,11 @@ pub enum ConfigCommands {
         #[arg(short, long, default_value = "trueflow.yaml")]
         file: String,
         /// Gateway URL
-        #[arg(long, env = "TRUEFLOW_GATEWAY_URL", default_value = "http://localhost:8443")]
+        #[arg(
+            long,
+            env = "TRUEFLOW_GATEWAY_URL",
+            default_value = "http://localhost:8443"
+        )]
         gateway_url: String,
         /// Admin or API key for authentication
         #[arg(long, env = "TRUEFLOW_ADMIN_KEY")]
@@ -198,7 +208,11 @@ pub enum ConfigCommands {
         #[arg(short, long, default_value = "trueflow.yaml")]
         file: String,
         /// Gateway URL
-        #[arg(long, env = "TRUEFLOW_GATEWAY_URL", default_value = "http://localhost:8443")]
+        #[arg(
+            long,
+            env = "TRUEFLOW_GATEWAY_URL",
+            default_value = "http://localhost:8443"
+        )]
         gateway_url: String,
         /// Admin or API key for authentication
         #[arg(long, env = "TRUEFLOW_ADMIN_KEY")]

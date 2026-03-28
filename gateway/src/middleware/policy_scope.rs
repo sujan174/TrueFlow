@@ -10,8 +10,8 @@
 //
 // This catches misconfiguration early, before requests fail at runtime.
 
-use uuid::Uuid;
 use serde_json::Value;
+use uuid::Uuid;
 
 /// Represents a model found in a policy's routing action.
 #[derive(Debug)]
@@ -43,6 +43,22 @@ pub enum ViolationType {
     ModelNotAllowed { allowed_patterns: Vec<String> },
 }
 
+/// Detailed violation type for structured UI error responses.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(tag = "type")]
+pub enum DetailedViolationType {
+    ProviderNotAllowed { allowed: Vec<String> },
+    ModelNotAllowed { allowed_patterns: Vec<String> },
+}
+
+/// Detailed scope violation for structured error responses (UI-friendly).
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct DetailedScopeViolation {
+    pub model: String,
+    pub detected_provider: String,
+    pub violation_type: DetailedViolationType,
+}
+
 /// Extract all models referenced in routing actions from a policy's rules.
 pub fn extract_routing_models(rules: &[crate::models::policy::Rule]) -> Vec<(String, String)> {
     // (model, action_type) pairs
@@ -63,10 +79,15 @@ pub fn extract_routing_models(rules: &[crate::models::policy::Rule]) -> Vec<(Str
                         }
                     }
                 }
-                crate::models::policy::Action::ConditionalRoute { branches, fallback, .. } => {
+                crate::models::policy::Action::ConditionalRoute {
+                    branches, fallback, ..
+                } => {
                     for branch in branches {
                         if !branch.target.model.is_empty() {
-                            models.push((branch.target.model.clone(), "conditional_route".to_string()));
+                            models.push((
+                                branch.target.model.clone(),
+                                "conditional_route".to_string(),
+                            ));
                         }
                     }
                     if let Some(fb) = fallback {
@@ -76,6 +97,61 @@ pub fn extract_routing_models(rules: &[crate::models::policy::Rule]) -> Vec<(Str
                     }
                 }
                 _ => {}
+            }
+        }
+    }
+
+    models
+}
+
+/// Extract routing models from raw JSON rules (for validation before parsing).
+/// Returns (model, action_type) pairs.
+pub fn extract_routing_models_from_json(rules: &Value) -> Vec<(String, String)> {
+    let mut models = Vec::new();
+
+    if let Some(arr) = rules.as_array() {
+        for rule in arr {
+            if let Some(actions) = rule.get("then").and_then(|a| a.as_array()) {
+                for action in actions {
+                    // Check dynamic_route action
+                    if let Some(pool) = action.get("dynamic_route").and_then(|dr| dr.get("pool")).and_then(|p| p.as_array()) {
+                        for entry in pool {
+                            if let Some(model) = entry.get("model").and_then(|m| m.as_str()) {
+                                if !model.is_empty() {
+                                    models.push((model.to_string(), "dynamic_route".to_string()));
+                                }
+                            }
+                        }
+                        // Check fallback
+                        if let Some(fb) = action.get("dynamic_route").and_then(|dr| dr.get("fallback")) {
+                            if let Some(model) = fb.get("model").and_then(|m| m.as_str()) {
+                                if !model.is_empty() {
+                                    models.push((model.to_string(), "dynamic_route".to_string()));
+                                }
+                            }
+                        }
+                    }
+                    // Check conditional_route action
+                    if let Some(routes) = action.get("conditional_route").and_then(|cr| cr.get("routes")).and_then(|r| r.as_array()) {
+                        for route in routes {
+                            if let Some(target) = route.get("target") {
+                                if let Some(model) = target.get("model").and_then(|m| m.as_str()) {
+                                    if !model.is_empty() {
+                                        models.push((model.to_string(), "conditional_route".to_string()));
+                                    }
+                                }
+                            }
+                        }
+                        // Check fallback
+                        if let Some(fb) = action.get("conditional_route").and_then(|cr| cr.get("fallback")) {
+                            if let Some(model) = fb.get("model").and_then(|m| m.as_str()) {
+                                if !model.is_empty() {
+                                    models.push((model.to_string(), "conditional_route".to_string()));
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -94,9 +170,8 @@ pub fn validate_policies_against_token_scope(
 ) -> Result<(), String> {
     // If no restrictions, everything is allowed
     let has_provider_restriction = allowed_providers.map_or(false, |p| !p.is_empty());
-    let has_model_restriction = allowed_models.map_or(false, |v| {
-        v.as_array().map_or(false, |arr| !arr.is_empty())
-    });
+    let has_model_restriction =
+        allowed_models.map_or(false, |v| v.as_array().map_or(false, |arr| !arr.is_empty()));
 
     if !has_provider_restriction && !has_model_restriction {
         return Ok(());
@@ -143,9 +218,8 @@ pub fn validate_policies_against_token_scope(
                 if let Some(models_value) = allowed_models {
                     if let Some(patterns) = models_value.as_array() {
                         let model_allowed = patterns.iter().any(|p| {
-                            p.as_str().map_or(false, |pattern| {
-                                crate::utils::glob_match(pattern, &model)
-                            })
+                            p.as_str()
+                                .map_or(false, |pattern| crate::utils::glob_match(pattern, &model))
                         });
 
                         if !model_allowed {
@@ -176,12 +250,94 @@ pub fn validate_policies_against_token_scope(
     }
 }
 
+/// Validate policy routing targets against token's allowed scope.
+/// Returns detailed violations for UI display.
+///
+/// # Arguments
+/// * `routing_models` - List of (model, action_type) pairs from policy routing actions
+/// * `allowed_providers` - Optional list of allowed provider names
+/// * `allowed_models` - Optional JSON array of allowed model patterns (globs)
+///
+/// # Returns
+/// * `Ok(())` if all models are within scope
+/// * `Err(Vec<DetailedScopeViolation>)` with structured violations for UI display
+pub fn validate_policy_scope_detailed(
+    routing_models: &[(String, String)],
+    allowed_providers: Option<&[String]>,
+    allowed_models: Option<&Value>,
+) -> Result<(), Vec<DetailedScopeViolation>> {
+    let mut violations = Vec::new();
+
+    let has_provider_restriction = allowed_providers.map_or(false, |p| !p.is_empty());
+    let has_model_restriction =
+        allowed_models.map_or(false, |v| v.as_array().map_or(false, |arr| !arr.is_empty()));
+
+    for (model, _action_type) in routing_models {
+        let detected_provider = detect_provider_from_model(model);
+
+        // Check provider restriction
+        if has_provider_restriction {
+            if let Some(allowed) = allowed_providers {
+                let provider_lower = detected_provider.to_lowercase();
+                let is_allowed = allowed.iter().any(|p| p.to_lowercase() == provider_lower);
+
+                if !is_allowed {
+                    violations.push(DetailedScopeViolation {
+                        model: model.clone(),
+                        detected_provider: detected_provider.clone(),
+                        violation_type: DetailedViolationType::ProviderNotAllowed {
+                            allowed: allowed.to_vec(),
+                        },
+                    });
+                    continue; // Skip model check if provider already violates
+                }
+            }
+        }
+
+        // Check model restriction
+        if has_model_restriction {
+            if let Some(models_value) = allowed_models {
+                if let Some(patterns) = models_value.as_array() {
+                    let model_allowed = patterns.iter().any(|p| {
+                        p.as_str()
+                            .map_or(false, |pattern| crate::utils::glob_match(pattern, model))
+                    });
+
+                    if !model_allowed {
+                        let pattern_strs: Vec<String> = patterns
+                            .iter()
+                            .filter_map(|p| p.as_str().map(|s| s.to_string()))
+                            .collect();
+
+                        violations.push(DetailedScopeViolation {
+                            model: model.clone(),
+                            detected_provider,
+                            violation_type: DetailedViolationType::ModelNotAllowed {
+                                allowed_patterns: pattern_strs,
+                            },
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    if violations.is_empty() {
+        Ok(())
+    } else {
+        Err(violations)
+    }
+}
+
 /// Detect provider from model name (simplified version).
 /// Returns the provider name in lowercase, or "unknown" for unrecognized patterns.
-fn detect_provider_from_model(model: &str) -> String {
+pub fn detect_provider_from_model(model: &str) -> String {
     let model_lower = model.to_lowercase();
 
-    if model_lower.starts_with("gpt-") || model_lower.starts_with("o1-") || model_lower.starts_with("o3-") {
+    if model_lower.starts_with("gpt-")
+        || model_lower.starts_with("o1-")
+        || model_lower.starts_with("o3-")
+    {
         return "openai".to_string();
     }
     if model_lower.starts_with("claude-") {
@@ -190,7 +346,10 @@ fn detect_provider_from_model(model: &str) -> String {
     if model_lower.starts_with("gemini-") {
         return "google".to_string();
     }
-    if model_lower.starts_with("bedrock-") || model_lower.starts_with("anthropic.claude") || model_lower.starts_with("amazon.") {
+    if model_lower.starts_with("bedrock-")
+        || model_lower.starts_with("anthropic.claude")
+        || model_lower.starts_with("amazon.")
+    {
         return "aws".to_string();
     }
     if model_lower.starts_with("azure-") || model_lower.contains("azureopenai") {

@@ -235,8 +235,8 @@ pub struct SetSpendCapRequest {
 #[derive(Deserialize)]
 pub struct CreatePolicyRequest {
     pub name: String,
-    /// Required - policy must bind to a token
-    pub token_id: Uuid,
+    /// Required - policy must bind to a token (token ID string like "tf_v1_xxx")
+    pub token_id: String,
     pub mode: Option<String>,  // "enforce" | "shadow", defaults to "enforce"
     pub phase: Option<String>, // "pre" | "post", defaults to "pre"
     pub rules: serde_json::Value,

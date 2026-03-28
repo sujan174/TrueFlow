@@ -25,6 +25,8 @@ const EXPERIMENT_PREFIX: &str = "__experiment__";
 pub struct CreateExperimentRequest {
     /// Human-readable experiment name (e.g. "gpt4o-vs-claude").
     pub name: String,
+    /// Token ID this experiment is bound to (string like "tf_v1_xxx").
+    pub token_id: String,
     /// Variants with weights and model overrides.
     pub variants: Vec<ExperimentVariant>,
     /// Optional condition scope. Default: all requests (catch-all).
@@ -120,7 +122,7 @@ pub async fn create_experiment(
 
     let policy_id = state
         .db
-        .insert_policy(project_id, &policy_name, "enforce", "pre", rules, None)
+        .insert_policy(project_id, &policy_name, "enforce", "pre", rules, None, &payload.token_id)
         .await
         .map_err(|e| {
             tracing::error!("create_experiment failed: {}", e);

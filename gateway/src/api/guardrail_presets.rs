@@ -90,13 +90,17 @@ impl GuardrailScope {
                 }));
             } else {
                 // Multiple paths: OR them together
-                let path_conditions: Vec<serde_json::Value> = self.paths.iter().map(|p| {
-                    json!({
-                        "field": "request.path",
-                        "op": "glob",
-                        "value": p
+                let path_conditions: Vec<serde_json::Value> = self
+                    .paths
+                    .iter()
+                    .map(|p| {
+                        json!({
+                            "field": "request.path",
+                            "op": "glob",
+                            "value": p
+                        })
                     })
-                }).collect();
+                    .collect();
 
                 if path_conditions.len() == 1 {
                     conditions.push(path_conditions[0].clone());
@@ -529,17 +533,20 @@ fn expand_preset(
     // Apply scope if configured
     let rules = if scope.has_scope() {
         let condition = scope.to_condition();
-        base_rules.into_iter().map(|rule| {
-            // Replace the "when" condition with scope
-            if let Some(then_action) = rule.get("then") {
-                json!({
-                    "when": condition,
-                    "then": then_action
-                })
-            } else {
-                rule
-            }
-        }).collect()
+        base_rules
+            .into_iter()
+            .map(|rule| {
+                // Replace the "when" condition with scope
+                if let Some(then_action) = rule.get("then") {
+                    json!({
+                        "when": condition,
+                        "then": then_action
+                    })
+                } else {
+                    rule
+                }
+            })
+            .collect()
     } else {
         base_rules
     };
@@ -576,7 +583,12 @@ pub async fn enable_guardrails(
     let mut skipped: Vec<String> = Vec::new();
 
     for preset in &payload.presets {
-        match expand_preset(preset, &payload.topic_allowlist, &payload.topic_denylist, &payload.scope) {
+        match expand_preset(
+            preset,
+            &payload.topic_allowlist,
+            &payload.topic_denylist,
+            &payload.scope,
+        ) {
             Some(rules) => {
                 if is_output_preset(preset) {
                     output_rules.extend(rules);
@@ -654,7 +666,7 @@ pub async fn enable_guardrails(
                 Some(existing_policy.id)
             } else {
                 let id = state.db.insert_policy(
-                project_id, &policy_name, "enforce", "request", rules_value, None,
+                project_id, &policy_name, "enforce", "request", rules_value, None, &payload.token_id,
             ).await.map_err(|e| {
                 tracing::error!(error = %e, "guardrails/enable: failed to create input policy");
                 StatusCode::INTERNAL_SERVER_ERROR
@@ -682,7 +694,7 @@ pub async fn enable_guardrails(
             Some(existing_policy.id)
         } else {
             let id = state.db.insert_policy(
-                project_id, &out_policy_name, "enforce", "response", out_rules_value, None,
+                project_id, &out_policy_name, "enforce", "response", out_rules_value, None, &payload.token_id,
             ).await.map_err(|e| {
                 tracing::error!(error = %e, "guardrails/enable: failed to create output policy");
                 StatusCode::INTERNAL_SERVER_ERROR
@@ -1128,7 +1140,8 @@ mod tests {
 
     #[test]
     fn test_expand_prompt_injection() {
-        let rules = expand_preset("prompt_injection", &[], &[], &GuardrailScope::default()).unwrap();
+        let rules =
+            expand_preset("prompt_injection", &[], &[], &GuardrailScope::default()).unwrap();
         assert_eq!(rules[0]["then"]["action"], "content_filter");
         assert_eq!(rules[0]["then"]["block_jailbreak"], true);
         assert_eq!(rules[0]["then"]["risk_threshold"], 0.3);
@@ -1174,7 +1187,8 @@ mod tests {
 
     #[test]
     fn test_expand_profanity_filter() {
-        let rules = expand_preset("profanity_filter", &[], &[], &GuardrailScope::default()).unwrap();
+        let rules =
+            expand_preset("profanity_filter", &[], &[], &GuardrailScope::default()).unwrap();
         assert_eq!(rules[0]["then"]["action"], "content_filter");
         assert_eq!(rules[0]["then"]["block_profanity"], true);
         // Should not enable bias (lighter filter)
@@ -1186,7 +1200,13 @@ mod tests {
     #[test]
     fn test_expand_competitor_block() {
         let competitors = vec!["Portkey".to_string(), "LiteLLM".to_string()];
-        let rules = expand_preset("competitor_block", &[], &competitors, &GuardrailScope::default()).unwrap();
+        let rules = expand_preset(
+            "competitor_block",
+            &[],
+            &competitors,
+            &GuardrailScope::default(),
+        )
+        .unwrap();
         assert_eq!(rules[0]["then"]["action"], "content_filter");
         assert_eq!(rules[0]["then"]["block_competitor_mention"], true);
         let names = rules[0]["then"]["competitor_names"].as_array().unwrap();
@@ -1195,21 +1215,24 @@ mod tests {
 
     #[test]
     fn test_expand_sensitive_topics() {
-        let rules = expand_preset("sensitive_topics", &[], &[], &GuardrailScope::default()).unwrap();
+        let rules =
+            expand_preset("sensitive_topics", &[], &[], &GuardrailScope::default()).unwrap();
         assert_eq!(rules[0]["then"]["action"], "content_filter");
         assert_eq!(rules[0]["then"]["block_sensitive_topics"], true);
     }
 
     #[test]
     fn test_expand_gibberish_filter() {
-        let rules = expand_preset("gibberish_filter", &[], &[], &GuardrailScope::default()).unwrap();
+        let rules =
+            expand_preset("gibberish_filter", &[], &[], &GuardrailScope::default()).unwrap();
         assert_eq!(rules[0]["then"]["action"], "content_filter");
         assert_eq!(rules[0]["then"]["block_gibberish"], true);
     }
 
     #[test]
     fn test_expand_contact_info_block() {
-        let rules = expand_preset("contact_info_block", &[], &[], &GuardrailScope::default()).unwrap();
+        let rules =
+            expand_preset("contact_info_block", &[], &[], &GuardrailScope::default()).unwrap();
         assert_eq!(rules[0]["then"]["action"], "content_filter");
         assert_eq!(rules[0]["then"]["block_contact_info"], true);
     }
@@ -1223,7 +1246,8 @@ mod tests {
 
     #[test]
     fn test_expand_strict_enterprise() {
-        let rules = expand_preset("strict_enterprise", &[], &[], &GuardrailScope::default()).unwrap();
+        let rules =
+            expand_preset("strict_enterprise", &[], &[], &GuardrailScope::default()).unwrap();
         // Should produce 2 rules: content filter + PII redaction
         assert_eq!(rules.len(), 2);
         assert_eq!(rules[0]["then"]["action"], "content_filter");

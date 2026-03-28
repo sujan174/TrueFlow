@@ -50,6 +50,8 @@ pub struct ConfigDocument {
 pub struct PolicyExport {
     /// Policy name — used as the unique key on import (upsert).
     pub name: String,
+    /// Name of the token this policy is bound to (required).
+    pub token_name: String,
     /// "enforce" or "shadow"
     pub mode: String,
     /// "request" or "response"
@@ -232,15 +234,30 @@ async fn build_config_document(
 async fn fetch_policies(state: &AppState, project_id: Uuid) -> anyhow::Result<Vec<PolicyExport>> {
     // Use large defaults for internal export - we want all policies
     let rows = state.db.list_policies(project_id, 1000, 0).await?;
+
+    // Build a map of token_id → token_name for resolving policy bindings
+    let tokens = state.db.list_tokens(project_id, 1000, 0).await?;
+    let token_name_map: std::collections::HashMap<String, String> = tokens
+        .iter()
+        .map(|t| (t.id.clone(), t.name.clone()))
+        .collect();
+
     let exports = rows
         .into_iter()
         .filter(|r| r.is_active)
-        .map(|r| PolicyExport {
-            name: r.name,
-            mode: r.mode,
-            phase: r.phase,
-            rules: r.rules,
-            retry: r.retry,
+        .map(|r| {
+            let token_name = token_name_map
+                .get(&r.token_id.to_string())
+                .cloned()
+                .unwrap_or_else(|| "unknown".to_string());
+            PolicyExport {
+                name: r.name,
+                token_name,
+                mode: r.mode,
+                phase: r.phase,
+                rules: r.rules,
+                retry: r.retry,
+            }
         })
         .collect();
     Ok(exports)
@@ -289,8 +306,84 @@ async fn import_document(
 ) -> Result<Json<ImportResult>, StatusCode> {
     let mut result = ImportResult::default();
 
-    // ── 1. Upsert policies ─────────────────────────────────────
-    // Build a map of name→id for resolving token→policy references later.
+    // ── 1. Upsert tokens first (policies need token_id reference) ─────
+    let existing_tokens = state
+        .db
+        .list_tokens(project_id, 1000, 0)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let existing_token_map: std::collections::HashMap<String, _> = existing_tokens
+        .into_iter()
+        .map(|t| (t.name.clone(), t))
+        .collect();
+
+    // Track token name → ID for policy binding
+    let mut token_id_map: std::collections::HashMap<String, String> = existing_token_map
+        .iter()
+        .map(|(name, t)| (name.clone(), t.id.clone()))
+        .collect();
+
+    for token_export in &doc.tokens {
+        // SSRF protection: Validate upstream URL
+        let allow_private_upstreams = std::env::var("TRUEFLOW_ALLOW_PRIVATE_UPSTREAMS").is_ok();
+        if !allow_private_upstreams {
+            if !crate::utils::is_safe_webhook_url(&token_export.upstream_url).await {
+                tracing::warn!(
+                    "config import: token '{}' upstream URL blocked by SSRF protection: {}",
+                    token_export.name,
+                    token_export.upstream_url
+                );
+                continue; // Skip this token, don't fail the entire import
+            }
+        }
+
+        let log_level: i16 = match token_export.log_level.as_deref() {
+            Some("metadata") => 0,
+            Some("full") => 2,
+            _ => 1, // default: redacted
+        };
+
+        if let Some(existing) = existing_token_map.get(&token_export.name) {
+            // Update token's log level and upstream URL (policies handled separately)
+            let updated = state
+                .db
+                .update_token_config(
+                    &existing.id,
+                    project_id,
+                    vec![], // Policies will be created with token binding
+                    log_level,
+                    &token_export.upstream_url,
+                )
+                .await
+                .map_err(|e| {
+                    tracing::error!("config import: update token '{}': {}", token_export.name, e);
+                    StatusCode::INTERNAL_SERVER_ERROR
+                })?;
+            if updated {
+                result.tokens_updated += 1;
+            }
+        } else {
+            // Create a new stub token (no credential — caller must set this separately)
+            let new_id = state
+                .db
+                .insert_token_stub(
+                    project_id,
+                    &token_export.name,
+                    &token_export.upstream_url,
+                    vec![], // Policies will be created with token binding
+                    log_level,
+                )
+                .await
+                .map_err(|e| {
+                    tracing::error!("config import: insert token '{}': {}", token_export.name, e);
+                    StatusCode::INTERNAL_SERVER_ERROR
+                })?;
+            token_id_map.insert(token_export.name.clone(), new_id);
+            result.tokens_created += 1;
+        }
+    }
+
+    // ── 2. Upsert policies (with token binding) ─────────────────────────
     let existing_policies = state
         .db
         .list_policies(project_id, 1000, 0)
@@ -303,6 +396,19 @@ async fn import_document(
 
     for policy in &doc.policies {
         let rules_val = policy.rules.clone();
+
+        // Resolve token_name to token_id
+        let token_id = match token_id_map.get(&policy.token_name) {
+            Some(id) => id.as_str(),
+            None => {
+                tracing::warn!(
+                    "config import: policy '{}' references unknown token '{}', skipping",
+                    policy.name,
+                    policy.token_name
+                );
+                continue;
+            }
+        };
 
         if let Some(&existing_id) = policy_id_map.get(&policy.name) {
             // Update existing policy (no optimistic locking for bulk import)
@@ -339,6 +445,7 @@ async fn import_document(
                     &policy.phase,
                     rules_val,
                     policy.retry.clone(),
+                    token_id,
                 )
                 .await
                 .map_err(|e| {
@@ -347,84 +454,6 @@ async fn import_document(
                 })?;
             policy_id_map.insert(policy.name.clone(), new_id);
             result.policies_created += 1;
-        }
-    }
-
-    // ── 2. Upsert tokens ───────────────────────────────────────
-    let existing_tokens = state
-        .db
-        .list_tokens(project_id, 1000, 0)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    let existing_token_map: std::collections::HashMap<String, _> = existing_tokens
-        .into_iter()
-        .map(|t| (t.name.clone(), t))
-        .collect();
-
-    for token_export in &doc.tokens {
-        // SSRF protection: Validate upstream URL
-        let allow_private_upstreams =
-            std::env::var("TRUEFLOW_ALLOW_PRIVATE_UPSTREAMS").is_ok();
-        if !allow_private_upstreams {
-            if !crate::utils::is_safe_webhook_url(&token_export.upstream_url).await {
-                tracing::warn!(
-                    "config import: token '{}' upstream URL blocked by SSRF protection: {}",
-                    token_export.name,
-                    token_export.upstream_url
-                );
-                continue; // Skip this token, don't fail the entire import
-            }
-        }
-
-        // Resolve policy names → IDs
-        let policy_ids: Vec<Uuid> = token_export
-            .policies
-            .iter()
-            .filter_map(|name| policy_id_map.get(name).copied())
-            .collect();
-
-        let log_level: i16 = match token_export.log_level.as_deref() {
-            Some("metadata") => 0,
-            Some("full") => 2,
-            _ => 1, // default: redacted
-        };
-
-        if let Some(existing) = existing_token_map.get(&token_export.name) {
-            // Update token's policy bindings and log level
-            let updated = state
-                .db
-                .update_token_config(
-                    &existing.id,
-                    project_id,
-                    policy_ids,
-                    log_level,
-                    &token_export.upstream_url,
-                )
-                .await
-                .map_err(|e| {
-                    tracing::error!("config import: update token '{}': {}", token_export.name, e);
-                    StatusCode::INTERNAL_SERVER_ERROR
-                })?;
-            if updated {
-                result.tokens_updated += 1;
-            }
-        } else {
-            // Create a new stub token (no credential — caller must set this separately)
-            let _new_id = state
-                .db
-                .insert_token_stub(
-                    project_id,
-                    &token_export.name,
-                    &token_export.upstream_url,
-                    policy_ids,
-                    log_level,
-                )
-                .await
-                .map_err(|e| {
-                    tracing::error!("config import: insert token '{}': {}", token_export.name, e);
-                    StatusCode::INTERNAL_SERVER_ERROR
-                })?;
-            result.tokens_created += 1;
         }
     }
 

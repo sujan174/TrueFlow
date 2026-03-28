@@ -24,14 +24,25 @@ pub struct UserSpendSummary {
 
 // -- Input structs --
 
+/// Input for creating a new credential.
+/// For builtin vault: encrypted_dek, dek_nonce, encrypted_secret, secret_nonce are set
+/// For external vault: external_vault_ref and vault_backend are set
 pub struct NewCredential {
     pub project_id: Uuid,
     pub name: String,
     pub provider: String,
-    pub encrypted_dek: Vec<u8>,
-    pub dek_nonce: Vec<u8>,
-    pub encrypted_secret: Vec<u8>,
-    pub secret_nonce: Vec<u8>,
+    /// Encrypted DEK for builtin vault (None for external vault)
+    pub encrypted_dek: Option<Vec<u8>>,
+    /// DEK nonce for builtin vault (None for external vault)
+    pub dek_nonce: Option<Vec<u8>>,
+    /// Encrypted secret for builtin vault (None for external vault)
+    pub encrypted_secret: Option<Vec<u8>>,
+    /// Secret nonce for builtin vault (None for external vault)
+    pub secret_nonce: Option<Vec<u8>>,
+    /// Reference to encrypted key in external vault (base64 ciphertext for AWS KMS)
+    pub external_vault_ref: Option<String>,
+    /// Vault backend type: builtin, aws_kms, hashicorp_vault
+    pub vault_backend: crate::vault::VaultBackend,
     pub injection_mode: String,
     pub injection_header: String,
 }
@@ -138,6 +149,7 @@ pub struct PolicyRow {
     pub retry: Option<serde_json::Value>,
     pub is_active: bool,
     pub created_at: DateTime<Utc>,
+    pub token_id: String,
 }
 
 // ── Session Summary Types ─────────────────────────────────────

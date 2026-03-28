@@ -29,11 +29,14 @@ use cache::TieredCache;
 use store::payload_store::PayloadStore;
 use store::postgres::PgStore;
 use vault::builtin::BuiltinStore;
+use vault::{VaultBackend, VaultRegistry};
 
 /// Shared application state passed to handlers and middleware.
 pub struct AppState {
     pub db: PgStore,
-    pub vault: BuiltinStore,
+    /// Vault registry supporting multiple backends (builtin, AWS KMS, HashiCorp Vault).
+    /// Use vault.default() for builtin operations, or vault.get(backend) for specific backends.
+    pub vault: VaultRegistry,
     pub cache: TieredCache,
     pub upstream_client: proxy::upstream::UpstreamClient,
     pub notifier: notification::slack::SlackNotifier,
@@ -49,6 +52,96 @@ pub struct AppState {
     pub observer: Arc<middleware::observer::ObserverHub>,
     /// MCP server registry — manages connections and cached tool schemas.
     pub mcp_registry: Arc<mcp::registry::McpRegistry>,
+}
+
+/// Load AWS KMS configuration from environment variables.
+///
+/// Required environment variables:
+/// - `TRUEFLOW_AWS_KMS_KEY_ARN`: KMS Key ARN or Alias
+/// - `TRUEFLOW_AWS_KMS_REGION`: AWS region (default: us-east-1)
+///
+/// Optional for cross-account access:
+/// - `TRUEFLOW_AWS_KMS_ASSUME_ROLE_ARN`: IAM role to assume
+/// - `TRUEFLOW_AWS_KMS_EXTERNAL_ID`: External ID for assume role
+#[cfg(feature = "aws-kms")]
+fn load_aws_kms_config() -> Option<vault::aws_kms::AwsKmsConfig> {
+    use std::env;
+
+    let key_arn = env::var("TRUEFLOW_AWS_KMS_KEY_ARN").ok()?;
+    let region = env::var("TRUEFLOW_AWS_KMS_REGION").unwrap_or_else(|_| "us-east-1".to_string());
+    let assume_role_arn = env::var("TRUEFLOW_AWS_KMS_ASSUME_ROLE_ARN").ok();
+    let external_id = env::var("TRUEFLOW_AWS_KMS_EXTERNAL_ID").ok();
+
+    Some(vault::aws_kms::AwsKmsConfig {
+        key_arn,
+        region,
+        assume_role_arn,
+        external_id,
+    })
+}
+
+/// Load HashiCorp Vault configuration from environment variables.
+///
+/// Required environment variables:
+/// - `TRUEFLOW_VAULT_ADDRESS`: Vault server URL (e.g., https://vault.example.com:8200)
+/// - `TRUEFLOW_VAULT_MOUNT_PATH`: Transit mount path (default: transit)
+///
+/// Authentication (one of):
+/// - AppRole: `TRUEFLOW_VAULT_ROLE_ID` + `TRUEFLOW_VAULT_SECRET_ID`
+/// - Kubernetes: `TRUEFLOW_VAULT_K8S_ROLE` + optional `TRUEFLOW_VAULT_K8S_JWT_PATH`
+///
+/// Optional:
+/// - `TRUEFLOW_VAULT_NAMESPACE`: Vault namespace (Enterprise)
+#[cfg(feature = "hashicorp-vault")]
+fn load_hashicorp_vault_config() -> Option<vault::hashicorp::HashiCorpVaultConfig> {
+    use std::env;
+
+    let address = env::var("TRUEFLOW_VAULT_ADDRESS").ok()?;
+    let mount_path =
+        env::var("TRUEFLOW_VAULT_MOUNT_PATH").unwrap_or_else(|_| "transit".to_string());
+    let namespace = env::var("TRUEFLOW_VAULT_NAMESPACE").ok();
+
+    // Check for AppRole auth
+    let (auth_method, role_id, secret_id, k8s_role, k8s_jwt_path) =
+        if let (Some(role_id), Some(secret_id)) = (
+            env::var("TRUEFLOW_VAULT_ROLE_ID").ok(),
+            env::var("TRUEFLOW_VAULT_SECRET_ID").ok(),
+        ) {
+            (
+                "approle".to_string(),
+                Some(role_id),
+                Some(secret_id),
+                None,
+                None,
+            )
+        } else if let Some(k8s_role) = env::var("TRUEFLOW_VAULT_K8S_ROLE").ok() {
+            let k8s_jwt_path = env::var("TRUEFLOW_VAULT_K8S_JWT_PATH").unwrap_or_else(|_| {
+                "/var/run/secrets/kubernetes.io/serviceaccount/token".to_string()
+            });
+            (
+                "kubernetes".to_string(),
+                None,
+                None,
+                Some(k8s_role),
+                Some(k8s_jwt_path),
+            )
+        } else {
+            tracing::warn!(
+                "HashiCorp Vault address configured but no valid authentication method found"
+            );
+            return None;
+        };
+
+    Some(vault::hashicorp::HashiCorpVaultConfig {
+        address,
+        mount_path,
+        namespace,
+        auth_method,
+        approle_role_id: role_id,
+        approle_secret_id: secret_id,
+        k8s_role,
+        k8s_jwt_path,
+    })
 }
 
 #[tokio::main]
@@ -118,7 +211,8 @@ async fn main() -> anyhow::Result<()> {
         Some(cli::Commands::Serve { port }) => run_server(cfg, port).await,
         Some(cli::Commands::Token { command }) => {
             let db = PgStore::connect(&cfg.database_url).await?;
-            let vault = BuiltinStore::new(&cfg.master_key, db.pool().clone())?;
+            let builtin_store = BuiltinStore::new(&cfg.master_key, db.pool().clone())?;
+            let vault = VaultRegistry::builtin_only(builtin_store);
             let redis_client = redis::Client::open(cfg.redis_url.as_str())?;
             let redis_conn = redis::aio::ConnectionManager::new(redis_client).await?;
             let cache = TieredCache::new(redis_conn);
@@ -154,7 +248,8 @@ async fn main() -> anyhow::Result<()> {
         }
         Some(cli::Commands::Policy { command }) => {
             let db = PgStore::connect(&cfg.database_url).await?;
-            let vault = BuiltinStore::new(&cfg.master_key, db.pool().clone())?;
+            let builtin_store = BuiltinStore::new(&cfg.master_key, db.pool().clone())?;
+            let vault = VaultRegistry::builtin_only(builtin_store);
             let redis_client = redis::Client::open(cfg.redis_url.as_str())?;
             let redis_conn = redis::aio::ConnectionManager::new(redis_client).await?;
             let cache = TieredCache::new(redis_conn);
@@ -198,7 +293,51 @@ async fn run_server(cfg: config::Config, port: u16) -> anyhow::Result<()> {
     db.migrate().await?;
 
     tracing::info!("Initializing vault...");
-    let vault = BuiltinStore::new(&cfg.master_key, db.pool().clone())?;
+    let vault = {
+        // Create builtin vault (always available)
+        let builtin_store = BuiltinStore::new(&cfg.master_key, db.pool().clone())?;
+        let mut backends = std::collections::HashMap::new();
+        backends.insert(
+            VaultBackend::Builtin,
+            std::sync::Arc::new(builtin_store) as std::sync::Arc<dyn vault::SecretStore>,
+        );
+
+        // Add AWS KMS if configured
+        #[cfg(feature = "aws-kms")]
+        if let Some(kms_config) = load_aws_kms_config() {
+            match vault::aws_kms::AwsKmsStore::new(kms_config, db.pool().clone()).await {
+                Ok(kms_store) => {
+                    tracing::info!("AWS KMS vault backend initialized successfully");
+                    backends.insert(
+                        VaultBackend::AwsKms,
+                        std::sync::Arc::new(kms_store) as std::sync::Arc<dyn vault::SecretStore>,
+                    );
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to initialize AWS KMS backend: {}. Continuing without AWS KMS support.", e);
+                }
+            }
+        }
+
+        // Add HashiCorp Vault if configured (Phase 2)
+        #[cfg(feature = "hashicorp-vault")]
+        if let Some(hc_config) = load_hashicorp_vault_config() {
+            match vault::hashicorp::HashiCorpVaultStore::new(hc_config, db.pool().clone()).await {
+                Ok(hc_store) => {
+                    tracing::info!("HashiCorp Vault backend initialized successfully");
+                    backends.insert(
+                        VaultBackend::HashicorpVault,
+                        std::sync::Arc::new(hc_store) as std::sync::Arc<dyn vault::SecretStore>,
+                    );
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to initialize HashiCorp Vault backend: {}. Continuing without HashiCorp Vault support.", e);
+                }
+            }
+        }
+
+        VaultRegistry::new(backends, VaultBackend::Builtin)?
+    };
 
     tracing::info!("Connecting to Redis...");
     // Redis is required for rate limiting, caching, and spend cap enforcement.
@@ -278,7 +417,11 @@ async fn run_server(cfg: config::Config, port: u16) -> anyhow::Result<()> {
                             .unwrap_or_default();
 
                         // Register in memory (will reconnect on next request)
-                        match state.mcp_registry.register_from_persisted(config, tools).await {
+                        match state
+                            .mcp_registry
+                            .register_from_persisted(config, tools)
+                            .await
+                        {
                             Ok(_) => {
                                 tracing::info!(
                                     server_id = %server.id,
@@ -599,6 +742,7 @@ async fn handle_policy_command(
     match cmd {
         cli::PolicyCommands::Create {
             name,
+            token_id,
             mode,
             phase,
             project_id,
@@ -641,11 +785,11 @@ async fn handle_policy_command(
             let rules_json = serde_json::to_value(rules)?;
             let id = state
                 .db
-                .insert_policy(pid, &name, &mode, &phase, rules_json, None)
+                .insert_policy(pid, &name, &mode, &phase, rules_json, None, &token_id)
                 .await?;
             println!(
-                "Policy created:\n  Name:     {}\n  ID:       {}\n  Mode:     {}\n  Phase:    {}",
-                name, id, mode, phase
+                "Policy created:\n  Name:     {}\n  ID:       {}\n  Token:    {}\n  Mode:     {}\n  Phase:    {}",
+                name, id, token_id, mode, phase
             );
         }
         cli::PolicyCommands::List { project_id } => {
@@ -827,10 +971,12 @@ async fn handle_credential_command(
                 project_id: project,
                 name: name.clone(),
                 provider: provider.clone(),
-                encrypted_dek,
-                dek_nonce,
-                encrypted_secret,
-                secret_nonce,
+                encrypted_dek: Some(encrypted_dek),
+                dek_nonce: Some(dek_nonce),
+                encrypted_secret: Some(encrypted_secret),
+                secret_nonce: Some(secret_nonce),
+                external_vault_ref: None,
+                vault_backend: VaultBackend::Builtin,
                 injection_mode: mode.clone(),
                 injection_header: header.clone(),
             };
@@ -895,7 +1041,10 @@ async fn handle_approval_command(db: &PgStore, cmd: cli::ApprovalCommands) -> an
                 println!("{:<38} {:<30} {}", r.id, summary_display, r.expires_at);
             }
         }
-        cli::ApprovalCommands::Approve { request_id, project_id } => {
+        cli::ApprovalCommands::Approve {
+            request_id,
+            project_id,
+        } => {
             let id = uuid::Uuid::parse_str(&request_id)?;
             let project = parse_project_id(project_id)?;
 
@@ -908,7 +1057,10 @@ async fn handle_approval_command(db: &PgStore, cmd: cli::ApprovalCommands) -> an
                 println!("Request {} not found or not pending.", id);
             }
         }
-        cli::ApprovalCommands::Reject { request_id, project_id } => {
+        cli::ApprovalCommands::Reject {
+            request_id,
+            project_id,
+        } => {
             let id = uuid::Uuid::parse_str(&request_id)?;
             let project = parse_project_id(project_id)?;
 
@@ -937,9 +1089,7 @@ fn parse_project_id(id: Option<String>) -> anyhow::Result<uuid::Uuid> {
     let raw = id
         .or_else(|| std::env::var("TRUEFLOW_PROJECT_ID").ok())
         .ok_or_else(|| {
-            anyhow::anyhow!(
-                "missing --project-id argument (or set TRUEFLOW_PROJECT_ID env var)"
-            )
+            anyhow::anyhow!("missing --project-id argument (or set TRUEFLOW_PROJECT_ID env var)")
         })?;
     raw.parse()
         .map_err(|_| anyhow::anyhow!("invalid project ID: {}", raw))
@@ -1042,10 +1192,7 @@ async fn handle_config_command(cmd: cli::ConfigCommands) -> anyhow::Result<()> {
                 }
 
                 // Find the token's live spend caps from the refreshed export
-                let live_token = refreshed
-                    .tokens
-                    .iter()
-                    .find(|t| t.name == local_token.name);
+                let live_token = refreshed.tokens.iter().find(|t| t.name == local_token.name);
 
                 let live_caps = live_token
                     .map(|t| &t.spend_caps)
@@ -1072,11 +1219,8 @@ async fn handle_config_command(cmd: cli::ConfigCommands) -> anyhow::Result<()> {
 
                         // Use the client to set the spend cap by resolving name → ID
                         // via the tokens list API
-                        let token_id =
-                            client.find_token_id(&local_token.name).await?;
-                        client
-                            .upsert_spend_cap(&token_id, period, limit)
-                            .await?;
+                        let token_id = client.find_token_id(&local_token.name).await?;
+                        client.upsert_spend_cap(&token_id, period, limit).await?;
                         spend_cap_changes += 1;
                     }
                 }
