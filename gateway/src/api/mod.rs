@@ -13,6 +13,7 @@ use uuid::Uuid;
 
 pub mod analytics;
 pub mod config;
+pub mod error_responses;
 pub mod experiment_handlers;
 pub mod guardrail_presets;
 pub mod handlers;
@@ -235,12 +236,15 @@ pub fn api_router(state: Arc<AppState>) -> Router<Arc<AppState>> {
             "/auth/keys",
             get(handlers::list_api_keys).post(handlers::create_api_key),
         )
-        .route("/auth/keys/:id", delete(handlers::revoke_api_key).put(handlers::update_api_key))
+        .route(
+            "/auth/keys/:id",
+            delete(handlers::revoke_api_key).put(handlers::update_api_key),
+        )
         .route("/auth/whoami", get(handlers::whoami))
         // User management (Supabase Auth sync)
         .route("/auth/sync-user", post(handlers::sync_user))
         .route("/users", get(handlers::list_users))
-        .route("/users/me", get(handlers::get_current_user))  // Must be before /users/:id
+        .route("/users/me", get(handlers::get_current_user)) // Must be before /users/:id
         .route("/users/:id", get(handlers::get_user))
         .route("/users/:id/role", patch(handlers::update_user_role))
         .route("/users/me/last-project", put(handlers::update_last_project))
@@ -355,10 +359,7 @@ pub fn api_router(state: Arc<AppState>) -> Router<Arc<AppState>> {
             "/analytics/models/latency",
             get(handlers::get_model_latency),
         )
-        .route(
-            "/analytics/models/stats",
-            get(handlers::get_model_stats),
-        )
+        .route("/analytics/models/stats", get(handlers::get_model_stats))
         .route(
             "/analytics/models/cost-latency-scatter",
             get(handlers::get_cost_latency_scatter),
@@ -397,9 +398,18 @@ pub fn api_router(state: Arc<AppState>) -> Router<Arc<AppState>> {
             get(handlers::get_hitl_rejection_reasons),
         )
         // Error analytics (Errors Tab)
-        .route("/analytics/errors/summary", get(handlers::get_error_summary))
-        .route("/analytics/errors/timeseries", get(handlers::get_error_timeseries))
-        .route("/analytics/errors/breakdown", get(handlers::get_error_breakdown))
+        .route(
+            "/analytics/errors/summary",
+            get(handlers::get_error_summary),
+        )
+        .route(
+            "/analytics/errors/timeseries",
+            get(handlers::get_error_timeseries),
+        )
+        .route(
+            "/analytics/errors/breakdown",
+            get(handlers::get_error_breakdown),
+        )
         .route("/analytics/errors/logs", get(handlers::get_error_logs))
         // Settings & System
         .route(
@@ -492,7 +502,10 @@ pub fn api_router(state: Arc<AppState>) -> Router<Arc<AppState>> {
             "/mcp/servers/discover",
             post(mcp_handlers::discover_mcp_server),
         )
-        .route("/mcp/servers/:id", get(mcp_handlers::get_mcp_server).delete(mcp_handlers::delete_mcp_server))
+        .route(
+            "/mcp/servers/:id",
+            get(mcp_handlers::get_mcp_server).delete(mcp_handlers::delete_mcp_server),
+        )
         .route(
             "/mcp/servers/:id/refresh",
             post(mcp_handlers::refresh_mcp_server),
@@ -551,6 +564,10 @@ pub fn api_router(state: Arc<AppState>) -> Router<Arc<AppState>> {
             "/experiments/:id/stop",
             post(experiment_handlers::stop_experiment),
         )
+        // Vault Management (External KMS)
+        .route("/vault/status", get(handlers::list_vault_status))
+        .route("/vault/test", post(handlers::test_vault_connection))
+        .route("/vault/config", post(handlers::save_vault_config))
         .layer(middleware::from_fn_with_state(state, admin_auth))
         .layer(TraceLayer::new_for_http())
         .fallback(fallback_404)
