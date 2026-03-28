@@ -1278,6 +1278,25 @@ export async function updateTokenMcpTools(
   }
 }
 
+/**
+ * Update token IP restrictions.
+ */
+export async function updateTokenIpRestrictions(
+  tokenId: string,
+  data: { allowed_ips?: string[] | null; blocked_ips?: string[] | null }
+): Promise<void> {
+  const response = await fetch(`/api/gateway/tokens/${tokenId}/ip-restrictions`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  })
+
+  if (!response.ok) {
+    const error = await response.text()
+    throw new Error(`Failed to update IP restrictions: ${response.status} ${error}`)
+  }
+}
+
 // ── Teams API ──────────────────────────────────────────────────────────────
 
 export async function listTeams(): Promise<Team[]> {

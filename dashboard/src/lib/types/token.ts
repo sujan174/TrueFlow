@@ -25,6 +25,8 @@ export interface TokenRow {
   tags: JsonValue               // JSON value (typically string[] or null)
   mcp_allowed_tools: JsonValue  // JSON value (typically string[] or null)
   mcp_blocked_tools: JsonValue  // JSON value (typically string[] or null)
+  allowed_ips: JsonValue        // JSON value (typically string[] or null) - CIDR notation
+  blocked_ips: JsonValue        // JSON value (typically string[] or null)
   guardrail_header_mode: string | null
   external_user_id: string | null
   metadata: Record<string, unknown> | null
@@ -70,6 +72,8 @@ export interface CreateTokenRequest {
   tags?: string[]               // Sent as JSON array to backend
   mcp_allowed_tools?: string[]  // Sent as JSON array to backend
   mcp_blocked_tools?: string[]  // Sent as JSON array to backend
+  allowed_ips?: string[]        // CIDR notation: ["192.168.0.0/16", "10.0.0.1"]
+  blocked_ips?: string[]        // Block specific IPs
   external_user_id?: string
   metadata?: Record<string, unknown>
   purpose?: 'llm' | 'tool' | 'both'
@@ -101,12 +105,22 @@ export interface CredentialMeta {
 }
 
 // CreateCredentialRequest - from gateway/src/api/handlers/dtos.rs
+// Supports two modes:
+// 1. Builtin vault (default): Provide `secret`, AILink encrypts and stores it
+// 2. External vault: Provide `vault_backend` and `encrypted_secret_ref`
 export interface CreateCredentialRequest {
   name: string
   provider: string
-  secret: string               // API key - will be encrypted
+  // Plaintext API key for builtin vault (will be encrypted by AILink)
+  // Required when vault_backend is "builtin" or not specified
+  secret?: string
+  // Vault backend to use: "builtin" (default), "aws_kms", "hashicorp_vault"
+  vault_backend?: 'builtin' | 'aws_kms' | 'hashicorp_vault'
+  // Pre-encrypted secret reference for external vaults
+  // For AWS KMS: base64-encoded ciphertext blob from `aws kms encrypt`
+  encrypted_secret_ref?: string
   project_id?: string
-  injection_mode?: 'bearer' | 'basic' | 'header' | 'query'
+  injection_mode?: 'bearer' | 'basic' | 'header' | 'query' | 'sigv4'
   injection_header?: string    // e.g. "Authorization"
 }
 

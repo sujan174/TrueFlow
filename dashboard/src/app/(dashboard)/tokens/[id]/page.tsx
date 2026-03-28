@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
-import { ArrowLeft, Key, Shield, MoreHorizontal, Trash2, Copy, Check, Plus, Wrench, Save, Loader2 } from "lucide-react"
+import { ArrowLeft, Key, Shield, MoreHorizontal, Trash2, Copy, Check, Plus, Wrench, Save, Loader2, Globe } from "lucide-react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -20,6 +20,7 @@ import {
   listPolicies,
   revokeToken,
   updateTokenMcpTools,
+  updateTokenIpRestrictions,
   type TokenRow,
   type GuardrailsStatus,
   type PolicyRow,
@@ -70,6 +71,9 @@ export default function TokenDetailPage() {
   const [mcpAllowedTools, setMcpAllowedTools] = useState<string[] | null>(null)
   const [mcpBlockedTools, setMcpBlockedTools] = useState<string[] | null>(null)
   const [savingMcp, setSavingMcp] = useState(false)
+  const [allowedIps, setAllowedIps] = useState<string[] | null>(null)
+  const [blockedIps, setBlockedIps] = useState<string[] | null>(null)
+  const [savingIpRestrictions, setSavingIpRestrictions] = useState(false)
 
   useEffect(() => {
     loadToken()
@@ -94,6 +98,16 @@ export default function TokenDetailPage() {
       setMcpBlockedTools(
         Array.isArray(tokenData.mcp_blocked_tools)
           ? tokenData.mcp_blocked_tools as string[]
+          : null
+      )
+      setAllowedIps(
+        Array.isArray(tokenData.allowed_ips)
+          ? tokenData.allowed_ips as string[]
+          : null
+      )
+      setBlockedIps(
+        Array.isArray(tokenData.blocked_ips)
+          ? tokenData.blocked_ips as string[]
           : null
       )
 
@@ -145,6 +159,29 @@ export default function TokenDetailPage() {
       toast.error(err instanceof Error ? err.message : "Failed to save MCP tools")
     } finally {
       setSavingMcp(false)
+    }
+  }
+
+  const handleSaveIpRestrictions = async () => {
+    setSavingIpRestrictions(true)
+    try {
+      await updateTokenIpRestrictions(tokenId, {
+        allowed_ips: allowedIps,
+        blocked_ips: blockedIps,
+      })
+      // Update the local token state to reflect the changes
+      if (token) {
+        setToken({
+          ...token,
+          allowed_ips: allowedIps,
+          blocked_ips: blockedIps,
+        })
+      }
+      toast.success("IP restrictions saved")
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to save IP restrictions")
+    } finally {
+      setSavingIpRestrictions(false)
     }
   }
 
@@ -259,6 +296,10 @@ export default function TokenDetailPage() {
               <Wrench className="h-4 w-4" />
               MCP Tools
             </TabsTrigger>
+            <TabsTrigger value="ip-restrictions" className="gap-2">
+              <Globe className="h-4 w-4" />
+              IP Restrictions
+            </TabsTrigger>
             <TabsTrigger value="policies">Policies ({policies.length})</TabsTrigger>
           </TabsList>
 
@@ -363,6 +404,71 @@ export default function TokenDetailPage() {
                 onAllowedChange={setMcpAllowedTools}
                 onBlockedChange={setMcpBlockedTools}
               />
+            </div>
+          </TabsContent>
+
+          <TabsContent value="ip-restrictions" className="mt-4 space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-medium">IP Restrictions</h3>
+                <p className="text-sm text-muted-foreground">
+                  Control which IP addresses can use this token
+                </p>
+              </div>
+              <Button className="gap-2" onClick={handleSaveIpRestrictions} disabled={savingIpRestrictions}>
+                {savingIpRestrictions ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Save className="h-4 w-4" />
+                )}
+                {savingIpRestrictions ? "Saving..." : "Save Changes"}
+              </Button>
+            </div>
+
+            <div className="bg-card border rounded-xl p-6 space-y-6">
+              {/* Allowed IPs */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Allowed IPs</label>
+                <p className="text-xs text-muted-foreground">
+                  Only allow requests from these IP addresses. Leave empty to allow all IPs.
+                </p>
+                <textarea
+                  className="w-full min-h-[100px] p-3 border rounded-lg text-sm font-mono resize-y"
+                  placeholder="192.168.0.0/16&#10;10.0.0.1&#10;203.0.113.0/24"
+                  value={allowedIps?.join("\n") || ""}
+                  onChange={(e) => {
+                    const lines = e.target.value.split("\n").map((l) => l.trim()).filter(Boolean)
+                    setAllowedIps(lines.length > 0 ? lines : null)
+                  }}
+                />
+              </div>
+
+              {/* Blocked IPs */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Blocked IPs</label>
+                <p className="text-xs text-muted-foreground">
+                  Block requests from these IP addresses. Takes precedence over allowed IPs.
+                </p>
+                <textarea
+                  className="w-full min-h-[100px] p-3 border rounded-lg text-sm font-mono resize-y"
+                  placeholder="192.168.1.100&#10;10.0.0.50"
+                  value={blockedIps?.join("\n") || ""}
+                  onChange={(e) => {
+                    const lines = e.target.value.split("\n").map((l) => l.trim()).filter(Boolean)
+                    setBlockedIps(lines.length > 0 ? lines : null)
+                  }}
+                />
+              </div>
+
+              {/* Helper text */}
+              <div className="text-xs text-muted-foreground bg-muted/50 p-3 rounded-lg">
+                <p className="font-medium mb-1">IP Format Examples:</p>
+                <ul className="list-disc list-inside space-y-0.5">
+                  <li>Single IP: <code className="font-mono">192.168.1.1</code></li>
+                  <li>CIDR range: <code className="font-mono">192.168.0.0/16</code> (matches 192.168.*.*)</li>
+                  <li>IPv6: <code className="font-mono">2001:db8::/32</code></li>
+                </ul>
+              </div>
             </div>
           </TabsContent>
 
