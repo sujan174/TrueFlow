@@ -1,19 +1,10 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useMemo } from "react"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
-import { Label } from "@/components/ui/label"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { Plus, Trash2, Parentheses, Minus } from "lucide-react"
+import { Plus, Trash2, Parentheses } from "lucide-react"
 import type {
   Condition,
   ConditionCheck,
@@ -27,6 +18,10 @@ import {
   CONDITION_FIELDS as FIELDS,
   OPERATOR_INFO as OPERATORS,
 } from "@/lib/types/policy"
+import { FIELD_CATEGORIES, getCategoryById, getFieldByPath } from "@/lib/field-registry"
+import { CategorySelector } from "./condition-category-selector"
+import { ConditionFieldInput } from "./condition-field-input"
+import { CustomFieldInput } from "./custom-field-input"
 
 // ============================================================================
 // Types
@@ -84,14 +79,54 @@ function createEmptyGroup(logic: 'AND' | 'OR'): ConditionAll | ConditionAny {
   return { any: [createEmptyCondition()] }
 }
 
-// Group fields by category for the dropdown
-const FIELDS_BY_CATEGORY = {
-  request: FIELDS.filter(f => f.category === 'request'),
-  response: FIELDS.filter(f => f.category === 'response'),
-  token: FIELDS.filter(f => f.category === 'token'),
-  agent: FIELDS.filter(f => f.category === 'agent'),
-  context: FIELDS.filter(f => f.category === 'context'),
-  usage: FIELDS.filter(f => f.category === 'usage'),
+/**
+ * Derive the category ID from a field path.
+ * This enables backward compatibility - existing conditions will show
+ * with their correct category selected.
+ */
+function deriveCategoryFromField(fieldPath: string): string {
+  // First, try to find the field in the new registry
+  const fieldDef = getFieldByPath(fieldPath)
+  if (fieldDef) {
+    // Find which category contains this field
+    for (const category of FIELD_CATEGORIES) {
+      if (category.fields.some(f => f.path === fieldPath)) {
+        return category.id
+      }
+    }
+  }
+
+  // Fallback: infer category from path prefix
+  if (fieldPath.startsWith('context.ip') || fieldPath.startsWith('context.network')) {
+    return 'ip_network'
+  }
+  if (fieldPath.startsWith('context.time')) {
+    return 'time'
+  }
+  if (fieldPath.startsWith('request.body.model')) {
+    return 'model'
+  }
+  if (fieldPath.includes('tools') || fieldPath.includes('function')) {
+    return 'tools'
+  }
+  if (fieldPath.startsWith('request.')) {
+    return 'request'
+  }
+  if (fieldPath.startsWith('token.')) {
+    return 'token'
+  }
+  if (fieldPath.startsWith('agent.')) {
+    return 'agent'
+  }
+  if (fieldPath.startsWith('response.')) {
+    return 'response'
+  }
+  if (fieldPath.startsWith('context.')) {
+    return 'request'
+  }
+
+  // Unknown path - use custom category
+  return 'custom'
 }
 
 // ============================================================================
@@ -283,25 +318,7 @@ function ConditionGroup({ value, onChange, depth = 0 }: ConditionGroupProps) {
     >
       {/* Group Header */}
       <div className="flex items-center gap-3 mb-4">
-        <Select value={logic} onValueChange={(v) => v && toggleLogic()}>
-          <SelectTrigger className="w-[180px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="AND">
-              <div className="flex items-center gap-2">
-                <Badge variant="default">AND</Badge>
-                <span className="text-muted-foreground text-xs">All must match</span>
-              </div>
-            </SelectItem>
-            <SelectItem value="OR">
-              <div className="flex items-center gap-2">
-                <Badge variant="secondary">OR</Badge>
-                <span className="text-muted-foreground text-xs">Any must match</span>
-              </div>
-            </SelectItem>
-          </SelectContent>
-        </Select>
+        <SelectLogic value={logic} onChange={toggleLogic} />
         <span className="text-sm text-muted-foreground">
           {logic === 'AND' ? 'Match all conditions below' : 'Match any condition below'}
         </span>
@@ -388,19 +405,152 @@ function ConditionGroup({ value, onChange, depth = 0 }: ConditionGroupProps) {
 }
 
 // ============================================================================
-// Condition Row (Leaf)
+// Logic Selector (extracted for reuse)
+// ============================================================================
+
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+
+function SelectLogic({ value, onChange }: { value: 'AND' | 'OR', onChange: () => void }) {
+  return (
+    <Select value={value} onValueChange={(v) => v && onChange()}>
+      <SelectTrigger className="w-[180px]">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="AND">
+          <div className="flex items-center gap-2">
+            <Badge variant="default">AND</Badge>
+            <span className="text-muted-foreground text-xs">All must match</span>
+          </div>
+        </SelectItem>
+        <SelectItem value="OR">
+          <div className="flex items-center gap-2">
+            <Badge variant="secondary">OR</Badge>
+            <span className="text-muted-foreground text-xs">Any must match</span>
+          </div>
+        </SelectItem>
+      </SelectContent>
+    </Select>
+  )
+}
+
+// ============================================================================
+// Condition Row (Leaf) - Redesigned with Hierarchical Categories
 // ============================================================================
 
 function ConditionRow({ value, onChange, onRemove }: ConditionRowProps) {
-  const fieldDef = FIELDS.find(f => f.name === value.field) || FIELDS[0]
-  const availableOperators = fieldDef.operators
+  // Derive the initial category from the current field path
+  const initialCategoryId = useMemo(() => deriveCategoryFromField(value.field), [value.field])
 
-  const handleFieldChange = (fieldName: string | null) => {
-    if (!fieldName) return
-    const newFieldDef = FIELDS.find(f => f.name === fieldName) || FIELDS[0]
-    const newOp = newFieldDef.operators.includes(value.op) ? value.op : newFieldDef.operators[0]
-    onChange({ ...value, field: fieldName, op: newOp })
+  // Track selected category (can be changed by user)
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string>(initialCategoryId)
+
+  // Get the category object
+  const selectedCategory = getCategoryById(selectedCategoryId) || FIELD_CATEGORIES[0]
+
+  // Handle category change
+  const handleCategoryChange = (categoryId: string) => {
+    setSelectedCategoryId(categoryId)
+
+    // If switching to a non-custom category with fields, reset to the first field
+    const category = getCategoryById(categoryId)
+    if (category && category.fields.length > 0) {
+      const firstField = category.fields[0]
+      onChange({
+        field: firstField.path,
+        op: firstField.operators[0] as ConditionOperator,
+        value: ''
+      })
+    } else if (categoryId === 'custom') {
+      // For custom, just clear the field path
+      onChange({
+        field: '',
+        op: 'eq',
+        value: ''
+      })
+    }
   }
+
+  // Handle field/operator/value changes from ConditionFieldInput
+  const handleFieldInputChange = (newValue: { field: string; op: ConditionOperator; value: unknown }) => {
+    onChange(newValue as ConditionCheck)
+  }
+
+  // Handle custom field path change
+  const handleCustomFieldChange = (fieldPath: string) => {
+    const fieldDef = getFieldByPath(fieldPath)
+    const newOp = fieldDef?.operators[0] || value.op
+    onChange({
+      ...value,
+      field: fieldPath,
+      op: newOp as ConditionOperator
+    })
+  }
+
+  return (
+    <div className="p-4 bg-muted/30 rounded-lg space-y-4">
+      {/* Category Selector */}
+      <div>
+        <CategorySelector
+          selectedCategoryId={selectedCategoryId}
+          onSelect={handleCategoryChange}
+        />
+      </div>
+
+      {/* Field Input (varies by category) */}
+      {selectedCategoryId === 'custom' ? (
+        <div className="space-y-4">
+          <CustomFieldInput
+            value={value.field}
+            onChange={handleCustomFieldChange}
+          />
+          {/* Operator and Value for custom fields */}
+          <OperatorValueInput
+            value={value}
+            onChange={onChange}
+          />
+        </div>
+      ) : (
+        <ConditionFieldInput
+          category={selectedCategory}
+          value={{ field: value.field, op: value.op, value: value.value }}
+          onChange={handleFieldInputChange}
+        />
+      )}
+
+      {/* Remove Button */}
+      <div className="flex justify-end">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="text-muted-foreground hover:text-destructive"
+          onClick={onRemove}
+        >
+          <Trash2 className="h-4 w-4 mr-1" />
+          Remove Condition
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+// ============================================================================
+// Operator & Value Input (for custom fields)
+// ============================================================================
+
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+
+function OperatorValueInput({ value, onChange }: { value: ConditionCheck, onChange: (c: ConditionCheck) => void }) {
+  // Get operators based on field definition or default set
+  const fieldDef = getFieldByPath(value.field)
+  const operators = fieldDef?.operators || ['eq', 'neq', 'in', 'contains', 'gt', 'gte', 'lt', 'lte', 'exists']
 
   const handleOperatorChange = (op: string | null) => {
     if (!op) return
@@ -408,73 +558,51 @@ function ConditionRow({ value, onChange, onRemove }: ConditionRowProps) {
   }
 
   const handleValueChange = (val: string) => {
-    let parsedValue: string | number = val
-    if (value.op !== 'in' && fieldDef.valueType === 'number' && val !== '') {
+    let parsedValue: unknown = val
+
+    // Type coercion based on field type
+    if (fieldDef?.type === "number" && val !== "") {
       const num = parseFloat(val)
-      if (!isNaN(num)) {
-        parsedValue = num
-      }
+      if (!isNaN(num)) parsedValue = num
     }
+
     onChange({ ...value, value: parsedValue })
   }
 
   return (
-    <div className="flex items-center gap-2 p-3 bg-muted/30 rounded-lg">
-      {/* Field Selector */}
-      <Select value={value.field} onValueChange={handleFieldChange}>
-        <SelectTrigger className="w-[180px]">
-          <SelectValue placeholder="Select field" />
-        </SelectTrigger>
-        <SelectContent>
-          {Object.entries(FIELDS_BY_CATEGORY).map(([category, fields]) => (
-            <div key={category}>
-              <div className="px-2 py-1 text-xs font-semibold text-muted-foreground uppercase">
-                {category}
-              </div>
-              {fields.map((field) => (
-                <SelectItem key={field.name} value={field.name}>
-                  {field.label}
-                </SelectItem>
-              ))}
-            </div>
-          ))}
-        </SelectContent>
-      </Select>
-
+    <div className="grid grid-cols-2 gap-4">
       {/* Operator Selector */}
-      <Select value={value.op} onValueChange={handleOperatorChange}>
-        <SelectTrigger className="w-[140px]">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {availableOperators.map((op) => (
-            <SelectItem key={op} value={op}>
-              {OPERATORS[op]?.label || op}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      <div>
+        <Label className="text-xs text-muted-foreground mb-1.5 block">Operator</Label>
+        <Select value={value.op} onValueChange={handleOperatorChange}>
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {operators.map((op) => (
+              <SelectItem key={op} value={op}>
+                <div className="flex items-center gap-2">
+                  <span className="font-medium">{OPERATORS[op]?.label || op}</span>
+                  <span className="text-xs text-muted-foreground">{OPERATORS[op]?.description}</span>
+                </div>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
 
       {/* Value Input */}
       {value.op !== 'exists' && (
-        <Input
-          className="flex-1"
-          value={String(value.value)}
-          onChange={(e) => handleValueChange(e.target.value)}
-          placeholder={value.op === 'in' ? 'value1, value2, value3' : 'Enter value'}
-          type={fieldDef.valueType === 'number' ? 'number' : 'text'}
-        />
+        <div>
+          <Label className="text-xs text-muted-foreground mb-1.5 block">Value</Label>
+          <Input
+            value={String(value.value || "")}
+            onChange={(e) => handleValueChange(e.target.value)}
+            placeholder={fieldDef?.placeholder || "Enter value"}
+            type={fieldDef?.type === "number" ? "number" : "text"}
+          />
+        </div>
       )}
-
-      {/* Remove Button */}
-      <Button
-        variant="ghost"
-        size="icon-sm"
-        className="text-muted-foreground hover:text-destructive"
-        onClick={onRemove}
-      >
-        <Trash2 className="h-4 w-4" />
-      </Button>
     </div>
   )
 }

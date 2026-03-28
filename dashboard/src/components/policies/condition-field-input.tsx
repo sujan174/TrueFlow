@@ -28,7 +28,8 @@ export function ConditionFieldInput({ category, value, onChange }: ConditionFiel
   // Get available operators based on field type
   const operators = fieldDef?.operators || ["eq", "neq", "in", "contains"]
 
-  const handleFieldChange = (fieldPath: string) => {
+  const handleFieldChange = (fieldPath: string | null) => {
+    if (!fieldPath) return
     const newFieldDef = getFieldByPath(fieldPath)
     const newOp = newFieldDef?.operators[0] || value.op
     onChange({ ...value, field: fieldPath, op: newOp as ConditionOperator, value: "" })
