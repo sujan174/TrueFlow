@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { Plus, Key, MoreHorizontal, Trash2, Eye, Users, Copy, Check, ChevronDown, GripVertical, ArrowUpDown } from "lucide-react"
 import Link from "next/link"
@@ -98,7 +98,6 @@ function CreateTokenModal({
   const [tokenMode, setTokenMode] = useState<TokenMode>("managed")
   const [name, setName] = useState("")
   const [teamId, setTeamId] = useState("")
-  const [credentialId, setCredentialId] = useState("")
   const [selectedProvider, setSelectedProvider] = useState("OpenAI")
   const [upstreamUrl, setUpstreamUrl] = useState("https://api.openai.com/v1")
   const [externalUserId, setExternalUserId] = useState("")
@@ -109,18 +108,27 @@ function CreateTokenModal({
   // Provider-level access control
   const [selectedProviders, setSelectedProviders] = useState<string[]>(["OpenAI"])
 
+  // Per-provider credential mapping
+  const [providerCredentials, setProviderCredentials] = useState<Record<string, string>>({})
+
+  // Provider name to ID mapping for credential filtering
+  const providerIdMap: Record<string, string> = {
+    "OpenAI": "openai",
+    "Anthropic": "anthropic",
+    "Google Gemini": "gemini",
+    "Azure OpenAI": "azure",
+    "AWS Bedrock": "bedrock",
+    "Cohere": "cohere",
+    "Mistral": "mistral",
+    "Groq": "groq",
+    "Together AI": "together",
+    "Ollama": "ollama",
+    "OpenRouter": "openrouter",
+    "Custom": "custom",
+  }
+
   // Get the currently selected preset
   const currentPreset = PROVIDER_PRESETS.find(p => p.name === selectedProvider) || PROVIDER_PRESETS[0]
-
-  const handleProviderChange = (providerName: string) => {
-    const preset = PROVIDER_PRESETS.find(p => p.name === providerName)
-    if (preset) {
-      setSelectedProvider(providerName)
-      if (preset.url) {
-        setUpstreamUrl(preset.url)
-      }
-    }
-  }
 
   // Toggle provider selection
   const toggleProvider = (providerName: string) => {
@@ -134,6 +142,19 @@ function CreateTokenModal({
       }
     })
   }
+
+  // Sync credential mappings when providers are removed
+  useEffect(() => {
+    setProviderCredentials(prev => {
+      const newCreds = { ...prev }
+      Object.keys(newCreds).forEach(provider => {
+        if (!selectedProviders.includes(provider)) {
+          delete newCreds[provider]
+        }
+      })
+      return newCreds
+    })
+  }, [selectedProviders])
 
   // Set single provider (for passthrough mode)
   const setSingleProvider = (providerName: string) => {
@@ -156,18 +177,53 @@ function CreateTokenModal({
     e.preventDefault()
     setIsSubmitting(true)
     try {
-      const response = await createToken({
-        name,
-        team_id: teamId || undefined,
-        credential_id: tokenMode === "passthrough" ? null : credentialId || undefined,
-        upstream_url: upstreamUrl,
-        external_user_id: externalUserId || undefined,
-        purpose,
-        // Include allowed_providers from selected providers
-        allowed_providers: selectedProviders.map(p => p.toLowerCase()),
-      })
-      setCreatedToken(response.token_id)
-      toast.success("Token created successfully")
+      // For managed mode with multiple providers, build upstreams array
+      if (tokenMode === "managed" && selectedProviders.length > 0) {
+        // Validate that all providers have credentials
+        const missingCredentials = selectedProviders.filter(p => !providerCredentials[p])
+        if (missingCredentials.length > 0) {
+          toast.error(`Please select credentials for: ${missingCredentials.join(", ")}`)
+          setIsSubmitting(false)
+          return
+        }
+
+        // Build upstreams array with per-provider credentials
+        const upstreams = selectedProviders.map((provider, index) => {
+          const preset = PROVIDER_PRESETS.find(p => p.name === provider)
+          return {
+            url: preset?.url || upstreamUrl,
+            weight: 100,
+            priority: index + 1,
+            credential_id: providerCredentials[provider],
+            allowed_models: preset?.allowed_models || undefined,
+          }
+        })
+
+        const response = await createToken({
+          name,
+          team_id: teamId || undefined,
+          upstream_url: upstreams[0].url, // Primary upstream URL
+          upstreams,
+          external_user_id: externalUserId || undefined,
+          purpose,
+          allowed_providers: selectedProviders.map(p => p.toLowerCase()),
+        })
+        setCreatedToken(response.token_id)
+        toast.success("Token created successfully")
+      } else {
+        // Passthrough mode - single provider, no stored credential
+        const response = await createToken({
+          name,
+          team_id: teamId || undefined,
+          credential_id: null,
+          upstream_url: upstreamUrl,
+          external_user_id: externalUserId || undefined,
+          purpose,
+          allowed_providers: selectedProviders.map(p => p.toLowerCase()),
+        })
+        setCreatedToken(response.token_id)
+        toast.success("Token created successfully")
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to create token")
     } finally {
@@ -179,12 +235,12 @@ function CreateTokenModal({
     setTokenMode("managed")
     setName("")
     setTeamId("")
-    setCredentialId("")
     setSelectedProvider("OpenAI")
     setUpstreamUrl("https://api.openai.com/v1")
     setExternalUserId("")
     setPurpose("llm")
     setSelectedProviders(["OpenAI"])
+    setProviderCredentials({})
     setCreatedToken(null)
     onOpenChange(false)
     if (createdToken) {
@@ -271,48 +327,81 @@ function CreateTokenModal({
                 <>
                   <label className="text-sm font-medium">Allowed Providers</label>
                   <p className="text-xs text-muted-foreground mb-2">
-                    Select providers this token can access. Drag to set failover priority.
+                    Select providers and assign credentials. Each provider can use a different API key.
                   </p>
                   <div className="space-y-2 mt-2">
-                    {/* Selected providers with priority */}
+                    {/* Selected providers with priority and credentials */}
                     {selectedProviders.length > 0 && (
-                      <div className="space-y-1.5 mb-3">
+                      <div className="space-y-2 mb-3">
                         {selectedProviders.map((providerName, index) => {
                           const preset = PROVIDER_PRESETS.find(p => p.name === providerName) || PROVIDER_PRESETS[0]
                           const priorityLabel = index === 0 ? "Primary" : `Backup ${index}`
+                          // Filter credentials by provider using ID mapping
+                          const providerId = providerIdMap[providerName] || providerName.toLowerCase()
+                          const providerCredentialsList = credentials.filter(
+                            c => c.provider === providerId
+                          )
                           return (
                             <div
                               key={providerName}
-                              className="flex items-center gap-2 p-2 border rounded-lg bg-muted/30"
+                              className="p-3 border rounded-lg bg-muted/30 space-y-2"
                             >
-                              <GripVertical className="h-4 w-4 text-muted-foreground cursor-grab" />
-                              <Badge
-                                variant={index === 0 ? "default" : "secondary"}
-                                className="text-[10px] min-w-[60px] justify-center"
-                              >
-                                {priorityLabel}
-                              </Badge>
-                              <span className="text-sm font-medium flex-1">{providerName}</span>
-                              <div className="flex items-center gap-1">
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="icon-sm"
-                                  disabled={index === 0}
-                                  onClick={() => moveProviderUp(index)}
-                                  className="h-6 w-6"
+                              <div className="flex items-center gap-2">
+                                <GripVertical className="h-4 w-4 text-muted-foreground cursor-grab" />
+                                <Badge
+                                  variant={index === 0 ? "default" : "secondary"}
+                                  className="text-[10px] min-w-[60px] justify-center"
                                 >
-                                  <ArrowUpDown className="h-3 w-3" />
-                                </Button>
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="icon-sm"
-                                  onClick={() => toggleProvider(providerName)}
-                                  className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                                  {priorityLabel}
+                                </Badge>
+                                <span className="text-sm font-medium flex-1">{providerName}</span>
+                                <div className="flex items-center gap-1">
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon-sm"
+                                    disabled={index === 0}
+                                    onClick={() => moveProviderUp(index)}
+                                    className="h-6 w-6"
+                                  >
+                                    <ArrowUpDown className="h-3 w-3" />
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon-sm"
+                                    onClick={() => toggleProvider(providerName)}
+                                    className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                                  >
+                                    <Trash2 className="h-3 w-3" />
+                                  </Button>
+                                </div>
+                              </div>
+                              {/* Credential dropdown for this provider */}
+                              <div className="pl-6">
+                                <select
+                                  value={providerCredentials[providerName] || ""}
+                                  onChange={(e) => {
+                                    setProviderCredentials(prev => ({
+                                      ...prev,
+                                      [providerName]: e.target.value
+                                    }))
+                                  }}
+                                  className="w-full px-2 py-1.5 text-xs border rounded bg-background"
+                                  required
                                 >
-                                  <Trash2 className="h-3 w-3" />
-                                </Button>
+                                  <option value="">Select credential...</option>
+                                  {providerCredentialsList.map((cred) => (
+                                    <option key={cred.id} value={cred.id}>
+                                      {cred.name}
+                                    </option>
+                                  ))}
+                                </select>
+                                {providerCredentialsList.length === 0 && (
+                                  <p className="text-[10px] text-amber-600 mt-1">
+                                    No {providerName} credentials found. Create one first.
+                                  </p>
+                                )}
                               </div>
                             </div>
                           )
@@ -415,29 +504,6 @@ function CreateTokenModal({
                 <option value="both">Both</option>
               </select>
             </div>
-            {tokenMode === "managed" && (
-              <div>
-                <label className="text-sm font-medium">Credential</label>
-                <select
-                  value={credentialId}
-                  onChange={(e) => setCredentialId(e.target.value)}
-                  className="w-full mt-1 px-3 py-2 text-sm border rounded-lg bg-background"
-                  required
-                >
-                  <option value="">Select credential...</option>
-                  {credentials.map((cred) => (
-                    <option key={cred.id} value={cred.id}>
-                      {cred.name} ({cred.provider})
-                    </option>
-                  ))}
-                </select>
-                {credentials.length === 0 && (
-                  <p className="text-xs text-amber-600 mt-1">
-                    No credentials available. Create one first or use Passthrough mode.
-                  </p>
-                )}
-              </div>
-            )}
             <div>
               <label className="text-sm font-medium">External User ID</label>
               <input
