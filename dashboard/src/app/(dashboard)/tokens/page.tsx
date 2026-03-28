@@ -135,6 +135,15 @@ function CreateTokenModal({
     })
   }
 
+  // Set single provider (for passthrough mode)
+  const setSingleProvider = (providerName: string) => {
+    setSelectedProviders([providerName])
+    const preset = PROVIDER_PRESETS.find(p => p.name === providerName)
+    if (preset?.url) {
+      setUpstreamUrl(preset.url)
+    }
+  }
+
   // Move provider up in priority
   const moveProviderUp = (index: number) => {
     if (index === 0) return
@@ -236,80 +245,106 @@ function CreateTokenModal({
 
             {/* Provider Selection */}
             <div className="col-span-2">
-              <label className="text-sm font-medium">Allowed Providers</label>
-              <p className="text-xs text-muted-foreground mb-2">
-                Select providers this token can access. Drag to set failover priority.
-              </p>
-              <div className="space-y-2 mt-2">
-                {/* Selected providers with priority */}
-                {selectedProviders.length > 0 && (
-                  <div className="space-y-1.5 mb-3">
-                    {selectedProviders.map((providerName, index) => {
-                      const preset = PROVIDER_PRESETS.find(p => p.name === providerName) || PROVIDER_PRESETS[0]
-                      const priorityLabel = index === 0 ? "Primary" : `Backup ${index}`
-                      return (
-                        <div
-                          key={providerName}
-                          className="flex items-center gap-2 p-2 border rounded-lg bg-muted/30"
-                        >
-                          <GripVertical className="h-4 w-4 text-muted-foreground cursor-grab" />
-                          <Badge
-                            variant={index === 0 ? "default" : "secondary"}
-                            className="text-[10px] min-w-[60px] justify-center"
-                          >
-                            {priorityLabel}
-                          </Badge>
-                          <span className="text-sm font-medium flex-1">{providerName}</span>
-                          <div className="flex items-center gap-1">
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon-sm"
-                              disabled={index === 0}
-                              onClick={() => moveProviderUp(index)}
-                              className="h-6 w-6"
+              {tokenMode === "passthrough" ? (
+                // Single provider selection for passthrough mode
+                <>
+                  <label className="text-sm font-medium">Provider</label>
+                  <p className="text-xs text-muted-foreground mb-2">
+                    Select the provider for this BYOK token. Your API key will be sent to this provider.
+                  </p>
+                  <select
+                    value={selectedProviders[0] || ""}
+                    onChange={(e) => setSingleProvider(e.target.value)}
+                    className="w-full mt-2 px-3 py-2 text-sm border rounded-lg bg-background"
+                    required
+                  >
+                    <option value="">Select provider...</option>
+                    {PROVIDER_PRESETS.map((preset) => (
+                      <option key={preset.name} value={preset.name}>
+                        {preset.name}
+                      </option>
+                    ))}
+                  </select>
+                </>
+              ) : (
+                // Multi-provider selection for managed mode
+                <>
+                  <label className="text-sm font-medium">Allowed Providers</label>
+                  <p className="text-xs text-muted-foreground mb-2">
+                    Select providers this token can access. Drag to set failover priority.
+                  </p>
+                  <div className="space-y-2 mt-2">
+                    {/* Selected providers with priority */}
+                    {selectedProviders.length > 0 && (
+                      <div className="space-y-1.5 mb-3">
+                        {selectedProviders.map((providerName, index) => {
+                          const preset = PROVIDER_PRESETS.find(p => p.name === providerName) || PROVIDER_PRESETS[0]
+                          const priorityLabel = index === 0 ? "Primary" : `Backup ${index}`
+                          return (
+                            <div
+                              key={providerName}
+                              className="flex items-center gap-2 p-2 border rounded-lg bg-muted/30"
                             >
-                              <ArrowUpDown className="h-3 w-3" />
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon-sm"
-                              onClick={() => toggleProvider(providerName)}
-                              className="h-6 w-6 text-muted-foreground hover:text-destructive"
-                            >
-                              <Trash2 className="h-3 w-3" />
-                            </Button>
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
+                              <GripVertical className="h-4 w-4 text-muted-foreground cursor-grab" />
+                              <Badge
+                                variant={index === 0 ? "default" : "secondary"}
+                                className="text-[10px] min-w-[60px] justify-center"
+                              >
+                                {priorityLabel}
+                              </Badge>
+                              <span className="text-sm font-medium flex-1">{providerName}</span>
+                              <div className="flex items-center gap-1">
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon-sm"
+                                  disabled={index === 0}
+                                  onClick={() => moveProviderUp(index)}
+                                  className="h-6 w-6"
+                                >
+                                  <ArrowUpDown className="h-3 w-3" />
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon-sm"
+                                  onClick={() => toggleProvider(providerName)}
+                                  className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                </Button>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
 
-                {/* Provider dropdown to add more */}
-                <select
-                  value=""
-                  onChange={(e) => {
-                    if (e.target.value && !selectedProviders.includes(e.target.value)) {
-                      setSelectedProviders([...selectedProviders, e.target.value])
-                    }
-                    e.target.value = ""
-                  }}
-                  className="w-full px-3 py-2 text-sm border rounded-lg bg-background"
-                >
-                  <option value="">+ Add provider...</option>
-                  {PROVIDER_PRESETS.filter(p => !selectedProviders.includes(p.name)).map((preset) => (
-                    <option key={preset.name} value={preset.name}>
-                      {preset.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+                    {/* Provider dropdown to add more */}
+                    <select
+                      value=""
+                      onChange={(e) => {
+                        if (e.target.value && !selectedProviders.includes(e.target.value)) {
+                          setSelectedProviders([...selectedProviders, e.target.value])
+                        }
+                        e.target.value = ""
+                      }}
+                      className="w-full px-3 py-2 text-sm border rounded-lg bg-background"
+                    >
+                      <option value="">+ Add provider...</option>
+                      {PROVIDER_PRESETS.filter(p => !selectedProviders.includes(p.name)).map((preset) => (
+                        <option key={preset.name} value={preset.name}>
+                          {preset.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </>
+              )}
             </div>
 
             {/* Models for each selected provider */}
-            {selectedProviders.length > 0 && (
+            {selectedProviders.length > 0 && tokenMode === "managed" && (
               <div className="col-span-2">
                 <label className="text-sm font-medium text-muted-foreground">Available Models by Provider</label>
                 <div className="mt-2 space-y-2">
@@ -333,6 +368,22 @@ function CreateTokenModal({
                       </div>
                     )
                   })}
+                </div>
+              </div>
+            )}
+
+            {/* Models for passthrough mode (single provider) */}
+            {selectedProviders.length > 0 && tokenMode === "passthrough" && (
+              <div className="col-span-2">
+                <label className="text-sm font-medium text-muted-foreground">Available Models</label>
+                <div className="mt-2 p-2 border rounded-lg bg-muted/20">
+                  <div className="flex flex-wrap gap-1">
+                    {(PROVIDER_PRESETS.find(p => p.name === selectedProviders[0])?.allowed_models || []).slice(0, 8).map((pattern) => (
+                      <Badge key={pattern} variant="outline" className="text-[10px] font-mono">
+                        {pattern}
+                      </Badge>
+                    ))}
+                  </div>
                 </div>
               </div>
             )}

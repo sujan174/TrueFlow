@@ -189,6 +189,19 @@ class TrueFlowClient:
             to your target provider (e.g., https://api.openai.com/v1).
             BYOK mode only supports a single provider per token.
         """
+        # Parameter validation
+        if not virtual_token:
+            from .exceptions import TrueFlowError
+            raise TrueFlowError("virtual_token is required for BYOK mode")
+        if not virtual_token.startswith("tf_v1_"):
+            from .exceptions import TrueFlowError
+            raise TrueFlowError(
+                f"Invalid virtual_token: must start with 'tf_v1_', got '{virtual_token[:10]}...'"
+            )
+        if not real_api_key:
+            from .exceptions import TrueFlowError
+            raise TrueFlowError("real_api_key is required for BYOK mode")
+
         instance = cls.__new__(cls)
         instance.api_key = virtual_token  # Virtual token as primary api_key
         instance._virtual_token = virtual_token
@@ -704,20 +717,130 @@ class AsyncClient:
 
     # ── Passthrough / BYOK ─────────────────────────────────────
 
-    @asynccontextmanager
-    async def with_upstream_key(self, key: str, header: str = "Bearer"):
+    @classmethod
+    def byok(
+        cls,
+        virtual_token: str,
+        real_api_key: str,
+        gateway_url: Optional[str] = None,
+        agent_name: Optional[str] = None,
+        **kwargs,
+    ) -> "AsyncClient":
         """
-        Async context manager for Passthrough (BYOK) mode.
+        Create an async client for BYOK (Bring Your Own Key) mode.
+
+        In BYOK mode, you keep control of your API keys while using
+        TrueFlow's observability and policy enforcement. Your virtual
+        token identifies the token configuration, and you provide your
+        real API key with each request.
+
+        Args:
+            virtual_token: Your TrueFlow virtual token (tf_v1_...).
+            real_api_key: Your real upstream API key (e.g., sk-...).
+            gateway_url: URL of the TrueFlow gateway.
+            agent_name: Optional agent name for logging.
+            **kwargs: Additional arguments passed to httpx.AsyncClient.
+
+        Returns:
+            AsyncClient configured for BYOK mode.
 
         Example::
 
-            async with client.with_upstream_key("sk-my-key") as byok:
-                resp = await byok.post("/v1/chat/completions", json={...})
+            client = AsyncClient.byok(
+                virtual_token="tf_v1_xxx",
+                real_api_key="sk-proj-my-openai-key",
+                gateway_url="https://gateway.example.com"
+            )
+
+            async with client:
+                oai = client.openai()
+                resp = await oai.chat.completions.create(...)
+
+        Note:
+            The token must have credential_id=NULL and upstream_url set
+            to your target provider (e.g., https://api.openai.com/v1).
+            BYOK mode only supports a single provider per token.
         """
+        # Parameter validation
+        if not virtual_token:
+            from .exceptions import TrueFlowError
+            raise TrueFlowError("virtual_token is required for BYOK mode")
+        if not virtual_token.startswith("tf_v1_"):
+            from .exceptions import TrueFlowError
+            raise TrueFlowError(
+                f"Invalid virtual_token: must start with 'tf_v1_', got '{virtual_token[:10]}...'"
+            )
+        if not real_api_key:
+            from .exceptions import TrueFlowError
+            raise TrueFlowError("real_api_key is required for BYOK mode")
+
+        instance = cls.__new__(cls)
+        instance.api_key = virtual_token  # Virtual token as primary api_key
+        instance._virtual_token = virtual_token
+        instance._real_api_key = real_api_key
+        instance.gateway_url = (gateway_url or os.environ.get("TRUEFLOW_GATEWAY_URL", "http://localhost:8443")).rstrip("/")
+        instance._agent_name = agent_name
+
+        # Headers for BYOK mode:
+        # - X-TrueFlow-Auth: Virtual token (identifies the token config)
+        # - X-TF-Real-Auth: Real API key (passed to upstream provider)
+        headers = {
+            "X-TrueFlow-Auth": virtual_token,
+            "X-TF-Real-Auth": f"Bearer {real_api_key}",
+        }
+        if agent_name:
+            headers["X-TrueFlow-Agent-Name"] = agent_name
+
+        from . import __version__
+        headers["X-TrueFlow-SDK-Version"] = __version__
+
+        timeout = kwargs.pop("timeout", 30.0)
+        max_retries = kwargs.pop("max_retries", 2)
+        if "transport" not in kwargs and max_retries > 0:
+            kwargs["transport"] = httpx.AsyncHTTPTransport(retries=max_retries)
+
+        _timings: dict = {}
+
+        async def _alog_req(request: httpx.Request):
+            _timings[id(request)] = time.perf_counter()
+            log_request(request.method, str(request.url))
+
+        async def _alog_res(response: httpx.Response):
+            start = _timings.pop(id(response.request), time.perf_counter())
+            elapsed = (time.perf_counter() - start) * 1000
+            log_response(response.status_code, str(response.url), elapsed)
+
+        instance._http = httpx.AsyncClient(
+            base_url=instance.gateway_url,
+            headers=headers,
+            timeout=timeout,
+            event_hooks={"request": [_alog_req], "response": [_alog_res]},
+            **kwargs,
+        )
+        return instance
+
+    @asynccontextmanager
+    async def with_upstream_key(self, key: str, header: str = "Bearer"):
+        """
+        Async context manager for Passthrough (BYOK) mode (deprecated).
+
+        .. deprecated:: 0.5.0
+            Use :meth:`AsyncClient.byok()` instead, which provides a
+            cleaner API with the standard X-TF-Real-Auth header.
+
+        Note:
+            Prefer AsyncClient.byok() for new code.
+        """
+        import warnings
+        warnings.warn(
+            "with_upstream_key() is deprecated. Use AsyncClient.byok() instead.",
+            DeprecationWarning,
+            stacklevel=2
+        )
         auth_value = f"{header} {key}" if header else key
         scoped = _AsyncScopedClient(
             self._http,
-            extra_headers={"X-Real-Authorization": auth_value},
+            extra_headers={"X-TF-Real-Auth": auth_value},
         )
         try:
             yield scoped

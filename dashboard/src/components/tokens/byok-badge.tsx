@@ -14,9 +14,12 @@ interface ByokBadgeProps {
 
 export function ByokBadge({ showTooltip = true }: ByokBadgeProps) {
   const badge = (
-    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium rounded border border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-300">
-      <KeyRound className="h-3 w-3" />
-      BYOK
+    <span
+      className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium rounded border border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-300"
+      aria-label="Bring Your Own Key mode"
+    >
+      <KeyRound className="h-3 w-3" aria-hidden="true" />
+      <span>BYOK</span>
     </span>
   )
 
@@ -27,7 +30,7 @@ export function ByokBadge({ showTooltip = true }: ByokBadgeProps) {
   return (
     <TooltipProvider>
       <Tooltip>
-        <TooltipTrigger>
+        <TooltipTrigger asChild>
           {badge}
         </TooltipTrigger>
         <TooltipContent>

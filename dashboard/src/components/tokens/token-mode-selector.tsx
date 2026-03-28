@@ -13,11 +13,12 @@ interface TokenModeSelectorProps {
 export function TokenModeSelector({ value, onChange }: TokenModeSelectorProps) {
   return (
     <div className="space-y-2">
-      <label className="text-sm font-medium">Token Mode</label>
-      <div className="grid grid-cols-2 gap-2">
+      <span id="token-mode-label" className="text-sm font-medium">Token Mode</span>
+      <div className="grid grid-cols-2 gap-2" role="group" aria-labelledby="token-mode-label">
         <button
           type="button"
           onClick={() => onChange("managed")}
+          aria-pressed={value === "managed"}
           className={cn(
             "flex flex-col items-start p-3 border rounded-lg transition-all text-left",
             value === "managed"
@@ -26,7 +27,7 @@ export function TokenModeSelector({ value, onChange }: TokenModeSelectorProps) {
           )}
         >
           <div className="flex items-center gap-2 mb-1">
-            <Shield className={cn("h-4 w-4", value === "managed" ? "text-primary" : "text-muted-foreground")} />
+            <Shield className={cn("h-4 w-4", value === "managed" ? "text-primary" : "text-muted-foreground")} aria-hidden="true" />
             <span className={cn("text-sm font-medium", value === "managed" && "text-primary")}>
               Managed Credential
             </span>
@@ -39,6 +40,7 @@ export function TokenModeSelector({ value, onChange }: TokenModeSelectorProps) {
         <button
           type="button"
           onClick={() => onChange("passthrough")}
+          aria-pressed={value === "passthrough"}
           className={cn(
             "flex flex-col items-start p-3 border rounded-lg transition-all text-left",
             value === "passthrough"
@@ -47,7 +49,7 @@ export function TokenModeSelector({ value, onChange }: TokenModeSelectorProps) {
           )}
         >
           <div className="flex items-center gap-2 mb-1">
-            <KeyRound className={cn("h-4 w-4", value === "passthrough" ? "text-primary" : "text-muted-foreground")} />
+            <KeyRound className={cn("h-4 w-4", value === "passthrough" ? "text-primary" : "text-muted-foreground")} aria-hidden="true" />
             <span className={cn("text-sm font-medium", value === "passthrough" && "text-primary")}>
               Passthrough (BYOK)
             </span>
@@ -59,7 +61,7 @@ export function TokenModeSelector({ value, onChange }: TokenModeSelectorProps) {
       </div>
 
       {value === "passthrough" && (
-        <div className="mt-2 p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+        <div className="mt-2 p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg" role="note">
           <p className="text-xs text-amber-800 dark:text-amber-200">
             <strong>Passthrough Mode:</strong> Your API keys are never stored.
             Provide them with each request using the Authorization header.
