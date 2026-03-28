@@ -12,6 +12,8 @@ use uuid::Uuid;
 pub struct Policy {
     pub id: Uuid,
     pub name: String,
+    /// Required binding to a token. Policies must be associated with exactly one token.
+    pub token_id: Uuid,
     /// Evaluation phase: "pre" (before upstream) or "post" (after upstream).
     #[serde(default = "default_phase")]
     pub phase: Phase,

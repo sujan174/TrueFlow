@@ -235,6 +235,8 @@ pub struct SetSpendCapRequest {
 #[derive(Deserialize)]
 pub struct CreatePolicyRequest {
     pub name: String,
+    /// Required - policy must bind to a token
+    pub token_id: Uuid,
     pub mode: Option<String>,  // "enforce" | "shadow", defaults to "enforce"
     pub phase: Option<String>, // "pre" | "post", defaults to "pre"
     pub rules: serde_json::Value,
@@ -266,14 +268,36 @@ pub struct DeleteResponse {
 
 // ── Credential DTOs ──────────────────────────────────────────
 
+/// Request for creating a credential with optional external vault.
+///
+/// For builtin vault (default):
+///   - Provide `secret` (plaintext API key) which will be encrypted by TrueFlow
+///
+/// For external vault (AWS KMS, HashiCorp Vault):
+///   - Set `vault_backend` to "aws_kms" or "hashicorp_vault"
+///   - Provide `encrypted_secret_ref` (pre-encrypted secret from your KMS)
+///   - Do NOT provide `secret`
 #[derive(Deserialize)]
 pub struct CreateCredentialRequest {
     pub name: String,
     pub provider: String,
-    pub secret: String, // plaintext API key — will be encrypted
+    /// Plaintext API key for builtin vault (will be encrypted by TrueFlow)
+    /// Required when vault_backend is "builtin" or not specified.
+    #[serde(default)]
+    pub secret: Option<String>,
+    /// Vault backend to use: "builtin" (default), "aws_kms", "hashicorp_vault"
+    #[serde(default)]
+    pub vault_backend: Option<String>,
+    /// Pre-encrypted secret reference for external vaults.
+    /// For AWS KMS: base64-encoded ciphertext blob from `aws kms encrypt`
+    /// Required when vault_backend is "aws_kms" or "hashicorp_vault"
+    #[serde(default)]
+    pub encrypted_secret_ref: Option<String>,
     pub project_id: Option<Uuid>,
-    pub injection_mode: Option<String>, // "header" (default) | "bearer"
-    pub injection_header: Option<String>, // e.g. "Authorization"
+    /// How to inject the credential: "header", "bearer", "basic", "query", "sigv4"
+    pub injection_mode: Option<String>,
+    /// Header name for injection (default: "Authorization")
+    pub injection_header: Option<String>,
 }
 
 #[derive(Serialize)]
