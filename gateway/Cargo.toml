@@ -9,6 +9,12 @@ description = "TrueFlow — Secure API Gateway for AI Agents"
 # NEVER enable this in production. Build with: cargo build --features test-hooks
 test-hooks = []
 
+# External KMS integration
+aws-kms = ["aws-sdk-kms", "aws-sdk-sts", "aws-config", "aws-types"]
+aws-secrets-manager = ["aws-sdk-secretsmanager", "aws-sdk-sts", "aws-config", "aws-types"]
+azure-key-vault = []
+hashicorp-vault = []
+
 [lib]
 name = "gateway"
 path = "src/lib.rs"
@@ -96,6 +102,13 @@ bytes = "1.11.1"
 # observability export
 prometheus = "0.13"
 cadence = "1"
+
+# AWS KMS integration (optional)
+aws-sdk-kms = { version = "1", optional = true }
+aws-sdk-sts = { version = "1", optional = true }
+aws-sdk-secretsmanager = { version = "1", optional = true }
+aws-config = { version = "1", optional = true }
+aws-types = { version = "1", optional = true }
 
 [dev-dependencies]
 tokio-test = "0.4"

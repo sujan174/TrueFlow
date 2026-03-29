@@ -16,6 +16,9 @@ pub mod hashicorp_kv;
 #[cfg(feature = "aws-secrets-manager")]
 pub mod aws_secrets_manager;
 
+#[cfg(feature = "azure-key-vault")]
+pub mod azure_key_vault;
+
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
