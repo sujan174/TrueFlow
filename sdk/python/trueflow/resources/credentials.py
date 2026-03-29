@@ -1,6 +1,6 @@
 """Resource for managing encrypted credentials."""
 
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Literal
 from ..types import Credential, CredentialCreateResponse
 from ..exceptions import raise_for_status
 
@@ -24,13 +24,60 @@ class CredentialsResource:
         self,
         name: str,
         provider: str,
-        secret: str,
+        *,
+        # For builtin vault
+        secret: Optional[str] = None,
+        # For external vault
+        vault_backend: Optional[Literal["builtin", "aws_kms", "aws_secrets_manager", "hashicorp_vault", "hashicorp_vault_kv", "azure_key_vault"]] = None,
+        encrypted_secret_ref: Optional[str] = None,
+        # For AWS Secrets Manager (secret_arn is stored in encrypted_secret_ref)
+        # Common options
         project_id: Optional[str] = None,
         injection_mode: Optional[str] = None,
         injection_header: Optional[str] = None,
     ) -> CredentialCreateResponse:
         """
-        Create a new encrypted credential.
+        Create a new credential.
+
+        Three modes are supported:
+
+        1. Builtin vault (default):
+           Provide `secret` (plaintext API key) which will be encrypted by AILink.
+
+           Example:
+               credential = client.credentials.create(
+                   name="prod-openai",
+                   provider="openai",
+                   secret="sk-proj-...",
+               )
+
+        2. AWS KMS:
+           Set `vault_backend="aws_kms"` and provide `encrypted_secret_ref`
+           (base64-encoded ciphertext from AWS KMS encrypt).
+
+           Example:
+               # First encrypt your key with your KMS:
+               # aws kms encrypt --key-id $KMS_KEY --plaintext "sk-..." \\
+               #     --output text --query CiphertextBlob
+
+               credential = client.credentials.create(
+                   name="prod-openai",
+                   provider="openai",
+                   vault_backend="aws_kms",
+                   encrypted_secret_ref="AQICAHj...",
+               )
+
+        3. AWS Secrets Manager (Recommended):
+           Set `vault_backend="aws_secrets_manager"` and provide `encrypted_secret_ref`
+           as the secret ARN.
+
+           Example:
+               credential = client.credentials.create(
+                   name="prod-openai",
+                   provider="openai",
+                   vault_backend="aws_secrets_manager",
+                   encrypted_secret_ref="arn:aws:secretsmanager:us-east-1:123456789012:secret:prod/openai-key-xxx",
+               )
 
         Returns a dict with the credential ``id`` and metadata.
         The secret is encrypted at rest and never returned.
@@ -38,14 +85,30 @@ class CredentialsResource:
         payload: Dict[str, Any] = {
             "name": name,
             "provider": provider,
-            "secret": secret,
         }
+
+        if vault_backend:
+            payload["vault_backend"] = vault_backend
+
+        if vault_backend in ("aws_kms", "hashicorp_vault", "hashicorp_vault_kv", "azure_key_vault", "aws_secrets_manager"):
+            if not encrypted_secret_ref:
+                raise ValueError(
+                    f"encrypted_secret_ref is required for {vault_backend} backend"
+                )
+            payload["encrypted_secret_ref"] = encrypted_secret_ref
+        else:
+            # Builtin vault
+            if not secret:
+                raise ValueError("secret is required for builtin vault")
+            payload["secret"] = secret
+
         if project_id:
             payload["project_id"] = project_id
         if injection_mode:
             payload["injection_mode"] = injection_mode
         if injection_header:
             payload["injection_header"] = injection_header
+
         resp = self._client._http.post("/api/v1/credentials", json=payload)
         raise_for_status(resp)
         return CredentialCreateResponse(**resp.json())
@@ -70,23 +133,64 @@ class AsyncCredentialsResource:
         self,
         name: str,
         provider: str,
-        secret: str,
+        *,
+        # For builtin vault
+        secret: Optional[str] = None,
+        # For external vault
+        vault_backend: Optional[Literal["builtin", "aws_kms", "aws_secrets_manager", "hashicorp_vault", "hashicorp_vault_kv", "azure_key_vault"]] = None,
+        encrypted_secret_ref: Optional[str] = None,
+        # For AWS Secrets Manager (secret_arn is stored in encrypted_secret_ref)
+        # Common options
         project_id: Optional[str] = None,
         injection_mode: Optional[str] = None,
         injection_header: Optional[str] = None,
     ) -> CredentialCreateResponse:
-        """Create a new encrypted credential."""
+        """
+        Create a new credential.
+
+        Three modes are supported:
+
+        1. Builtin vault (default):
+           Provide `secret` (plaintext API key) which will be encrypted by AILink.
+
+        2. AWS KMS:
+           Set `vault_backend="aws_kms"` and provide `encrypted_secret_ref`
+           (base64-encoded ciphertext from AWS KMS encrypt).
+
+        3. AWS Secrets Manager (Recommended):
+           Set `vault_backend="aws_secrets_manager"` and provide `encrypted_secret_ref`
+           as the secret ARN.
+
+        Returns a dict with the credential ``id`` and metadata.
+        The secret is encrypted at rest and never returned.
+        """
         payload: Dict[str, Any] = {
             "name": name,
             "provider": provider,
-            "secret": secret,
         }
+
+        if vault_backend:
+            payload["vault_backend"] = vault_backend
+
+        if vault_backend in ("aws_kms", "hashicorp_vault", "hashicorp_vault_kv", "azure_key_vault", "aws_secrets_manager"):
+            if not encrypted_secret_ref:
+                raise ValueError(
+                    f"encrypted_secret_ref is required for {vault_backend} backend"
+                )
+            payload["encrypted_secret_ref"] = encrypted_secret_ref
+        else:
+            # Builtin vault
+            if not secret:
+                raise ValueError("secret is required for builtin vault")
+            payload["secret"] = secret
+
         if project_id:
             payload["project_id"] = project_id
         if injection_mode:
             payload["injection_mode"] = injection_mode
         if injection_header:
             payload["injection_header"] = injection_header
+
         resp = await self._client._http.post("/api/v1/credentials", json=payload)
         raise_for_status(resp)
         return CredentialCreateResponse(**resp.json())
