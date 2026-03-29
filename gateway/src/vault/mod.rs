@@ -7,6 +7,9 @@ pub mod aws_kms;
 #[cfg(feature = "hashicorp-vault")]
 pub mod hashicorp;
 
+#[cfg(feature = "hashicorp-vault")]
+pub mod hashicorp_kv;
+
 #[cfg(feature = "aws-secrets-manager")]
 pub mod aws_secrets_manager;
 
