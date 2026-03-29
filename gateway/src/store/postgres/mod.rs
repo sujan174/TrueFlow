@@ -10,6 +10,7 @@ mod policies;
 mod pricing;
 mod projects;
 mod prompts;
+mod secret_references;
 mod services;
 mod sessions;
 mod settings;
@@ -17,6 +18,7 @@ mod tokens;
 pub mod types;
 mod usage;
 mod users;
+pub mod vault_config;
 
 // SEC-10: Export LastAdminError for use in API handlers
 pub use api_keys::LastAdminError;

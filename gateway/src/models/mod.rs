@@ -7,5 +7,6 @@ pub mod llm;
 pub mod notification;
 pub mod policy;
 pub mod pricing_cache;
+pub mod secret_reference;
 pub mod service;
 pub mod token;
