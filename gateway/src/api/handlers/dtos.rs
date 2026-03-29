@@ -8,7 +8,7 @@ pub struct CreateTokenRequest {
     pub credential_id: Option<Uuid>,
     pub upstream_url: String,
     pub project_id: Option<Uuid>,
-    pub policy_ids: Option<Vec<Uuid>>,
+    // Note: policy_ids removed - create policies separately with token_id binding
     /// Numeric log level (0/1/2) — deprecated in favour of log_level_name.
     #[serde(rename = "log_level")]
     pub log_level_num: Option<i16>,
@@ -434,4 +434,119 @@ pub struct UpdateSettingsRequest {
 #[derive(serde::Deserialize)]
 pub struct RehydrateRequest {
     pub tokens: Vec<String>,
+}
+
+// ── Secret Reference DTOs ─────────────────────────────────────
+
+/// Request to create a new secret reference.
+#[derive(Deserialize)]
+pub struct CreateSecretReferenceDto {
+    pub name: String,
+    pub description: Option<String>,
+    /// Vault backend type (aws_secrets_manager, hashicorp_vault_kv, azure_key_vault)
+    pub vault_backend: String,
+    /// External reference (ARN, path:key, or URI)
+    pub external_ref: String,
+    /// Optional vault config for authentication
+    pub vault_config_id: Option<Uuid>,
+    /// Provider this secret is for
+    pub provider: Option<String>,
+    /// Injection mode: bearer (default), header, query, none
+    #[serde(default)]
+    pub injection_mode: Option<String>,
+    /// Header name for injection (default: Authorization)
+    #[serde(default)]
+    pub injection_header: Option<String>,
+    /// Team IDs allowed to access (None = all teams)
+    pub allowed_team_ids: Option<Vec<Uuid>>,
+    /// User IDs allowed to access (None = all users)
+    pub allowed_user_ids: Option<Vec<Uuid>>,
+}
+
+/// Request to update an existing secret reference.
+#[derive(Deserialize, Default)]
+pub struct UpdateSecretReferenceDto {
+    pub name: Option<String>,
+    pub description: Option<String>,
+    pub external_ref: Option<String>,
+    pub vault_config_id: Option<Uuid>,
+    pub provider: Option<String>,
+    pub injection_mode: Option<String>,
+    pub injection_header: Option<String>,
+    pub allowed_team_ids: Option<Vec<Uuid>>,
+    pub allowed_user_ids: Option<Vec<Uuid>>,
+    pub version: Option<String>,
+    pub is_active: Option<bool>,
+}
+
+/// Filter parameters for listing secret references.
+#[derive(Debug, Deserialize, Default)]
+pub struct SecretReferenceFilterParams {
+    /// Filter by vault backend type
+    pub vault_backend: Option<String>,
+    /// Filter by provider
+    pub provider: Option<String>,
+    /// Filter by active status
+    pub is_active: Option<bool>,
+    /// Pagination
+    pub limit: Option<i64>,
+    pub offset: Option<i64>,
+}
+
+/// Response for secret reference operations.
+#[derive(Serialize)]
+pub struct SecretReferenceResponse {
+    pub id: Uuid,
+    pub project_id: Uuid,
+    pub name: String,
+    pub description: Option<String>,
+    pub vault_backend: String,
+    pub external_ref: String,
+    pub vault_config_id: Option<Uuid>,
+    pub provider: Option<String>,
+    pub injection_mode: String,
+    pub injection_header: String,
+    pub allowed_team_ids: Option<Vec<Uuid>>,
+    pub allowed_user_ids: Option<Vec<Uuid>>,
+    pub last_accessed_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub last_rotated_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub version: Option<String>,
+    pub is_active: bool,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+    pub created_by: Option<Uuid>,
+}
+
+impl From<crate::models::secret_reference::SecretReference> for SecretReferenceResponse {
+    fn from(sr: crate::models::secret_reference::SecretReference) -> Self {
+        Self {
+            id: sr.id,
+            project_id: sr.project_id,
+            name: sr.name,
+            description: sr.description,
+            vault_backend: sr.vault_backend.to_string(),
+            external_ref: sr.external_ref,
+            vault_config_id: sr.vault_config_id,
+            provider: sr.provider,
+            injection_mode: sr.injection_mode,
+            injection_header: sr.injection_header,
+            allowed_team_ids: sr.allowed_team_ids,
+            allowed_user_ids: sr.allowed_user_ids,
+            last_accessed_at: sr.last_accessed_at,
+            last_rotated_at: sr.last_rotated_at,
+            version: sr.version,
+            is_active: sr.is_active,
+            created_at: sr.created_at,
+            updated_at: sr.updated_at,
+            created_by: sr.created_by,
+        }
+    }
+}
+
+/// Response for secret fetch operation.
+#[derive(Serialize)]
+pub struct SecretFetchResponse {
+    pub reference_id: Uuid,
+    pub fetched_at: chrono::DateTime<chrono::Utc>,
+    pub message: String,
 }

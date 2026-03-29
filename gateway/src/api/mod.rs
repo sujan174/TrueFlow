@@ -568,6 +568,19 @@ pub fn api_router(state: Arc<AppState>) -> Router<Arc<AppState>> {
         .route("/vault/status", get(handlers::list_vault_status))
         .route("/vault/test", post(handlers::test_vault_connection))
         .route("/vault/config", post(handlers::save_vault_config))
+        .route("/vault/configs", get(handlers::list_vault_configs))
+        // Secret References (External Secrets)
+        .route(
+            "/secret-references",
+            get(handlers::list_secret_references).post(handlers::create_secret_reference),
+        )
+        .route(
+            "/secret-references/:id",
+            get(handlers::get_secret_reference)
+                .put(handlers::update_secret_reference)
+                .delete(handlers::delete_secret_reference),
+        )
+        .route("/secret-references/:id/fetch", post(handlers::fetch_secret))
         .layer(middleware::from_fn_with_state(state, admin_auth))
         .layer(TraceLayer::new_for_http())
         .fallback(fallback_404)
