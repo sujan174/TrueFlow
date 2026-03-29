@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS secret_references (
     description TEXT,
 
     -- Vault backend configuration
-    vault_backend VARCHAR(50) NOT NULL,  -- aws_secrets_manager, hashicorp_vault_kv, azure_key_vault
+    vault_backend VARCHAR(50) NOT NULL CHECK (vault_backend IN ('aws_secrets_manager', 'hashicorp_vault_kv', 'azure_key_vault')),
     external_ref TEXT NOT NULL,           -- ARN, path:key, or secret name/URI
     vault_config_id UUID REFERENCES project_vault_configs(id) ON DELETE SET NULL,
 
@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS secret_references (
     provider VARCHAR(50),
 
     -- Injection configuration
-    injection_mode VARCHAR(20) NOT NULL DEFAULT 'bearer',  -- bearer, header, query, none
+    injection_mode VARCHAR(20) NOT NULL DEFAULT 'bearer' CHECK (injection_mode IN ('bearer', 'header', 'query', 'none')),
     injection_header VARCHAR(100) DEFAULT 'Authorization',  -- Header name for header mode
 
     -- Access control (workspace/team scoping)
@@ -46,10 +46,10 @@ CREATE TABLE IF NOT EXISTS secret_access_log (
     token_id UUID REFERENCES tokens(id) ON DELETE SET NULL,
     accessed_by UUID REFERENCES users(id) ON DELETE SET NULL,
 
-    access_type VARCHAR(20) NOT NULL,  -- read, list, rotate
-    vault_backend VARCHAR(50) NOT NULL,
+    access_type VARCHAR(20) NOT NULL CHECK (access_type IN ('read', 'list', 'rotate')),
+    vault_backend VARCHAR(50) NOT NULL CHECK (vault_backend IN ('aws_secrets_manager', 'hashicorp_vault_kv', 'azure_key_vault')),
     latency_ms INTEGER,
-    status VARCHAR(20) NOT NULL,       -- success, failure
+    status VARCHAR(20) NOT NULL CHECK (status IN ('success', 'failure')),
     error_message TEXT,
 
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -68,7 +68,6 @@ CREATE INDEX IF NOT EXISTS idx_secret_references_user_access ON secret_reference
 
 -- Indexes for secret_access_log
 CREATE INDEX IF NOT EXISTS idx_secret_access_log_reference ON secret_access_log(secret_reference_id, created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_secret_access_log_project ON secret_access_log(secret_reference_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_secret_access_log_token ON secret_access_log(token_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_secret_access_log_credential ON secret_access_log(credential_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_secret_access_log_user ON secret_access_log(accessed_by, created_at DESC);
