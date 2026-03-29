@@ -92,6 +92,8 @@ fn load_aws_kms_config() -> Option<vault::aws_kms::AwsKmsConfig> {
 ///
 /// Optional:
 /// - `TRUEFLOW_VAULT_NAMESPACE`: Vault namespace (Enterprise)
+/// - `TRUEFLOW_VAULT_DEFAULT_KEY_NAME`: Default Transit key name for encryption
+/// - `TRUEFLOW_VAULT_SKIP_TLS_VERIFY`: Skip TLS verification (not recommended for production)
 #[cfg(feature = "hashicorp-vault")]
 fn load_hashicorp_vault_config() -> Option<vault::hashicorp::HashiCorpVaultConfig> {
     use std::env;
@@ -132,6 +134,11 @@ fn load_hashicorp_vault_config() -> Option<vault::hashicorp::HashiCorpVaultConfi
             return None;
         };
 
+    let default_key_name = env::var("TRUEFLOW_VAULT_DEFAULT_KEY_NAME").ok();
+    let skip_tls_verify = env::var("TRUEFLOW_VAULT_SKIP_TLS_VERIFY")
+        .map(|v| v == "1" || v.to_lowercase() == "true")
+        .unwrap_or(false);
+
     Some(vault::hashicorp::HashiCorpVaultConfig {
         address,
         mount_path,
@@ -141,6 +148,8 @@ fn load_hashicorp_vault_config() -> Option<vault::hashicorp::HashiCorpVaultConfi
         approle_secret_id: secret_id,
         k8s_role,
         k8s_jwt_path,
+        default_key_name,
+        skip_tls_verify,
     })
 }
 
@@ -834,7 +843,6 @@ async fn handle_token_command(
             credential,
             upstream,
             project_id,
-            policy_ids,
         } => {
             let pid = parse_project_id(project_id)?;
 
@@ -854,17 +862,6 @@ async fn handle_token_command(
                 cred_id
             };
 
-            // Parse policy IDs
-            let mut p_ids = Vec::new();
-            if let Some(ids) = policy_ids {
-                for id_str in ids {
-                    p_ids.push(
-                        uuid::Uuid::parse_str(&id_str)
-                            .context(format!("Invalid policy ID: {}", id_str))?,
-                    );
-                }
-            }
-
             let token_id = format!("tf_v1_{}", uuid::Uuid::new_v4().simple());
 
             let new_token = crate::store::postgres::NewToken {
@@ -874,7 +871,6 @@ async fn handle_token_command(
                 credential_id: Some(cred_id),
                 upstream_url: upstream,
                 scopes: serde_json::json!([]),
-                policy_ids: p_ids,
                 log_level: Some(1),    // Default to redacted logging for CLI
                 circuit_breaker: None, // Use gateway defaults
                 allowed_models: None,

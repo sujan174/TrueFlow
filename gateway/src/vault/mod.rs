@@ -7,8 +7,12 @@ pub mod aws_kms;
 #[cfg(feature = "hashicorp-vault")]
 pub mod hashicorp;
 
+#[cfg(feature = "aws-secrets-manager")]
+pub mod aws_secrets_manager;
+
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
+use sqlx::FromRow;
 use std::collections::HashMap;
 use std::sync::Arc;
 use uuid::Uuid;
@@ -22,8 +26,14 @@ pub enum VaultBackend {
     Builtin,
     /// AWS Key Management Service.
     AwsKms,
+    /// AWS Secrets Manager - runtime fetch from customer's secret store.
+    AwsSecretsManager,
     /// HashiCorp Vault Transit secrets engine.
     HashicorpVault,
+    /// HashiCorp Vault KV secrets engine (future).
+    HashicorpVaultKv,
+    /// Azure Key Vault (future).
+    AzureKeyVault,
 }
 
 impl Default for VaultBackend {
@@ -32,12 +42,21 @@ impl Default for VaultBackend {
     }
 }
 
+/// Database row for looking up credential vault backend
+#[derive(FromRow)]
+struct CredentialBackendRow {
+    vault_backend: VaultBackend,
+}
+
 impl std::fmt::Display for VaultBackend {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Builtin => write!(f, "builtin"),
             Self::AwsKms => write!(f, "aws_kms"),
+            Self::AwsSecretsManager => write!(f, "aws_secrets_manager"),
             Self::HashicorpVault => write!(f, "hashicorp_vault"),
+            Self::HashicorpVaultKv => write!(f, "hashicorp_vault_kv"),
+            Self::AzureKeyVault => write!(f, "azure_key_vault"),
         }
     }
 }
@@ -49,7 +68,18 @@ impl std::str::FromStr for VaultBackend {
         match s.to_lowercase().as_str() {
             "builtin" => Ok(Self::Builtin),
             "aws_kms" | "awskms" | "aws-kms" => Ok(Self::AwsKms),
-            "hashicorp_vault" | "hashicorpvault" | "hashicorp-vault" | "hcp_vault" => Ok(Self::HashicorpVault),
+            "aws_secrets_manager" | "awssecretsmanager" | "aws-secrets-manager" => {
+                Ok(Self::AwsSecretsManager)
+            }
+            "hashicorp_vault" | "hashicorpvault" | "hashicorp-vault" | "hcp_vault" => {
+                Ok(Self::HashicorpVault)
+            }
+            "hashicorp_vault_kv" | "hashicorpvaultkv" | "hashicorp-vault-kv" | "hcp_vault_kv" => {
+                Ok(Self::HashicorpVaultKv)
+            }
+            "azure_key_vault" | "azurekeyvault" | "azure-key-vault" => {
+                Ok(Self::AzureKeyVault)
+            }
             _ => Err(format!("Unknown vault backend: {}", s)),
         }
     }
@@ -74,7 +104,7 @@ pub struct DecryptedSecret {
 }
 
 /// Abstraction over secret storage backends.
-/// Implementations: BuiltinStore, AwsKmsStore, HashiCorpVaultStore.
+/// Implementations: BuiltinStore, AwsKmsStore, AwsSecretsManagerStore, HashiCorpVaultStore.
 #[async_trait]
 pub trait SecretStore: Send + Sync {
     /// Returns the backend type for this store.
@@ -94,6 +124,9 @@ pub trait SecretStore: Send + Sync {
 
     /// Check if the backend is healthy and accessible.
     async fn health_check(&self) -> anyhow::Result<()>;
+
+    /// Return self as Any for downcasting (needed for builtin store access).
+    fn as_any(&self) -> &dyn std::any::Any;
 }
 
 /// Registry for vault backends with factory pattern.
@@ -101,6 +134,8 @@ pub trait SecretStore: Send + Sync {
 pub struct VaultRegistry {
     backends: HashMap<VaultBackend, Arc<dyn SecretStore>>,
     default_backend: VaultBackend,
+    /// Reference to builtin store for direct access to encrypt_string
+    builtin_store: builtin::BuiltinStore,
 }
 
 impl VaultRegistry {
@@ -110,23 +145,42 @@ impl VaultRegistry {
         default_backend: VaultBackend,
     ) -> anyhow::Result<Self> {
         if !backends.contains_key(&default_backend) {
-            anyhow::bail!("Default backend {:?} not found in backends map", default_backend);
+            anyhow::bail!(
+                "Default backend {:?} not found in backends map",
+                default_backend
+            );
         }
+
+        // Extract builtin store for direct access
+        let builtin_store = backends
+            .get(&VaultBackend::Builtin)
+            .and_then(|s| {
+                // Try to downcast to BuiltinStore - this is safe because we know
+                // the Builtin variant is always a BuiltinStore
+                s.as_any().downcast_ref::<builtin::BuiltinStore>().cloned()
+            })
+            .ok_or_else(|| anyhow::anyhow!("Builtin vault backend not found"))?;
 
         Ok(Self {
             backends,
             default_backend,
+            builtin_store,
         })
     }
 
     /// Create a registry with only the builtin backend.
     pub fn builtin_only(vault: builtin::BuiltinStore) -> Self {
         let mut backends = HashMap::new();
-        backends.insert(VaultBackend::Builtin, Arc::new(vault) as Arc<dyn SecretStore>);
+        let vault_clone = vault.clone();
+        backends.insert(
+            VaultBackend::Builtin,
+            Arc::new(vault_clone) as Arc<dyn SecretStore>,
+        );
 
         Self {
             backends,
             default_backend: VaultBackend::Builtin,
+            builtin_store: vault,
         }
     }
 
@@ -161,12 +215,10 @@ impl VaultRegistry {
         let mut statuses = Vec::new();
 
         for (backend, store) in &self.backends {
-            let healthy = store.health_check().await.is_ok();
-            let error = if !healthy {
-                store.health_check().await.err().map(|e| e.to_string())
-            } else {
-                None
-            };
+            // Call health_check once and use the result for both healthy and error
+            let result = store.health_check().await;
+            let healthy = result.is_ok();
+            let error = result.err().map(|e| e.to_string());
 
             statuses.push(BackendStatus {
                 backend: *backend,
@@ -190,6 +242,44 @@ impl VaultRegistry {
         let store = self.get(backend)?;
         store.retrieve(id).await
     }
+
+    /// Retrieve a credential by ID, automatically determining the vault backend.
+    /// This queries the credentials table to get the vault_backend for the credential,
+    /// then routes to the appropriate backend.
+    ///
+    /// This is the primary method for proxy handler credential resolution.
+    pub async fn retrieve_credential(
+        &self,
+        pool: &sqlx::PgPool,
+        id: &str,
+    ) -> anyhow::Result<(String, String, String, String)> {
+        // Query the credential to get its vault_backend
+        let row = sqlx::query_as::<_, CredentialBackendRow>(
+            "SELECT vault_backend FROM credentials WHERE id = $1 AND is_active = true",
+        )
+        .bind(uuid::Uuid::parse_str(id)?)
+        .fetch_optional(pool)
+        .await?;
+
+        let backend = match row {
+            Some(r) => r.vault_backend,
+            None => anyhow::bail!("Credential not found: {}", id),
+        };
+
+        // Route to the appropriate store
+        let store = self.get(backend)?;
+        store.retrieve(id).await
+    }
+
+    /// Encrypt a plaintext string using the builtin vault.
+    /// This is used for creating new credentials with the builtin backend.
+    /// Returns (encrypted_dek, dek_nonce, encrypted_secret, secret_nonce).
+    pub fn encrypt_string(
+        &self,
+        plaintext: &str,
+    ) -> anyhow::Result<(Vec<u8>, Vec<u8>, Vec<u8>, Vec<u8>)> {
+        self.builtin_store.encrypt_string(plaintext)
+    }
 }
 
 #[cfg(test)]
@@ -201,15 +291,49 @@ mod tests {
     fn test_backend_display() {
         assert_eq!(VaultBackend::Builtin.to_string(), "builtin");
         assert_eq!(VaultBackend::AwsKms.to_string(), "aws_kms");
+        assert_eq!(
+            VaultBackend::AwsSecretsManager.to_string(),
+            "aws_secrets_manager"
+        );
         assert_eq!(VaultBackend::HashicorpVault.to_string(), "hashicorp_vault");
+        assert_eq!(VaultBackend::HashicorpVaultKv.to_string(), "hashicorp_vault_kv");
+        assert_eq!(VaultBackend::AzureKeyVault.to_string(), "azure_key_vault");
     }
 
     #[test]
     fn test_backend_from_str() {
-        assert_eq!(VaultBackend::from_str("builtin").unwrap(), VaultBackend::Builtin);
-        assert_eq!(VaultBackend::from_str("aws_kms").unwrap(), VaultBackend::AwsKms);
-        assert_eq!(VaultBackend::from_str("AWS-KMS").unwrap(), VaultBackend::AwsKms);
-        assert_eq!(VaultBackend::from_str("hashicorp_vault").unwrap(), VaultBackend::HashicorpVault);
+        assert_eq!(
+            VaultBackend::from_str("builtin").unwrap(),
+            VaultBackend::Builtin
+        );
+        assert_eq!(
+            VaultBackend::from_str("aws_kms").unwrap(),
+            VaultBackend::AwsKms
+        );
+        assert_eq!(
+            VaultBackend::from_str("AWS-KMS").unwrap(),
+            VaultBackend::AwsKms
+        );
+        assert_eq!(
+            VaultBackend::from_str("aws_secrets_manager").unwrap(),
+            VaultBackend::AwsSecretsManager
+        );
+        assert_eq!(
+            VaultBackend::from_str("AWS-SECRETS-MANAGER").unwrap(),
+            VaultBackend::AwsSecretsManager
+        );
+        assert_eq!(
+            VaultBackend::from_str("hashicorp_vault").unwrap(),
+            VaultBackend::HashicorpVault
+        );
+        assert_eq!(
+            VaultBackend::from_str("hashicorp_vault_kv").unwrap(),
+            VaultBackend::HashicorpVaultKv
+        );
+        assert_eq!(
+            VaultBackend::from_str("azure_key_vault").unwrap(),
+            VaultBackend::AzureKeyVault
+        );
         assert!(VaultBackend::from_str("unknown").is_err());
     }
 }
