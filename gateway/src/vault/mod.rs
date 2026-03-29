@@ -1,5 +1,6 @@
 pub mod builtin;
 pub mod mock;
+pub mod secret_cache;
 
 #[cfg(feature = "aws-kms")]
 pub mod aws_kms;
@@ -25,6 +26,8 @@ use sqlx::FromRow;
 use std::collections::HashMap;
 use std::sync::Arc;
 use uuid::Uuid;
+
+pub use secret_cache::{CachedSecret, SecretCache, SecretCacheConfig};
 
 /// Supported vault backend types.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, sqlx::Type)]
@@ -145,6 +148,8 @@ pub struct VaultRegistry {
     default_backend: VaultBackend,
     /// Reference to builtin store for direct access to encrypt_string
     builtin_store: builtin::BuiltinStore,
+    /// Optional secret cache for external vault backends (L1 + L2).
+    cache: Option<Arc<SecretCache>>,
 }
 
 impl VaultRegistry {
@@ -174,6 +179,7 @@ impl VaultRegistry {
             backends,
             default_backend,
             builtin_store,
+            cache: None,
         })
     }
 
@@ -190,7 +196,20 @@ impl VaultRegistry {
             backends,
             default_backend: VaultBackend::Builtin,
             builtin_store: vault,
+            cache: None,
         }
+    }
+
+    /// Add a secret cache for external vault backends.
+    /// This should be called during app initialization with a Redis connection.
+    pub fn with_cache(mut self, cache: Arc<SecretCache>) -> Self {
+        self.cache = Some(cache);
+        self
+    }
+
+    /// Get a reference to the secret cache, if configured.
+    pub fn cache(&self) -> Option<&Arc<SecretCache>> {
+        self.cache.as_ref()
     }
 
     /// Get a vault backend by type.
@@ -278,6 +297,127 @@ impl VaultRegistry {
         // Route to the appropriate store
         let store = self.get(backend)?;
         store.retrieve(id).await
+    }
+
+    /// Retrieve a credential with caching support for external vaults.
+    ///
+    /// For external vault backends (AWS Secrets Manager, HashiCorp Vault, Azure Key Vault),
+    /// this method checks the cache first to avoid rate limits on repeated API calls.
+    /// For the builtin backend, it bypasses the cache (secrets are already in PostgreSQL).
+    ///
+    /// Returns (plaintext_secret, provider, injection_mode, injection_header).
+    pub async fn retrieve_credential_cached(
+        &self,
+        pool: &sqlx::PgPool,
+        id: &str,
+    ) -> anyhow::Result<(String, String, String, String)> {
+        // Query the credential to get vault_backend and external_vault_ref
+        #[derive(FromRow)]
+        struct CredentialCacheRow {
+            vault_backend: VaultBackend,
+            external_vault_ref: Option<String>,
+            provider: String,
+            injection_mode: String,
+            injection_header: String,
+        }
+
+        let row = sqlx::query_as::<_, CredentialCacheRow>(
+            r#"SELECT
+                vault_backend,
+                external_vault_ref,
+                provider,
+                injection_mode,
+                injection_header
+               FROM credentials
+               WHERE id = $1 AND is_active = true"#,
+        )
+        .bind(uuid::Uuid::parse_str(id)?)
+        .fetch_optional(pool)
+        .await?;
+
+        let row = match row {
+            Some(r) => r,
+            None => anyhow::bail!("Credential not found: {}", id),
+        };
+
+        let backend = row.vault_backend;
+        let backend_str = backend.to_string();
+
+        // Check if this is an external vault that supports caching
+        let is_external = matches!(
+            backend,
+            VaultBackend::AwsSecretsManager
+                | VaultBackend::HashicorpVault
+                | VaultBackend::HashicorpVaultKv
+                | VaultBackend::AzureKeyVault
+        );
+
+        // For external vaults with caching enabled, try cache first
+        if is_external {
+            if let (Some(cache), Some(external_ref)) = (&self.cache, &row.external_vault_ref) {
+                // Try to get from cache
+                if let Some(cached) = cache.get(external_ref, &backend_str).await {
+                    tracing::debug!(
+                        credential_id = %id,
+                        backend = %backend_str,
+                        "Secret cache hit"
+                    );
+                    return Ok((
+                        cached.plaintext,
+                        cached.provider,
+                        cached.injection_mode,
+                        cached.injection_header,
+                    ));
+                }
+
+                // Cache miss - fetch from vault
+                tracing::debug!(
+                    credential_id = %id,
+                    backend = %backend_str,
+                    "Secret cache miss, fetching from vault"
+                );
+
+                let store = self.get(backend)?;
+                let result = store.retrieve(id).await?;
+
+                // Cache the result
+                let cached_secret = CachedSecret {
+                    plaintext: result.0.clone(),
+                    provider: result.1.clone(),
+                    injection_mode: result.2.clone(),
+                    injection_header: result.3.clone(),
+                    backend: backend_str.clone(),
+                };
+
+                if let Err(e) = cache.set(external_ref, &backend_str, cached_secret).await {
+                    tracing::warn!(
+                        credential_id = %id,
+                        error = %e,
+                        "Failed to cache secret"
+                    );
+                }
+
+                return Ok(result);
+            }
+        }
+
+        // No caching (builtin backend or cache not configured) - direct fetch
+        let store = self.get(backend)?;
+        store.retrieve(id).await
+    }
+
+    /// Invalidate the cache for a credential.
+    /// Call this when a credential is updated or deleted.
+    pub async fn invalidate_cache(
+        &self,
+        external_ref: &str,
+        backend: VaultBackend,
+    ) -> anyhow::Result<()> {
+        if let Some(cache) = &self.cache {
+            let backend_str = backend.to_string();
+            cache.invalidate(external_ref, &backend_str).await?;
+        }
+        Ok(())
     }
 
     /// Encrypt a plaintext string using the builtin vault.

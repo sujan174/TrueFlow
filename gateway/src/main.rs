@@ -437,6 +437,13 @@ async fn run_server(cfg: config::Config, port: u16) -> anyhow::Result<()> {
     let redis_conn = redis::aio::ConnectionManager::new(redis_client).await?;
     let cache = TieredCache::new(redis_conn);
 
+    // Initialize secret cache for external vault backends (AWS Secrets Manager, HashiCorp Vault, Azure Key Vault)
+    // This uses a separate Redis connection to avoid contention with the main cache.
+    let secret_cache_redis = cache.redis();
+    let secret_cache = std::sync::Arc::new(vault::SecretCache::with_defaults(secret_cache_redis));
+    let vault = vault.with_cache(secret_cache);
+    tracing::info!("Secret cache initialized for external vault backends");
+
     let upstream_client = proxy::upstream::UpstreamClient::new();
     let notifier = notification::slack::SlackNotifier::new(cfg.slack_webhook_url.clone());
 
