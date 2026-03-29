@@ -35,6 +35,9 @@ pub struct AzureKeyVaultConfig {
     pub client_secret: Option<String>,
     /// Use Azure Managed Identity instead of service principal
     pub use_managed_identity: bool,
+    /// Client ID for user-assigned managed identity (optional)
+    /// If not set, system-assigned managed identity is used
+    pub managed_identity_client_id: Option<String>,
 }
 
 impl std::fmt::Debug for AzureKeyVaultConfig {
@@ -45,6 +48,7 @@ impl std::fmt::Debug for AzureKeyVaultConfig {
             .field("client_id", &self.client_id)
             .field("client_secret", &"[REDACTED]")
             .field("use_managed_identity", &self.use_managed_identity)
+            .field("managed_identity_client_id", &self.managed_identity_client_id)
             .finish()
     }
 }
@@ -106,15 +110,24 @@ pub struct AzureKeyVaultStore {
     access_token: tokio::sync::RwLock<Option<(String, std::time::Instant)>>,
 }
 
+/// Default HTTP timeout for Azure API calls (30 seconds)
+const DEFAULT_HTTP_TIMEOUT_SECS: u64 = 30;
+
 impl AzureKeyVaultStore {
     /// Create a new Azure Key Vault store.
     pub fn new(config: AzureKeyVaultConfig, pool: PgPool) -> anyhow::Result<Self> {
         config.validate()?;
 
+        let http_client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(DEFAULT_HTTP_TIMEOUT_SECS))
+            .connect_timeout(std::time::Duration::from_secs(DEFAULT_HTTP_TIMEOUT_SECS))
+            .build()
+            .map_err(|e| anyhow::anyhow!("Failed to create HTTP client: {}", e))?;
+
         Ok(Self {
             config,
             pool,
-            http_client: reqwest::Client::new(),
+            http_client,
             access_token: tokio::sync::RwLock::new(None),
         })
     }
@@ -154,13 +167,21 @@ impl AzureKeyVaultStore {
 
         let resource = format!("https://{}.vault.azure.net", vault_name);
 
+        // Build query parameters
+        let mut query_params = vec![
+            ("api-version", "2018-02-01".to_string()),
+            ("resource", resource.clone()),
+        ];
+
+        // Add client_id for user-assigned managed identity if configured
+        if let Some(client_id) = &self.config.managed_identity_client_id {
+            query_params.push(("client_id", client_id.clone()));
+        }
+
         let response = self
             .http_client
             .get(IMDS_URL)
-            .query(&[
-                ("api-version", "2018-02-01"),
-                ("resource", &resource),
-            ])
+            .query(&query_params)
             .header("Metadata", "true")
             .send()
             .await
@@ -380,9 +401,8 @@ impl SecretStore for AzureKeyVaultStore {
         // Fetch secret from Azure Key Vault
         let plaintext = self.fetch_secret(&secret_name).await?;
 
-        tracing::info!(
+        tracing::debug!(
             credential_id = %cred_id,
-            secret_name = %secret_name,
             vault_url = %self.config.vault_url,
             "Successfully fetched secret from Azure Key Vault"
         );
@@ -428,13 +448,25 @@ mod tests {
 
     #[test]
     fn test_config_validation() {
-        // Valid managed identity config
+        // Valid managed identity config (system-assigned)
         let config = AzureKeyVaultConfig {
             vault_url: "https://my-vault.vault.azure.net/".to_string(),
             tenant_id: None,
             client_id: None,
             client_secret: None,
             use_managed_identity: true,
+            managed_identity_client_id: None,
+        };
+        assert!(config.validate().is_ok());
+
+        // Valid managed identity config (user-assigned)
+        let config = AzureKeyVaultConfig {
+            vault_url: "https://my-vault.vault.azure.net/".to_string(),
+            tenant_id: None,
+            client_id: None,
+            client_secret: None,
+            use_managed_identity: true,
+            managed_identity_client_id: Some("user-assigned-client-id".to_string()),
         };
         assert!(config.validate().is_ok());
 
@@ -445,6 +477,7 @@ mod tests {
             client_id: Some("client-456".to_string()),
             client_secret: Some("secret-789".to_string()),
             use_managed_identity: false,
+            managed_identity_client_id: None,
         };
         assert!(config.validate().is_ok());
 
@@ -455,6 +488,7 @@ mod tests {
             client_id: None,
             client_secret: None,
             use_managed_identity: true,
+            managed_identity_client_id: None,
         };
         assert!(config.validate().is_err());
 
@@ -465,6 +499,7 @@ mod tests {
             client_id: None,
             client_secret: None,
             use_managed_identity: false,
+            managed_identity_client_id: None,
         };
         assert!(config.validate().is_err());
     }
@@ -477,6 +512,7 @@ mod tests {
             client_id: None,
             client_secret: None,
             use_managed_identity: true,
+            managed_identity_client_id: None,
         };
         assert_eq!(config.vault_name(), Some("my-vault"));
 
@@ -486,6 +522,7 @@ mod tests {
             client_id: None,
             client_secret: None,
             use_managed_identity: true,
+            managed_identity_client_id: None,
         };
         assert_eq!(config.vault_name(), Some("prod-keys"));
     }
@@ -498,6 +535,7 @@ mod tests {
             client_id: Some("client-456".to_string()),
             client_secret: Some("super-secret-value".to_string()),
             use_managed_identity: false,
+            managed_identity_client_id: None,
         };
 
         let debug_str = format!("{:?}", config);

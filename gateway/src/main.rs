@@ -166,6 +166,7 @@ fn load_hashicorp_vault_config() -> Option<vault::hashicorp::HashiCorpVaultConfi
 ///
 /// Optional:
 /// - `TRUEFLOW_AZURE_USE_MANAGED_IDENTITY`: Use Azure Managed Identity instead of service principal (defaults to false)
+/// - `TRUEFLOW_AZURE_MANAGED_IDENTITY_CLIENT_ID`: Client ID for user-assigned managed identity (optional)
 #[cfg(feature = "azure-key-vault")]
 fn load_azure_key_vault_config() -> Option<vault::azure_key_vault::AzureKeyVaultConfig> {
     use std::env;
@@ -177,12 +178,14 @@ fn load_azure_key_vault_config() -> Option<vault::azure_key_vault::AzureKeyVault
 
     // If using managed identity, we don't need service principal credentials
     if use_managed_identity {
+        let managed_identity_client_id = env::var("TRUEFLOW_AZURE_MANAGED_IDENTITY_CLIENT_ID").ok();
         return Some(vault::azure_key_vault::AzureKeyVaultConfig {
             vault_url,
             tenant_id: None,
             client_id: None,
             client_secret: None,
             use_managed_identity: true,
+            managed_identity_client_id,
         });
     }
 
@@ -207,6 +210,7 @@ fn load_azure_key_vault_config() -> Option<vault::azure_key_vault::AzureKeyVault
         client_id,
         client_secret,
         use_managed_identity: false,
+        managed_identity_client_id: None,
     })
 }
 
