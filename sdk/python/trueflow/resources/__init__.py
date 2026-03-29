@@ -9,6 +9,7 @@ from .approvals import ApprovalsResource, AsyncApprovalsResource
 from .audit import AuditResource, AsyncAuditResource
 from .services import ServicesResource, AsyncServicesResource
 from .prompts import PromptsResource, AsyncPromptsResource
+from .secret_references import SecretReferencesResource, AsyncSecretReferencesResource
 
 __all__ = [
     "ApiKeysResource",
@@ -33,4 +34,6 @@ __all__ = [
     "AsyncServicesResource",
     "PromptsResource",
     "AsyncPromptsResource",
+    "SecretReferencesResource",
+    "AsyncSecretReferencesResource",
 ]
