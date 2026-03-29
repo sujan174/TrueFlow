@@ -155,6 +155,61 @@ fn load_hashicorp_vault_config() -> Option<vault::hashicorp::HashiCorpVaultConfi
     })
 }
 
+/// Load Azure Key Vault configuration from environment variables.
+///
+/// Required environment variables:
+/// - `TRUEFLOW_AZURE_KEY_VAULT_URL`: Azure Key Vault URL (e.g., https://my-vault.vault.azure.net/)
+///
+/// Authentication (one of):
+/// - Service Principal: `TRUEFLOW_AZURE_TENANT_ID` + `TRUEFLOW_AZURE_CLIENT_ID` + `TRUEFLOW_AZURE_CLIENT_SECRET`
+/// - Managed Identity: Set `TRUEFLOW_AZURE_USE_MANAGED_IDENTITY=true` (no other credentials needed)
+///
+/// Optional:
+/// - `TRUEFLOW_AZURE_USE_MANAGED_IDENTITY`: Use Azure Managed Identity instead of service principal (defaults to false)
+#[cfg(feature = "azure-key-vault")]
+fn load_azure_key_vault_config() -> Option<vault::azure_key_vault::AzureKeyVaultConfig> {
+    use std::env;
+
+    let vault_url = env::var("TRUEFLOW_AZURE_KEY_VAULT_URL").ok()?;
+    let use_managed_identity = env::var("TRUEFLOW_AZURE_USE_MANAGED_IDENTITY")
+        .map(|v| v == "1" || v.to_lowercase() == "true")
+        .unwrap_or(false);
+
+    // If using managed identity, we don't need service principal credentials
+    if use_managed_identity {
+        return Some(vault::azure_key_vault::AzureKeyVaultConfig {
+            vault_url,
+            tenant_id: None,
+            client_id: None,
+            client_secret: None,
+            use_managed_identity: true,
+        });
+    }
+
+    // Service principal authentication requires all three credentials
+    let tenant_id = env::var("TRUEFLOW_AZURE_TENANT_ID").ok();
+    let client_id = env::var("TRUEFLOW_AZURE_CLIENT_ID").ok();
+    let client_secret = env::var("TRUEFLOW_AZURE_CLIENT_SECRET").ok();
+
+    // Validate that all required fields are present for service principal auth
+    if tenant_id.is_none() || client_id.is_none() || client_secret.is_none() {
+        tracing::warn!(
+            "Azure Key Vault URL configured but missing service principal credentials. \
+             Provide TRUEFLOW_AZURE_TENANT_ID, TRUEFLOW_AZURE_CLIENT_ID, and TRUEFLOW_AZURE_CLIENT_SECRET, \
+             or set TRUEFLOW_AZURE_USE_MANAGED_IDENTITY=true for managed identity authentication."
+        );
+        return None;
+    }
+
+    Some(vault::azure_key_vault::AzureKeyVaultConfig {
+        vault_url,
+        tenant_id,
+        client_id,
+        client_secret,
+        use_managed_identity: false,
+    })
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     // Configure OpenTelemetry (OTLP) -> Jaeger
@@ -343,6 +398,23 @@ async fn run_server(cfg: config::Config, port: u16) -> anyhow::Result<()> {
                 }
                 Err(e) => {
                     tracing::warn!("Failed to initialize HashiCorp Vault backend: {}. Continuing without HashiCorp Vault support.", e);
+                }
+            }
+        }
+
+        // Add Azure Key Vault if configured
+        #[cfg(feature = "azure-key-vault")]
+        if let Some(azure_config) = load_azure_key_vault_config() {
+            match vault::azure_key_vault::AzureKeyVaultStore::new(azure_config, db.pool().clone()) {
+                Ok(azure_store) => {
+                    tracing::info!("Azure Key Vault backend initialized successfully");
+                    backends.insert(
+                        VaultBackend::AzureKeyVault,
+                        std::sync::Arc::new(azure_store) as std::sync::Arc<dyn vault::SecretStore>,
+                    );
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to initialize Azure Key Vault backend: {}. Continuing without Azure Key Vault support.", e);
                 }
             }
         }
