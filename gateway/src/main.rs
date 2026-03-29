@@ -140,16 +140,18 @@ fn load_hashicorp_vault_config() -> Option<vault::hashicorp::HashiCorpVaultConfi
         .unwrap_or(false);
 
     Some(vault::hashicorp::HashiCorpVaultConfig {
-        address,
-        mount_path,
-        namespace,
-        auth_method,
-        approle_role_id: role_id,
-        approle_secret_id: secret_id,
-        k8s_role,
-        k8s_jwt_path,
+        base: vault::hashicorp_common::HashiCorpVaultBaseConfig {
+            address,
+            mount_path,
+            namespace,
+            auth_method,
+            approle_role_id: role_id,
+            approle_secret_id: secret_id,
+            k8s_role,
+            k8s_jwt_path,
+            skip_tls_verify,
+        },
         default_key_name,
-        skip_tls_verify,
     })
 }
 

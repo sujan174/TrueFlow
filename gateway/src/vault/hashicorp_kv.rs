@@ -26,79 +26,38 @@ use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::Duration;
 use tokio::sync::RwLock;
-use url::Url;
 use uuid::Uuid;
 
+use super::hashicorp_common::{
+    authenticate, build_vault_client, validate_base_config, HashiCorpVaultBaseConfig,
+    HealthResponse, VaultErrorResponse, VaultToken,
+};
 use super::{SecretStore, VaultBackend};
-
-/// Default timeout for Vault API calls.
-const VAULT_TIMEOUT_SECS: u64 = 30;
-
-/// Vault token refresh buffer (refresh 5 minutes before expiry).
-const TOKEN_REFRESH_BUFFER_SECS: u64 = 300;
 
 /// HashiCorp Vault KV configuration for runtime secret fetch.
 ///
 /// Note: Debug is intentionally implemented to redact sensitive fields.
 #[derive(Clone, Deserialize, Serialize)]
 pub struct HashiCorpVaultKvConfig {
-    /// Vault server address (e.g., https://vault.example.com:8200)
-    pub address: String,
-    /// KV v2 secrets engine mount path (default: secret)
-    pub mount_path: String,
-    /// Vault namespace (Enterprise only)
-    pub namespace: Option<String>,
-    /// Authentication method: "approle" or "kubernetes"
-    pub auth_method: String,
-    /// AppRole role ID (for approle auth)
-    pub approle_role_id: Option<String>,
-    /// AppRole secret ID (for approle auth)
-    pub approle_secret_id: Option<String>,
-    /// Kubernetes auth role (for k8s auth)
-    pub k8s_role: Option<String>,
-    /// Path to Kubernetes JWT token (default: /var/run/secrets/kubernetes.io/serviceaccount/token)
-    pub k8s_jwt_path: Option<String>,
-    /// Skip TLS verification (not recommended for production)
-    #[serde(default)]
-    pub skip_tls_verify: bool,
+    /// Base configuration fields (shared with other HashiCorp backends)
+    #[serde(flatten)]
+    pub base: HashiCorpVaultBaseConfig,
 }
 
 impl std::fmt::Debug for HashiCorpVaultKvConfig {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("HashiCorpVaultKvConfig")
-            .field("address", &self.address)
-            .field("mount_path", &self.mount_path)
-            .field("namespace", &self.namespace)
-            .field("auth_method", &self.auth_method)
-            .field("approle_role_id", &self.approle_role_id)
+            .field("address", &self.base.address)
+            .field("mount_path", &self.base.mount_path)
+            .field("namespace", &self.base.namespace)
+            .field("auth_method", &self.base.auth_method)
+            .field("approle_role_id", &self.base.approle_role_id)
             .field("approle_secret_id", &"[REDACTED]")
-            .field("k8s_role", &self.k8s_role)
-            .field("k8s_jwt_path", &self.k8s_jwt_path)
-            .field("skip_tls_verify", &self.skip_tls_verify)
+            .field("k8s_role", &self.base.k8s_role)
+            .field("k8s_jwt_path", &self.base.k8s_jwt_path)
+            .field("skip_tls_verify", &self.base.skip_tls_verify)
             .finish()
-    }
-}
-
-/// Cached Vault token with expiry information.
-#[derive(Clone)]
-struct VaultToken {
-    /// The token string
-    token: String,
-    /// Token expiry time (Unix timestamp in seconds)
-    expires_at: u64,
-}
-
-impl VaultToken {
-    /// Check if the token needs refresh (within buffer period of expiry).
-    fn needs_refresh(&self) -> bool {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs();
-
-        now + TOKEN_REFRESH_BUFFER_SECS >= self.expires_at
     }
 }
 
@@ -116,41 +75,8 @@ pub struct HashiCorpVaultKvStore {
 }
 
 // ============================================================================
-// Vault API Types
+// KV-specific API Types
 // ============================================================================
-
-/// AppRole login request.
-#[derive(Serialize)]
-struct AppRoleLoginRequest {
-    role_id: String,
-    secret_id: String,
-}
-
-/// AppRole login response.
-#[derive(Deserialize)]
-struct AppRoleLoginResponse {
-    auth: VaultAuth,
-}
-
-/// Kubernetes login request.
-#[derive(Serialize)]
-struct KubernetesLoginRequest {
-    role: String,
-    jwt: String,
-}
-
-/// Kubernetes login response.
-#[derive(Deserialize)]
-struct KubernetesLoginResponse {
-    auth: VaultAuth,
-}
-
-/// Common auth response fields.
-#[derive(Deserialize)]
-struct VaultAuth {
-    client_token: String,
-    lease_duration: u64,
-}
 
 /// KV v2 read response.
 /// The response structure is: { data: { data: { key: value }, metadata: {...} } }
@@ -182,26 +108,6 @@ struct KvV2Metadata {
     version: i64,
 }
 
-/// Vault health response.
-#[derive(Deserialize)]
-struct HealthResponse {
-    /// Whether Vault is initialized
-    #[serde(default)]
-    initialized: bool,
-    /// Whether Vault is sealed
-    #[serde(default)]
-    sealed: bool,
-    /// Whether Vault is in standby
-    #[serde(default)]
-    standby: bool,
-}
-
-/// Vault error response.
-#[derive(Deserialize)]
-struct VaultErrorResponse {
-    errors: Vec<String>,
-}
-
 // ============================================================================
 // Implementation
 // ============================================================================
@@ -217,20 +123,8 @@ impl HashiCorpVaultKvStore {
         // Validate configuration
         Self::validate_config(&config)?;
 
-        // Build HTTP client with appropriate timeouts
-        let mut client_builder = Client::builder()
-            .timeout(Duration::from_secs(VAULT_TIMEOUT_SECS))
-            .connect_timeout(Duration::from_secs(10));
-
-        if config.skip_tls_verify {
-            client_builder = client_builder.danger_accept_invalid_certs(true);
-            tracing::warn!(
-                address = %config.address,
-                "TLS verification disabled for Vault connection - not recommended for production"
-            );
-        }
-
-        let client = client_builder.build()?;
+        // Build HTTP client
+        let client = build_vault_client(config.base.skip_tls_verify)?;
 
         let store = Self {
             config,
@@ -240,12 +134,12 @@ impl HashiCorpVaultKvStore {
         };
 
         // Initial authentication to validate credentials
-        store.authenticate().await?;
+        store.authenticate_and_cache().await?;
 
         tracing::info!(
-            address = %store.config.address,
-            mount_path = %store.config.mount_path,
-            auth_method = %store.config.auth_method,
+            address = %store.config.base.address,
+            mount_path = %store.config.base.mount_path,
+            auth_method = %store.config.base.auth_method,
             "HashiCorp Vault KV store initialized successfully"
         );
 
@@ -254,51 +148,7 @@ impl HashiCorpVaultKvStore {
 
     /// Validate the configuration.
     fn validate_config(config: &HashiCorpVaultKvConfig) -> anyhow::Result<()> {
-        // Validate address is a valid URL
-        Url::parse(&config.address)
-            .map_err(|e| anyhow::anyhow!("Invalid Vault address '{}': {}", config.address, e))?;
-
-        // Validate auth method and required fields
-        match config.auth_method.as_str() {
-            "approle" => {
-                if config.approle_role_id.is_none()
-                    || config
-                        .approle_role_id
-                        .as_ref()
-                        .map_or(true, |s| s.is_empty())
-                {
-                    anyhow::bail!("approle_role_id is required for AppRole authentication");
-                }
-                if config.approle_secret_id.is_none()
-                    || config
-                        .approle_secret_id
-                        .as_ref()
-                        .map_or(true, |s| s.is_empty())
-                {
-                    anyhow::bail!("approle_secret_id is required for AppRole authentication");
-                }
-            }
-            "kubernetes" => {
-                if config.k8s_role.is_none()
-                    || config.k8s_role.as_ref().map_or(true, |s| s.is_empty())
-                {
-                    anyhow::bail!("k8s_role is required for Kubernetes authentication");
-                }
-            }
-            _ => {
-                anyhow::bail!(
-                    "Unsupported auth method '{}'. Supported: approle, kubernetes",
-                    config.auth_method
-                );
-            }
-        }
-
-        // Validate mount path is not empty
-        if config.mount_path.is_empty() {
-            anyhow::bail!("mount_path cannot be empty");
-        }
-
-        Ok(())
+        validate_base_config(&config.base)
     }
 
     /// Get or refresh the authentication token.
@@ -314,16 +164,12 @@ impl HashiCorpVaultKvStore {
         }
 
         // Need to authenticate or refresh
-        self.authenticate().await
+        self.authenticate_and_cache().await
     }
 
     /// Authenticate with Vault and cache the token.
-    async fn authenticate(&self) -> anyhow::Result<String> {
-        let token = match self.config.auth_method.as_str() {
-            "approle" => self.authenticate_approle().await?,
-            "kubernetes" => self.authenticate_kubernetes().await?,
-            _ => anyhow::bail!("Unsupported auth method: {}", self.config.auth_method),
-        };
+    async fn authenticate_and_cache(&self) -> anyhow::Result<String> {
+        let token = authenticate(&self.client, &self.config.base).await?;
 
         // Cache the token
         {
@@ -332,131 +178,6 @@ impl HashiCorpVaultKvStore {
         }
 
         Ok(token.token)
-    }
-
-    /// Authenticate using AppRole method.
-    async fn authenticate_approle(&self) -> anyhow::Result<VaultToken> {
-        let role_id = self
-            .config
-            .approle_role_id
-            .as_ref()
-            .ok_or_else(|| anyhow::anyhow!("approle_role_id not configured"))?;
-        let secret_id = self
-            .config
-            .approle_secret_id
-            .as_ref()
-            .ok_or_else(|| anyhow::anyhow!("approle_secret_id not configured"))?;
-
-        let url = format!("{}/v1/auth/approle/login", self.config.address);
-
-        let request = AppRoleLoginRequest {
-            role_id: role_id.clone(),
-            secret_id: secret_id.clone(),
-        };
-
-        let mut builder = self.client.post(&url).json(&request);
-
-        if let Some(ref namespace) = self.config.namespace {
-            builder = builder.header("X-Vault-Namespace", namespace);
-        }
-
-        let response = builder.send().await.map_err(|e| {
-            tracing::error!(error = %e, url = %url, "Failed to connect to Vault for AppRole login");
-            anyhow::anyhow!("Failed to connect to Vault: {}", e)
-        })?;
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let error_body = response.text().await.unwrap_or_default();
-            tracing::error!(status = %status, body = %error_body, "AppRole login failed");
-            anyhow::bail!("AppRole login failed: HTTP {} - {}", status, error_body);
-        }
-
-        let login_response: AppRoleLoginResponse = response.json().await.map_err(|e| {
-            anyhow::anyhow!("Failed to parse AppRole login response: {}", e)
-        })?;
-
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs();
-
-        tracing::info!(
-            role_id = %role_id,
-            lease_duration = login_response.auth.lease_duration,
-            "Successfully authenticated with Vault using AppRole"
-        );
-
-        Ok(VaultToken {
-            token: login_response.auth.client_token,
-            expires_at: now + login_response.auth.lease_duration,
-        })
-    }
-
-    /// Authenticate using Kubernetes method.
-    async fn authenticate_kubernetes(&self) -> anyhow::Result<VaultToken> {
-        let role = self
-            .config
-            .k8s_role
-            .as_ref()
-            .ok_or_else(|| anyhow::anyhow!("k8s_role not configured"))?;
-
-        // Read JWT token from Kubernetes service account
-        let jwt_path = self
-            .config
-            .k8s_jwt_path
-            .as_deref()
-            .unwrap_or("/var/run/secrets/kubernetes.io/serviceaccount/token");
-
-        let jwt = tokio::fs::read_to_string(jwt_path).await.map_err(|e| {
-            tracing::error!(path = %jwt_path, error = %e, "Failed to read Kubernetes JWT token");
-            anyhow::anyhow!("Failed to read Kubernetes JWT from {}: {}", jwt_path, e)
-        })?;
-
-        let url = format!("{}/v1/auth/kubernetes/login", self.config.address);
-
-        let request = KubernetesLoginRequest {
-            role: role.clone(),
-            jwt: jwt.trim().to_string(),
-        };
-
-        let mut builder = self.client.post(&url).json(&request);
-
-        if let Some(ref namespace) = self.config.namespace {
-            builder = builder.header("X-Vault-Namespace", namespace);
-        }
-
-        let response = builder.send().await.map_err(|e| {
-            tracing::error!(error = %e, url = %url, "Failed to connect to Vault for Kubernetes login");
-            anyhow::anyhow!("Failed to connect to Vault: {}", e)
-        })?;
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let error_body = response.text().await.unwrap_or_default();
-            tracing::error!(status = %status, body = %error_body, "Kubernetes login failed");
-            anyhow::bail!("Kubernetes login failed: HTTP {} - {}", status, error_body);
-        }
-
-        let login_response: KubernetesLoginResponse = response.json().await.map_err(|e| {
-            anyhow::anyhow!("Failed to parse Kubernetes login response: {}", e)
-        })?;
-
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs();
-
-        tracing::info!(
-            role = %role,
-            lease_duration = login_response.auth.lease_duration,
-            "Successfully authenticated with Vault using Kubernetes auth"
-        );
-
-        Ok(VaultToken {
-            token: login_response.auth.client_token,
-            expires_at: now + login_response.auth.lease_duration,
-        })
     }
 
     /// Fetch a secret from Vault KV v2.
@@ -472,12 +193,12 @@ impl HashiCorpVaultKvStore {
         // KV v2 API endpoint: /v1/{mount}/data/{path}
         let url = format!(
             "{}/v1/{}/data/{}",
-            self.config.address, self.config.mount_path, secret_path
+            self.config.base.address, self.config.base.mount_path, secret_path
         );
 
         let mut builder = self.client.get(&url).header("X-Vault-Token", &token);
 
-        if let Some(ref namespace) = self.config.namespace {
+        if let Some(ref namespace) = self.config.base.namespace {
             builder = builder.header("X-Vault-Namespace", namespace);
         }
 
@@ -656,7 +377,7 @@ impl SecretStore for HashiCorpVaultKvStore {
 
     /// Check if Vault is healthy and accessible.
     async fn health_check(&self) -> anyhow::Result<()> {
-        let url = format!("{}/v1/sys/health", self.config.address);
+        let url = format!("{}/v1/sys/health", self.config.base.address);
 
         // Use standbyok=true and sealedcode=200 to get a 200 response even if Vault is in standby
         let url_with_params = format!(
@@ -666,13 +387,13 @@ impl SecretStore for HashiCorpVaultKvStore {
 
         let mut builder = self.client.get(&url_with_params);
 
-        if let Some(ref namespace) = self.config.namespace {
+        if let Some(ref namespace) = self.config.base.namespace {
             builder = builder.header("X-Vault-Namespace", namespace);
         }
 
         let response = builder.send().await.map_err(|e| {
             tracing::error!(
-                address = %self.config.address,
+                address = %self.config.base.address,
                 error = %e,
                 "Failed to connect to Vault for health check"
             );
@@ -700,7 +421,7 @@ impl SecretStore for HashiCorpVaultKvStore {
         self.get_token().await?;
 
         tracing::debug!(
-            address = %self.config.address,
+            address = %self.config.base.address,
             initialized = health.initialized,
             sealed = health.sealed,
             standby = health.standby,
@@ -729,9 +450,8 @@ struct CredentialRow {
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_config_serialization() {
-        let config = HashiCorpVaultKvConfig {
+    fn create_test_base_config() -> HashiCorpVaultBaseConfig {
+        HashiCorpVaultBaseConfig {
             address: "https://vault.example.com:8200".to_string(),
             mount_path: "secret".to_string(),
             namespace: Some("admin/trueflow".to_string()),
@@ -741,26 +461,28 @@ mod tests {
             k8s_role: None,
             k8s_jwt_path: None,
             skip_tls_verify: false,
+        }
+    }
+
+    #[test]
+    fn test_config_serialization() {
+        let config = HashiCorpVaultKvConfig {
+            base: create_test_base_config(),
         };
 
         let json = serde_json::to_string(&config).unwrap();
         let parsed: HashiCorpVaultKvConfig = serde_json::from_str(&json).unwrap();
-        assert_eq!(config.address, parsed.address);
-        assert_eq!(config.mount_path, parsed.mount_path);
+        assert_eq!(config.base.address, parsed.base.address);
+        assert_eq!(config.base.mount_path, parsed.base.mount_path);
     }
 
     #[test]
     fn test_debug_redacts_secret() {
         let config = HashiCorpVaultKvConfig {
-            address: "https://vault.example.com:8200".to_string(),
-            mount_path: "secret".to_string(),
-            namespace: None,
-            auth_method: "approle".to_string(),
-            approle_role_id: Some("role-uuid".to_string()),
-            approle_secret_id: Some("super-secret-id".to_string()),
-            k8s_role: None,
-            k8s_jwt_path: None,
-            skip_tls_verify: false,
+            base: HashiCorpVaultBaseConfig {
+                approle_secret_id: Some("super-secret-id".to_string()),
+                ..create_test_base_config()
+            },
         };
 
         let debug_output = format!("{:?}", config);
@@ -771,23 +493,21 @@ mod tests {
     #[test]
     fn test_validate_config_approle() {
         let valid_config = HashiCorpVaultKvConfig {
-            address: "https://vault.example.com:8200".to_string(),
-            mount_path: "secret".to_string(),
-            namespace: None,
-            auth_method: "approle".to_string(),
-            approle_role_id: Some("role-id".to_string()),
-            approle_secret_id: Some("secret-id".to_string()),
-            k8s_role: None,
-            k8s_jwt_path: None,
-            skip_tls_verify: false,
+            base: HashiCorpVaultBaseConfig {
+                approle_role_id: Some("role-id".to_string()),
+                approle_secret_id: Some("secret-id".to_string()),
+                ..create_test_base_config()
+            },
         };
 
         assert!(HashiCorpVaultKvStore::validate_config(&valid_config).is_ok());
 
         // Missing secret_id
         let invalid_config = HashiCorpVaultKvConfig {
-            approle_secret_id: None,
-            ..valid_config.clone()
+            base: HashiCorpVaultBaseConfig {
+                approle_secret_id: None,
+                ..valid_config.base.clone()
+            },
         };
         assert!(HashiCorpVaultKvStore::validate_config(&invalid_config).is_err());
     }
@@ -795,25 +515,26 @@ mod tests {
     #[test]
     fn test_validate_config_kubernetes() {
         let valid_config = HashiCorpVaultKvConfig {
-            address: "https://vault.example.com:8200".to_string(),
-            mount_path: "secret".to_string(),
-            namespace: None,
-            auth_method: "kubernetes".to_string(),
-            approle_role_id: None,
-            approle_secret_id: None,
-            k8s_role: Some("trueflow-role".to_string()),
-            k8s_jwt_path: Some(
-                "/var/run/secrets/kubernetes.io/serviceaccount/token".to_string(),
-            ),
-            skip_tls_verify: false,
+            base: HashiCorpVaultBaseConfig {
+                auth_method: "kubernetes".to_string(),
+                approle_role_id: None,
+                approle_secret_id: None,
+                k8s_role: Some("trueflow-role".to_string()),
+                k8s_jwt_path: Some(
+                    "/var/run/secrets/kubernetes.io/serviceaccount/token".to_string(),
+                ),
+                ..create_test_base_config()
+            },
         };
 
         assert!(HashiCorpVaultKvStore::validate_config(&valid_config).is_ok());
 
         // Missing k8s_role
         let invalid_config = HashiCorpVaultKvConfig {
-            k8s_role: None,
-            ..valid_config.clone()
+            base: HashiCorpVaultBaseConfig {
+                k8s_role: None,
+                ..valid_config.base.clone()
+            },
         };
         assert!(HashiCorpVaultKvStore::validate_config(&invalid_config).is_err());
     }
@@ -821,51 +542,30 @@ mod tests {
     #[test]
     fn test_validate_config_invalid_auth_method() {
         let config = HashiCorpVaultKvConfig {
-            address: "https://vault.example.com:8200".to_string(),
-            mount_path: "secret".to_string(),
-            namespace: None,
-            auth_method: "invalid".to_string(),
-            approle_role_id: None,
-            approle_secret_id: None,
-            k8s_role: None,
-            k8s_jwt_path: None,
-            skip_tls_verify: false,
+            base: HashiCorpVaultBaseConfig {
+                auth_method: "invalid".to_string(),
+                approle_role_id: None,
+                approle_secret_id: None,
+                k8s_role: None,
+                k8s_jwt_path: None,
+                ..create_test_base_config()
+            },
         };
 
         assert!(HashiCorpVaultKvStore::validate_config(&config).is_err());
     }
 
     #[test]
-    fn test_token_needs_refresh() {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
-
-        // Token that expires in 10 minutes - does not need refresh
-        let token = VaultToken {
-            token: "test-token".to_string(),
-            expires_at: now + 600,
-        };
-        assert!(!token.needs_refresh());
-
-        // Token that expires in 2 minutes - needs refresh
-        let token = VaultToken {
-            token: "test-token".to_string(),
-            expires_at: now + 120,
-        };
-        assert!(token.needs_refresh());
-    }
-
-    #[test]
     fn test_parse_external_ref() {
         // Standard format
-        let (path, key) = HashiCorpVaultKvStore::parse_external_ref("prod/api-keys:openai_key").unwrap();
+        let (path, key) =
+            HashiCorpVaultKvStore::parse_external_ref("prod/api-keys:openai_key").unwrap();
         assert_eq!(path, "prod/api-keys");
         assert_eq!(key, "openai_key");
 
         // Nested path
-        let (path, key) = HashiCorpVaultKvStore::parse_external_ref("team/secrets/prod:api_key").unwrap();
+        let (path, key) =
+            HashiCorpVaultKvStore::parse_external_ref("team/secrets/prod:api_key").unwrap();
         assert_eq!(path, "team/secrets/prod");
         assert_eq!(key, "api_key");
 
@@ -886,15 +586,6 @@ mod tests {
 
     #[test]
     fn test_vault_api_types_serde() {
-        // Test AppRole login request serialization
-        let req = AppRoleLoginRequest {
-            role_id: "role-123".to_string(),
-            secret_id: "secret-456".to_string(),
-        };
-        let json = serde_json::to_string(&req).unwrap();
-        assert!(json.contains("role_id"));
-        assert!(json.contains("secret_id"));
-
         // Test KV v2 read response deserialization
         let json = r#"{
             "data": {
@@ -910,14 +601,15 @@ mod tests {
             }
         }"#;
         let resp: KvV2ReadResponse = serde_json::from_str(json).unwrap();
-        assert_eq!(resp.data.data.get("api_key").unwrap().as_str().unwrap(), "sk-test-123");
+        assert_eq!(
+            resp.data
+                .data
+                .get("api_key")
+                .unwrap()
+                .as_str()
+                .unwrap(),
+            "sk-test-123"
+        );
         assert_eq!(resp.data.metadata.version, 1);
-
-        // Health response deserialization
-        let json = r#"{"initialized":true,"sealed":false,"standby":false}"#;
-        let health: HealthResponse = serde_json::from_str(json).unwrap();
-        assert!(health.initialized);
-        assert!(!health.sealed);
-        assert!(!health.standby);
     }
 }

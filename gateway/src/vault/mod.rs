@@ -5,6 +5,9 @@ pub mod mock;
 pub mod aws_kms;
 
 #[cfg(feature = "hashicorp-vault")]
+pub mod hashicorp_common;
+
+#[cfg(feature = "hashicorp-vault")]
 pub mod hashicorp;
 
 #[cfg(feature = "hashicorp-vault")]
