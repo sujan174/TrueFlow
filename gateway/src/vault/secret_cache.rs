@@ -6,8 +6,9 @@
 //!
 //! # Security
 //! - Cache keys are SHA256 hashes of the external_vault_ref to prevent logging sensitive paths
-//! - Secrets are stored encrypted in Redis (relying on Redis ACLs for access control)
+//! - Secrets are stored as JSON in Redis; rely on Redis ACLs for access control
 //! - L1 cache is process-local and never shared
+//! - In-memory secrets implement zeroize-on-drop to minimize plaintext exposure
 
 use dashmap::DashMap;
 use redis::aio::ConnectionManager;
@@ -16,6 +17,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+use zeroize::Zeroize;
 
 /// Configuration for the secret cache.
 #[derive(Debug, Clone)]
@@ -51,6 +53,22 @@ pub struct CachedSecret {
     pub injection_header: String,
     /// Backend that provided this secret.
     pub backend: String,
+}
+
+impl Zeroize for CachedSecret {
+    fn zeroize(&mut self) {
+        self.plaintext.zeroize();
+        self.provider.zeroize();
+        self.injection_mode.zeroize();
+        self.injection_header.zeroize();
+        self.backend.zeroize();
+    }
+}
+
+impl Drop for CachedSecret {
+    fn drop(&mut self) {
+        self.zeroize();
+    }
 }
 
 /// Entry stored in the local DashMap with an expiry timestamp.
@@ -127,28 +145,51 @@ impl SecretCache {
 
         // L2: Check Redis
         let mut conn = self.redis.clone();
-        if let Ok(Some(v)) = conn.get::<_, Option<String>>(&key).await {
-            if let Ok(cached) = serde_json::from_str::<CachedSecret>(&v) {
+        match conn.get::<_, Option<String>>(&key).await {
+            Ok(Some(v)) => {
+                match serde_json::from_str::<CachedSecret>(&v) {
+                    Ok(cached) => {
+                        tracing::debug!(
+                            cache_key = %key,
+                            backend = %backend,
+                            "L2 cache hit for secret"
+                        );
+                        // Populate L1 with remaining TTL
+                        let ttl_secs: i64 = conn.ttl(&key).await.unwrap_or(60);
+                        let ttl = if ttl_secs > 0 {
+                            Duration::from_secs(ttl_secs as u64)
+                        } else {
+                            Duration::from_secs(60)
+                        };
+                        self.local.insert(
+                            key.clone(),
+                            LocalCacheEntry {
+                                value: cached.clone(),
+                                expires_at: Instant::now() + ttl,
+                            },
+                        );
+                        return Some(cached);
+                    }
+                    Err(e) => {
+                        tracing::debug!(
+                            cache_key = %key,
+                            backend = %backend,
+                            error = %e,
+                            "Failed to deserialize cached secret from Redis"
+                        );
+                    }
+                }
+            }
+            Ok(None) => {
+                // Key not found in Redis - this is normal, not an error
+            }
+            Err(e) => {
                 tracing::debug!(
                     cache_key = %key,
                     backend = %backend,
-                    "L2 cache hit for secret"
+                    error = %e,
+                    "Redis GET failed for secret cache"
                 );
-                // Populate L1 with remaining TTL
-                let ttl_secs: i64 = conn.ttl(&key).await.unwrap_or(60);
-                let ttl = if ttl_secs > 0 {
-                    Duration::from_secs(ttl_secs as u64)
-                } else {
-                    Duration::from_secs(60)
-                };
-                self.local.insert(
-                    key.clone(),
-                    LocalCacheEntry {
-                        value: cached.clone(),
-                        expires_at: Instant::now() + ttl,
-                    },
-                );
-                return Some(cached);
             }
         }
 

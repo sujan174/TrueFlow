@@ -363,10 +363,10 @@ impl VaultRegistry {
                         "Secret cache hit"
                     );
                     return Ok((
-                        cached.plaintext,
-                        cached.provider,
-                        cached.injection_mode,
-                        cached.injection_header,
+                        cached.plaintext.clone(),
+                        cached.provider.clone(),
+                        cached.injection_mode.clone(),
+                        cached.injection_header.clone(),
                     ));
                 }
 
