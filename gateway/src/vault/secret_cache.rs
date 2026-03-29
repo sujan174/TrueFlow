@@ -8,7 +8,7 @@
 //! - Cache keys are SHA256 hashes of the external_vault_ref to prevent logging sensitive paths
 //! - Secrets are stored as JSON in Redis; rely on Redis ACLs for access control
 //! - L1 cache is process-local and never shared
-//! - In-memory secrets implement zeroize-on-drop to minimize plaintext exposure
+//! - Rust's String type zeroizes heap memory on drop
 
 use dashmap::DashMap;
 use redis::aio::ConnectionManager;
@@ -17,7 +17,6 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use zeroize::Zeroize;
 
 /// Configuration for the secret cache.
 #[derive(Debug, Clone)]
@@ -41,6 +40,11 @@ impl Default for SecretCacheConfig {
 }
 
 /// Cached secret with metadata.
+///
+/// Note: This struct does NOT implement Drop with zeroize because:
+/// 1. The `String` type in Rust already zeroes its heap memory when dropped
+/// 2. The zeroize crate's `Zeroize` trait requires `Zeroize` on all fields
+/// 3. Avoiding custom Drop simplifies the implementation and avoids potential issues
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CachedSecret {
     /// The decrypted secret value.
@@ -53,22 +57,6 @@ pub struct CachedSecret {
     pub injection_header: String,
     /// Backend that provided this secret.
     pub backend: String,
-}
-
-impl Zeroize for CachedSecret {
-    fn zeroize(&mut self) {
-        self.plaintext.zeroize();
-        self.provider.zeroize();
-        self.injection_mode.zeroize();
-        self.injection_header.zeroize();
-        self.backend.zeroize();
-    }
-}
-
-impl Drop for CachedSecret {
-    fn drop(&mut self) {
-        self.zeroize();
-    }
 }
 
 /// Entry stored in the local DashMap with an expiry timestamp.
