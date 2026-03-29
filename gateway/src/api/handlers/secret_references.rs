@@ -88,6 +88,15 @@ pub async fn create_secret_reference(
         }
     }
 
+    // Validate vault_backend for external vaults only
+    match payload.vault_backend.as_str() {
+        "aws_secrets_manager" | "hashicorp_vault" | "hashicorp_vault_kv" | "azure_key_vault" => {}
+        _ => {
+            tracing::warn!("create_secret_reference: invalid vault_backend: {}", payload.vault_backend);
+            return Err(StatusCode::BAD_REQUEST);
+        }
+    }
+
     let req = CreateSecretReferenceRequest {
         name: payload.name,
         description: payload.description,
@@ -263,11 +272,15 @@ pub async fn fetch_secret(
     }
 
     // Check access if allowlists are configured
-    // Note: team_id is not available in AuthContext, pass None
-    // User-level access check is the primary authorization
+    // User must be authenticated for access control
+    let user_id = auth.user_id.ok_or_else(|| {
+        tracing::warn!("fetch_secret: unauthenticated access attempt");
+        StatusCode::UNAUTHORIZED
+    })?;
+
     let access_result = state
         .db
-        .check_secret_access(id, auth.user_id.unwrap_or_default(), None)
+        .check_secret_access(id, user_id, None)
         .await
         .map_err(|e| {
             tracing::error!("fetch_secret: check_secret_access failed: {}", e);
