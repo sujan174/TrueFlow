@@ -18,6 +18,7 @@ if TYPE_CHECKING:
     from .resources.credentials import CredentialsResource, AsyncCredentialsResource
     from .resources.projects import ProjectsResource, AsyncProjectsResource
     from .resources.services import ServicesResource, AsyncServicesResource
+    from .resources.secret_references import SecretReferencesResource, AsyncSecretReferencesResource
 
 
 class TrueFlowClient:
@@ -630,6 +631,12 @@ class TrueFlowClient:
         from .resources.prompts import PromptsResource
         return PromptsResource(self)
 
+    @cached_property
+    def secret_references(self) -> "SecretReferencesResource":
+        """Secret reference management — references to external secrets in vault backends."""
+        from .resources.secret_references import SecretReferencesResource
+        return SecretReferencesResource(self)
+
 
 class AsyncClient:
     """
@@ -1103,6 +1110,12 @@ class AsyncClient:
         """Prompt management — CRUD, versioning, deployment, rendering."""
         from .resources.prompts import AsyncPromptsResource
         return AsyncPromptsResource(self)
+
+    @cached_property
+    def secret_references(self) -> "AsyncSecretReferencesResource":
+        """Secret reference management — references to external secrets in vault backends."""
+        from .resources.secret_references import AsyncSecretReferencesResource
+        return AsyncSecretReferencesResource(self)
 
 
 # ── Scoped helpers (internal) ─────────────────────────────────────────────────
