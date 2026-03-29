@@ -3,6 +3,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
+use tracing::{instrument, warn};
 use uuid::Uuid;
 
 use super::PgStore;
@@ -38,12 +39,21 @@ pub struct SecretReferenceRow {
 
 impl From<SecretReferenceRow> for SecretReference {
     fn from(row: SecretReferenceRow) -> Self {
+        let vault_backend = row.vault_backend.parse().unwrap_or_else(|e| {
+            warn!(
+                vault_backend = %row.vault_backend,
+                error = %e,
+                reference_id = %row.id,
+                "Invalid vault_backend value, defaulting to 'builtin'"
+            );
+            VaultBackend::Builtin
+        });
         Self {
             id: row.id,
             project_id: row.project_id,
             name: row.name,
             description: row.description,
-            vault_backend: row.vault_backend.parse().unwrap_or(VaultBackend::Builtin),
+            vault_backend,
             external_ref: row.external_ref,
             vault_config_id: row.vault_config_id,
             provider: row.provider,
@@ -64,6 +74,7 @@ impl From<SecretReferenceRow> for SecretReference {
 
 impl PgStore {
     /// Create a new secret reference.
+    #[instrument(skip(self))]
     pub async fn create_secret_reference(
         &self,
         project_id: Uuid,
@@ -106,6 +117,7 @@ impl PgStore {
     }
 
     /// List secret references with optional filtering.
+    #[instrument(skip(self))]
     pub async fn list_secret_references(
         &self,
         project_id: Uuid,
@@ -113,6 +125,8 @@ impl PgStore {
         limit: i64,
         offset: i64,
     ) -> anyhow::Result<Vec<SecretReference>> {
+        // Clamp limit to prevent DoS via excessive result sets
+        let limit = limit.clamp(1, 1000);
         let mut query = String::from(
             "SELECT * FROM secret_references WHERE project_id = $1",
         );
@@ -159,6 +173,7 @@ impl PgStore {
     }
 
     /// Get a single secret reference by ID.
+    #[instrument(skip(self))]
     pub async fn get_secret_reference(
         &self,
         id: Uuid,
@@ -176,6 +191,7 @@ impl PgStore {
     }
 
     /// Update a secret reference.
+    #[instrument(skip(self))]
     pub async fn update_secret_reference(
         &self,
         id: Uuid,
@@ -286,6 +302,7 @@ impl PgStore {
     }
 
     /// Soft-delete a secret reference by setting is_active = false.
+    #[instrument(skip(self))]
     pub async fn delete_secret_reference(&self, id: Uuid, project_id: Uuid) -> anyhow::Result<bool> {
         let result = sqlx::query(
             "UPDATE secret_references SET is_active = false, updated_at = NOW() \
@@ -302,6 +319,7 @@ impl PgStore {
     /// Check if a user has access to a secret reference.
     ///
     /// Returns Granted if access is allowed, Denied if not, NotFound if the reference doesn't exist.
+    #[instrument(skip(self))]
     pub async fn check_secret_access(
         &self,
         secret_reference_id: Uuid,
@@ -345,6 +363,7 @@ impl PgStore {
     }
 
     /// Update last_accessed_at timestamp for a secret reference.
+    #[instrument(skip(self))]
     pub async fn touch_secret_access(&self, secret_reference_id: Uuid) -> anyhow::Result<()> {
         sqlx::query(
             "UPDATE secret_references SET last_accessed_at = NOW() WHERE id = $1",
@@ -357,6 +376,7 @@ impl PgStore {
     }
 
     /// Get secret reference by name within a project.
+    #[instrument(skip(self))]
     pub async fn get_secret_reference_by_name(
         &self,
         project_id: Uuid,
@@ -374,6 +394,7 @@ impl PgStore {
     }
 
     /// Hard delete a secret reference (admin only, use with caution).
+    #[instrument(skip(self))]
     pub async fn hard_delete_secret_reference(&self, id: Uuid, project_id: Uuid) -> anyhow::Result<bool> {
         let result = sqlx::query(
             "DELETE FROM secret_references WHERE id = $1 AND project_id = $2",
