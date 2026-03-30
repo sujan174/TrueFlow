@@ -176,11 +176,14 @@ pub fn detect_provider(model: &str, upstream_url: &str) -> Provider {
     // ── URL-based fallback (only reached for empty/unknown model names) ──
     let url_lower = upstream_url.to_lowercase();
     if url_lower.contains("anthropic") && !url_lower.contains("bedrock") {
+        // Task 36: Record URL-based fallback
+        crate::middleware::metrics::record_provider_derivation_fallback("anthropic");
         return Provider::Anthropic;
     }
     if url_lower.contains("generativelanguage.googleapis.com")
         || url_lower.contains("aiplatform.googleapis.com")
     {
+        crate::middleware::metrics::record_provider_derivation_fallback("google");
         return Provider::Gemini;
     }
     // Azure OpenAI: detect by endpoint URL patterns
@@ -188,31 +191,39 @@ pub fn detect_provider(model: &str, upstream_url: &str) -> Provider {
         || url_lower.contains(".openai.azure.com")
         || url_lower.contains("azure-api.net")
     {
+        crate::middleware::metrics::record_provider_derivation_fallback("azure");
         return Provider::AzureOpenAI;
     }
     // Bedrock: region-specific endpoints
     if url_lower.contains("bedrock-runtime") || url_lower.contains("bedrock") {
+        crate::middleware::metrics::record_provider_derivation_fallback("bedrock");
         return Provider::Bedrock;
     }
     if url_lower.contains("groq.com") {
+        crate::middleware::metrics::record_provider_derivation_fallback("groq");
         return Provider::Groq;
     }
     if url_lower.contains("mistral.ai") {
+        crate::middleware::metrics::record_provider_derivation_fallback("mistral");
         return Provider::Mistral;
     }
     if url_lower.contains("together.xyz") || url_lower.contains("together.ai") {
+        crate::middleware::metrics::record_provider_derivation_fallback("together");
         return Provider::TogetherAI;
     }
     if url_lower.contains("cohere.com") || url_lower.contains("cohere.ai") {
+        crate::middleware::metrics::record_provider_derivation_fallback("cohere");
         return Provider::Cohere;
     }
     if url_lower.contains("localhost:11434")
         || url_lower.contains("ollama")
         || url_lower.contains(":11434")
     {
+        crate::middleware::metrics::record_provider_derivation_fallback("ollama");
         return Provider::Ollama;
     }
     if url_lower.contains("openai") {
+        crate::middleware::metrics::record_provider_derivation_fallback("openai");
         return Provider::OpenAI;
     }
 

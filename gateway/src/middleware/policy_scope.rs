@@ -11,6 +11,7 @@
 // This catches misconfiguration early, before requests fail at runtime.
 
 use serde_json::Value;
+use std::time::Instant;
 use uuid::Uuid;
 
 /// Represents a model found in a policy's routing action.
@@ -60,6 +61,7 @@ pub struct DetailedScopeViolation {
 }
 
 /// Extract all models referenced in routing actions from a policy's rules.
+#[allow(dead_code)]
 pub fn extract_routing_models(rules: &[crate::models::policy::Rule]) -> Vec<(String, String)> {
     // (model, action_type) pairs
     let mut models = Vec::new();
@@ -163,17 +165,22 @@ pub fn extract_routing_models_from_json(rules: &Value) -> Vec<(String, String)> 
 /// are within the token's allowed scope.
 ///
 /// Returns Ok(()) if all models are allowed, or Err with detailed message.
+#[allow(dead_code)]
 pub fn validate_policies_against_token_scope(
     policies: &[crate::models::policy::Policy],
     allowed_providers: Option<&[String]>,
     allowed_models: Option<&Value>,
 ) -> Result<(), String> {
+    let start = Instant::now();
+
     // If no restrictions, everything is allowed
     let has_provider_restriction = allowed_providers.map_or(false, |p| !p.is_empty());
     let has_model_restriction =
         allowed_models.map_or(false, |v| v.as_array().map_or(false, |arr| !arr.is_empty()));
 
     if !has_provider_restriction && !has_model_restriction {
+        let duration = start.elapsed().as_secs_f64();
+        crate::middleware::metrics::observe_scope_validation_duration(duration);
         return Ok(());
     }
 
@@ -208,6 +215,8 @@ pub fn validate_policies_against_token_scope(
                             allowed.join(", "),
                             provider_note
                         ));
+                        // Record provider violation metric (Task 36)
+                        crate::middleware::metrics::record_scope_validation_failure("provider_not_allowed");
                         continue; // Skip model check if provider already violates
                     }
                 }
@@ -236,12 +245,18 @@ pub fn validate_policies_against_token_scope(
                                 model,
                                 pattern_strs.join(", ")
                             ));
+                            // Record model violation metric (Task 36)
+                            crate::middleware::metrics::record_scope_validation_failure("model_not_allowed");
                         }
                     }
                 }
             }
         }
     }
+
+    // Record validation duration (Task 36)
+    let duration = start.elapsed().as_secs_f64();
+    crate::middleware::metrics::observe_scope_validation_duration(duration);
 
     if violations.is_empty() {
         Ok(())

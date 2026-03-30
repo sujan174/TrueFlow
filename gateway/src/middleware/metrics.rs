@@ -30,6 +30,84 @@ static DB_SPEND_PERSIST_FAILURES: Lazy<prometheus::CounterVec> = Lazy::new(|| {
     .expect("failed to register trueflow_db_spend_persist_failures_total")
 });
 
+// ── Token Creation Metrics (Task 36) ────────────────────────────────────────
+
+/// Counter for tokens created, labeled by mode (managed/byok)
+static TOKENS_CREATED: Lazy<prometheus::CounterVec> = Lazy::new(|| {
+    prometheus::register_counter_vec!(
+        opts!(
+            "trueflow_tokens_created_total",
+            "Total number of tokens created"
+        ),
+        &["mode"]
+    )
+    .expect("failed to register trueflow_tokens_created_total")
+});
+
+/// Counter for token creation errors
+static TOKEN_CREATION_ERRORS: Lazy<prometheus::CounterVec> = Lazy::new(|| {
+    prometheus::register_counter_vec!(
+        opts!(
+            "trueflow_token_creation_errors_total",
+            "Total number of token creation errors"
+        ),
+        &["error_type"]
+    )
+    .expect("failed to register trueflow_token_creation_errors_total")
+});
+
+// ── Policy Scope Validation Metrics (Task 36) ───────────────────────────────
+
+/// Histogram for scope validation duration
+static SCOPE_VALIDATION_DURATION: Lazy<prometheus::Histogram> = Lazy::new(|| {
+    prometheus::register_histogram!(
+        prometheus::histogram_opts!(
+            "trueflow_scope_validation_duration_seconds",
+            "Duration of policy scope validation",
+            vec![0.0001, 0.0005, 0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0]
+        )
+    )
+    .expect("failed to register trueflow_scope_validation_duration_seconds")
+});
+
+/// Counter for scope validation failures
+static SCOPE_VALIDATION_FAILURES: Lazy<prometheus::CounterVec> = Lazy::new(|| {
+    prometheus::register_counter_vec!(
+        opts!(
+            "trueflow_scope_validation_failures_total",
+            "Total number of policy scope validation failures"
+        ),
+        &["violation_type"]
+    )
+    .expect("failed to register trueflow_scope_validation_failures_total")
+});
+
+// ── Provider Derivation Metrics (Task 36) ───────────────────────────────────
+
+/// Counter for provider derivation from model
+static PROVIDER_DERIVATIONS: Lazy<prometheus::CounterVec> = Lazy::new(|| {
+    prometheus::register_counter_vec!(
+        opts!(
+            "trueflow_provider_derivations_total",
+            "Total number of provider derivations from model names"
+        ),
+        &["provider", "source"]
+    )
+    .expect("failed to register trueflow_provider_derivations_total")
+});
+
+/// Counter for provider derivation fallbacks (when URL is used instead of model prefix)
+static PROVIDER_DERIVATION_FALLBACKS: Lazy<prometheus::CounterVec> = Lazy::new(|| {
+    prometheus::register_counter_vec!(
+        opts!(
+            "trueflow_provider_derivation_fallbacks_total",
+            "Total number of times provider was derived from URL instead of model"
+        ),
+        &["provider"]
+    )
+    .expect("failed to register trueflow_provider_derivation_fallbacks_total")
+});
+
 /// Prometheus metrics recorder.
 /// All metrics are registered in the global default registry.
 pub struct PrometheusRecorder {
@@ -213,9 +291,47 @@ pub fn encode_metrics() -> String {
 /// HIGH-6: Record a DB spend persistence failure.
 /// Called from fire-and-forget spawns in spend.rs.
 pub fn record_db_spend_persist_failure(period: &str) {
-    DB_SPEND_PERSIST_FAILURES
-        .with_label_values(&[period])
-        .inc();
+    DB_SPEND_PERSIST_FAILURES.with_label_values(&[period]).inc();
+}
+
+// ── Token Creation Metrics (Task 36) ────────────────────────────────────────
+
+/// Record a token creation event.
+/// `has_credential` = true means managed mode (credential stored in vault).
+/// `has_credential` = false means BYOK mode (user provides key at request time).
+pub fn record_token_created(has_credential: bool) {
+    let mode = if has_credential { "managed" } else { "byok" };
+    TOKENS_CREATED.with_label_values(&[mode]).inc();
+}
+
+/// Record a token creation error.
+pub fn record_token_creation_error(error_type: &str) {
+    TOKEN_CREATION_ERRORS.with_label_values(&[error_type]).inc();
+}
+
+// ── Scope Validation Metrics (Task 36) ───────────────────────────────────────
+
+/// Observe scope validation duration in seconds.
+pub fn observe_scope_validation_duration(duration_secs: f64) {
+    SCOPE_VALIDATION_DURATION.observe(duration_secs);
+}
+
+/// Record a scope validation failure.
+pub fn record_scope_validation_failure(violation_type: &str) {
+    SCOPE_VALIDATION_FAILURES.with_label_values(&[violation_type]).inc();
+}
+
+// ── Provider Derivation Metrics (Task 36) ───────────────────────────────────
+
+/// Record a provider derivation from model prefix.
+pub fn record_provider_derivation(provider: &str) {
+    PROVIDER_DERIVATIONS.with_label_values(&[provider, "model_prefix"]).inc();
+}
+
+/// Record a provider derivation fallback (URL-based).
+pub fn record_provider_derivation_fallback(provider: &str) {
+    PROVIDER_DERIVATIONS.with_label_values(&[provider, "url_fallback"]).inc();
+    PROVIDER_DERIVATION_FALLBACKS.with_label_values(&[provider]).inc();
 }
 
 // ── Tests ─────────────────────────────────────────────────────
