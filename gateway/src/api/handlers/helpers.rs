@@ -4,6 +4,7 @@ use axum::http::StatusCode;
 use uuid::Uuid;
 
 use crate::api::AuthContext;
+use crate::errors::AppError;
 use crate::AppState;
 
 /// Verify that `project_id` belongs to `org_id`.
@@ -14,15 +15,11 @@ pub async fn verify_project_ownership(
     state: &crate::AppState,
     org_id: Uuid,
     project_id: Uuid,
-) -> Result<(), StatusCode> {
+) -> Result<(), AppError> {
     let belongs = state
         .db
         .project_belongs_to_org(project_id, org_id)
-        .await
-        .map_err(|e| {
-            tracing::error!("project_belongs_to_org failed: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+        .await?;
     if !belongs {
         tracing::warn!(
             org_id = %org_id,
@@ -30,7 +27,7 @@ pub async fn verify_project_ownership(
             "SEC-05: project isolation - project not found or does not belong to org"
         );
         // Return NOT_FOUND to prevent ID enumeration attacks
-        return Err(StatusCode::NOT_FOUND);
+        return Err(AppError::NotFound(format!("Project {}", project_id)));
     }
     Ok(())
 }
@@ -39,11 +36,8 @@ pub(super) async fn verify_token_ownership(
     state: &Arc<AppState>,
     token_id: &str,
     auth: &AuthContext,
-) -> Result<(), StatusCode> {
-    let token = state.db.get_token(token_id).await.map_err(|e| {
-        tracing::error!("verify_token_ownership DB error: {}", e);
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+) -> Result<(), AppError> {
+    let token = state.db.get_token(token_id).await?;
     match token {
         Some(t) if t.project_id == auth.default_project_id() => Ok(()),
         Some(_) => {
@@ -51,9 +45,9 @@ pub(super) async fn verify_token_ownership(
                 token_id,
                 "spend cap access denied: token belongs to different project"
             );
-            Err(StatusCode::NOT_FOUND) // Don't reveal existence to other projects
+            Err(AppError::NotFound(format!("Token {}", token_id))) // Don't reveal existence to other projects
         }
-        None => Err(StatusCode::NOT_FOUND),
+        None => Err(AppError::NotFound(format!("Token {}", token_id))),
     }
 }
 

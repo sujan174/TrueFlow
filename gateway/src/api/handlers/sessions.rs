@@ -9,6 +9,7 @@ use axum::{
 use super::dtos::{PaginationParams, SetSpendCapRequest, UpdateSessionStatusRequest};
 use super::helpers::verify_project_ownership;
 use crate::api::AuthContext;
+use crate::errors::AppError;
 use crate::AppState;
 
 pub async fn get_session(
@@ -16,9 +17,9 @@ pub async fn get_session(
     Extension(auth): Extension<AuthContext>,
     Path(session_id): Path<String>,
     Query(params): Query<PaginationParams>,
-) -> Result<Json<crate::store::postgres::SessionSummaryRow>, StatusCode> {
+) -> Result<Json<crate::store::postgres::SessionSummaryRow>, AppError> {
     auth.require_scope("audit:read")
-        .map_err(|_| StatusCode::FORBIDDEN)?;
+        .map_err(|_| AppError::Forbidden("audit:read scope required".to_string()))?;
     let project_id = params
         .project_id
         .unwrap_or_else(|| auth.default_project_id());
@@ -27,12 +28,8 @@ pub async fn get_session(
     let summary = state
         .db
         .get_session_summary(&session_id, project_id)
-        .await
-        .map_err(|e| {
-            tracing::error!(session_id = %session_id, "get_session_summary failed: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?
-        .ok_or(StatusCode::NOT_FOUND)?;
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("Session {}", session_id)))?;
 
     Ok(Json(summary))
 }
@@ -45,9 +42,9 @@ pub async fn list_sessions(
     State(state): State<Arc<AppState>>,
     Extension(auth): Extension<AuthContext>,
     Query(params): Query<PaginationParams>,
-) -> Result<Json<Vec<crate::store::postgres::SessionSummaryRow>>, StatusCode> {
+) -> Result<Json<Vec<crate::store::postgres::SessionSummaryRow>>, AppError> {
     auth.require_scope("audit:read")
-        .map_err(|_| StatusCode::FORBIDDEN)?;
+        .map_err(|_| AppError::Forbidden("audit:read scope required".to_string()))?;
     let project_id = params
         .project_id
         .unwrap_or_else(|| auth.default_project_id());
@@ -55,14 +52,7 @@ pub async fn list_sessions(
     let limit = params.limit.unwrap_or(100).clamp(1, 500);
     let offset = params.offset.unwrap_or(0).max(0);
 
-    let sessions = state
-        .db
-        .list_sessions(project_id, limit, offset)
-        .await
-        .map_err(|e| {
-            tracing::error!("list_sessions failed: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+    let sessions = state.db.list_sessions(project_id, limit, offset).await?;
 
     Ok(Json(sessions))
 }
@@ -78,10 +68,11 @@ pub async fn update_session_status(
     Path(session_id): Path<String>,
     Query(params): Query<PaginationParams>,
     Json(payload): Json<UpdateSessionStatusRequest>,
-) -> Result<Json<crate::store::postgres::SessionEntity>, StatusCode> {
-    auth.require_role("admin")?;
+) -> Result<Json<crate::store::postgres::SessionEntity>, AppError> {
+    auth.require_role("admin")
+        .map_err(|_| AppError::Forbidden("admin role required".to_string()))?;
     auth.require_scope("sessions:write")
-        .map_err(|_| StatusCode::FORBIDDEN)?;
+        .map_err(|_| AppError::Forbidden("sessions:write scope required".to_string()))?;
     let project_id = params
         .project_id
         .unwrap_or_else(|| auth.default_project_id());
@@ -90,18 +81,16 @@ pub async fn update_session_status(
     // Validate status value
     match payload.status.as_str() {
         "active" | "paused" | "completed" => {}
-        _ => return Err(StatusCode::UNPROCESSABLE_ENTITY),
+        _ => return Err(AppError::ValidationError {
+            message: format!("Invalid status: {}. Must be 'active', 'paused', or 'completed'", payload.status),
+        }),
     }
 
     let session = state
         .db
         .update_session_status(&session_id, project_id, &payload.status)
-        .await
-        .map_err(|e| {
-            tracing::error!(session_id = %session_id, "update_session_status failed: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?
-        .ok_or(StatusCode::NOT_FOUND)?;
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("Session {}", session_id)))?;
 
     tracing::info!(
         session_id = %session_id,
@@ -119,10 +108,11 @@ pub async fn set_session_spend_cap(
     Path(session_id): Path<String>,
     Query(params): Query<PaginationParams>,
     Json(payload): Json<SetSpendCapRequest>,
-) -> Result<Json<crate::store::postgres::SessionEntity>, StatusCode> {
-    auth.require_role("admin")?;
+) -> Result<Json<crate::store::postgres::SessionEntity>, AppError> {
+    auth.require_role("admin")
+        .map_err(|_| AppError::Forbidden("admin role required".to_string()))?;
     auth.require_scope("sessions:write")
-        .map_err(|_| StatusCode::FORBIDDEN)?;
+        .map_err(|_| AppError::Forbidden("sessions:write scope required".to_string()))?;
     let project_id = params
         .project_id
         .unwrap_or_else(|| auth.default_project_id());
@@ -131,12 +121,8 @@ pub async fn set_session_spend_cap(
     let session = state
         .db
         .set_session_spend_cap(&session_id, project_id, payload.spend_cap_usd)
-        .await
-        .map_err(|e| {
-            tracing::error!(session_id = %session_id, "set_session_spend_cap failed: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?
-        .ok_or(StatusCode::NOT_FOUND)?;
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("Session {}", session_id)))?;
 
     tracing::info!(
         session_id = %session_id,
@@ -156,9 +142,9 @@ pub async fn get_session_entity(
     Extension(auth): Extension<AuthContext>,
     Path(session_id): Path<String>,
     Query(params): Query<PaginationParams>,
-) -> Result<Json<crate::store::postgres::SessionEntity>, StatusCode> {
+) -> Result<Json<crate::store::postgres::SessionEntity>, AppError> {
     auth.require_scope("audit:read")
-        .map_err(|_| StatusCode::FORBIDDEN)?;
+        .map_err(|_| AppError::Forbidden("audit:read scope required".to_string()))?;
     let project_id = params
         .project_id
         .unwrap_or_else(|| auth.default_project_id());
@@ -167,12 +153,8 @@ pub async fn get_session_entity(
     let session = state
         .db
         .get_session_entity(&session_id, project_id)
-        .await
-        .map_err(|e| {
-            tracing::error!(session_id = %session_id, "get_session_entity failed: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?
-        .ok_or(StatusCode::NOT_FOUND)?;
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("Session {}", session_id)))?;
 
     Ok(Json(session))
 }

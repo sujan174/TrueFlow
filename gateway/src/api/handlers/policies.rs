@@ -14,6 +14,7 @@ use super::dtos::{
 };
 use super::helpers::verify_project_ownership;
 use crate::api::AuthContext;
+use crate::errors::AppError;
 use crate::store::postgres::PolicyRow;
 use crate::AppState;
 
@@ -21,9 +22,9 @@ pub async fn list_policies(
     State(state): State<Arc<AppState>>,
     Extension(auth): Extension<AuthContext>,
     Query(params): Query<PaginationParams>,
-) -> Result<Json<Vec<PolicyRow>>, StatusCode> {
+) -> Result<Json<Vec<PolicyRow>>, AppError> {
     auth.require_scope("policies:read")
-        .map_err(|_| StatusCode::FORBIDDEN)?;
+        .map_err(|_| AppError::Forbidden("policies:read scope required".to_string()))?;
     let project_id = params
         .project_id
         .unwrap_or_else(|| auth.default_project_id());
@@ -32,14 +33,7 @@ pub async fn list_policies(
     let limit = params.limit.unwrap_or(100).clamp(1, 1000);
     let offset = params.offset.unwrap_or(0).max(0);
 
-    let policies = state
-        .db
-        .list_policies(project_id, limit, offset)
-        .await
-        .map_err(|e| {
-            tracing::error!("list_policies failed: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+    let policies = state.db.list_policies(project_id, limit, offset).await?;
 
     Ok(Json(policies))
 }
@@ -49,41 +43,33 @@ pub async fn create_policy(
     State(state): State<Arc<AppState>>,
     Extension(auth): Extension<AuthContext>,
     Json(payload): Json<CreatePolicyRequest>,
-) -> impl IntoResponse {
-    if auth.require_role("admin").is_err() {
-        return StatusCode::FORBIDDEN.into_response();
-    }
-    if auth.require_scope("policies:write").is_err() {
-        return StatusCode::FORBIDDEN.into_response();
-    }
+) -> Result<(StatusCode, Json<PolicyResponse>), AppError> {
+    auth.require_role("admin")
+        .map_err(|_| AppError::Forbidden("admin role required".to_string()))?;
+    auth.require_scope("policies:write")
+        .map_err(|_| AppError::Forbidden("policies:write scope required".to_string()))?;
     let project_id = payload
         .project_id
         .unwrap_or_else(|| auth.default_project_id());
     // SEC: verify project isolation
-    if let Err(status) = verify_project_ownership(&state, auth.org_id, project_id).await {
-        return status.into_response();
-    }
+    verify_project_ownership(&state, auth.org_id, project_id).await?;
     let mode = payload.mode.unwrap_or_else(|| "enforce".to_string());
     let phase = payload.phase.unwrap_or_else(|| "pre".to_string());
 
     // Validate mode
     if mode != "enforce" && mode != "shadow" {
         tracing::warn!("create_policy: invalid mode: {}", mode);
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(json!({ "error": format!("invalid mode: {}", mode) })),
-        )
-            .into_response();
+        return Err(AppError::ValidationError {
+            message: format!("Invalid mode: {}. Must be 'enforce' or 'shadow'", mode),
+        });
     }
 
     // Validate phase
     if phase != "pre" && phase != "post" {
         tracing::warn!("create_policy: invalid phase: {}", phase);
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(json!({ "error": format!("invalid phase: {}", phase) })),
-        )
-            .into_response();
+        return Err(AppError::ValidationError {
+            message: format!("Invalid phase: {}. Must be 'pre' or 'post'", phase),
+        });
     }
 
     // SEC: enforce max size on rules JSON to prevent oversized payloads clogging DB+memory
@@ -94,16 +80,15 @@ pub async fn create_policy(
             "create_policy: rules JSON too large: {} bytes",
             rules_str.len()
         );
-        return (
-            StatusCode::UNPROCESSABLE_ENTITY,
-            Json(json!({ "error": format!("rules JSON exceeds maximum size of {}KB", MAX_RULES_BYTES / 1024) })),
-        ).into_response();
+        return Err(AppError::ValidationError {
+            message: format!("Rules JSON exceeds maximum size of {}KB", MAX_RULES_BYTES / 1024),
+        });
     }
 
     // Validate model patterns in routing actions
     if let Err(e) = validate_routing_actions(&payload.rules) {
         tracing::warn!("create_policy: invalid routing action: {}", e);
-        return (StatusCode::BAD_REQUEST, Json(json!({ "error": e }))).into_response();
+        return Err(AppError::ValidationError { message: e });
     }
 
     // Validate phase-action compatibility
@@ -119,53 +104,27 @@ pub async fn create_policy(
                 "create_policy: phase-action validation failed: {:?}",
                 errors
             );
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(json!({
-                    "error": {
-                        "code": "phase_action_mismatch",
-                        "message": "Policy contains actions incompatible with selected phase",
-                        "details": errors
-                    }
-                })),
-            )
-                .into_response();
+            return Err(AppError::ValidationError {
+                message: format!(
+                    "Policy contains actions incompatible with selected phase: {}",
+                    errors.join(", ")
+                ),
+            });
         }
     }
 
     // Fetch the token to validate scope
-    let token = match state.db.get_token(&payload.token_id).await {
-        Ok(Some(t)) => t,
-        Ok(None) => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(json!({
-                    "error": {
-                        "code": "token_not_found",
-                        "message": "The specified token was not found"
-                    }
-                })),
-            )
-                .into_response();
-        }
-        Err(e) => {
-            tracing::error!("create_policy: failed to fetch token: {}", e);
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-        }
-    };
+    let token = state
+        .db
+        .get_token(&payload.token_id)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("Token {}", payload.token_id)))?;
 
     // Verify token belongs to the same project
     if token.project_id != project_id {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(json!({
-                "error": {
-                    "code": "token_project_mismatch",
-                    "message": "Token must belong to the same project as the policy"
-                }
-            })),
-        )
-            .into_response();
+        return Err(AppError::ValidationError {
+            message: "Token must belong to the same project as the policy".to_string(),
+        });
     }
 
     // Extract routing models from rules and validate against token's scope
@@ -176,20 +135,19 @@ pub async fn create_policy(
         token.allowed_providers.as_deref(),
         token.allowed_models.as_ref(),
     ) {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(json!({
-                "error": {
-                    "code": "policy_scope_violation",
-                    "message": "Policy routing targets exceed token's allowed scope",
-                    "violations": violations
-                }
-            })),
-        )
-            .into_response();
+        let violation_strs: Vec<String> = violations
+            .iter()
+            .map(|v| format!("{} (provider: {})", v.model, v.detected_provider))
+            .collect();
+        return Err(AppError::ValidationError {
+            message: format!(
+                "Policy routing targets exceed token's allowed scope: {}",
+                violation_strs.join(", ")
+            ),
+        });
     }
 
-    match state
+    let id = state
         .db
         .insert_policy(
             project_id,
@@ -200,26 +158,16 @@ pub async fn create_policy(
             payload.retry,
             &payload.token_id,
         )
-        .await
-    {
-        Ok(id) => (
-            StatusCode::CREATED,
-            Json(json!(PolicyResponse {
-                id,
-                name: payload.name,
-                message: "Policy created".to_string(),
-            })),
-        )
-            .into_response(),
-        Err(e) => {
-            tracing::error!("create_policy failed: {}", e);
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({ "error": "internal server error" })),
-            )
-                .into_response()
-        }
-    }
+        .await?;
+
+    Ok((
+        StatusCode::CREATED,
+        Json(PolicyResponse {
+            id,
+            name: payload.name,
+            message: "Policy created".to_string(),
+        }),
+    ))
 }
 
 /// PUT /api/v1/policies/:id — update a policy
@@ -229,11 +177,14 @@ pub async fn update_policy(
     Path(id_str): Path<String>,
     Query(params): Query<PaginationParams>,
     Json(payload): Json<UpdatePolicyRequest>,
-) -> Result<Json<PolicyResponse>, StatusCode> {
-    auth.require_role("admin")?;
+) -> Result<(StatusCode, Json<PolicyResponse>), AppError> {
+    auth.require_role("admin")
+        .map_err(|_| AppError::Forbidden("admin role required".to_string()))?;
     auth.require_scope("policies:write")
-        .map_err(|_| StatusCode::FORBIDDEN)?;
-    let id = Uuid::parse_str(&id_str).map_err(|_| StatusCode::BAD_REQUEST)?;
+        .map_err(|_| AppError::Forbidden("policies:write scope required".to_string()))?;
+    let id = Uuid::parse_str(&id_str).map_err(|_| AppError::ValidationError {
+        message: "Invalid policy ID format".to_string(),
+    })?;
     // HIGH-3: Accept explicit project_id from query params
     let project_id = params
         .project_id
@@ -243,14 +194,18 @@ pub async fn update_policy(
     // Validate mode if provided
     if let Some(ref mode) = payload.mode {
         if mode != "enforce" && mode != "shadow" {
-            return Err(StatusCode::BAD_REQUEST);
+            return Err(AppError::ValidationError {
+                message: format!("Invalid mode: {}. Must be 'enforce' or 'shadow'", mode),
+            });
         }
     }
 
     // Validate phase if provided
     if let Some(ref phase) = payload.phase {
         if phase != "pre" && phase != "post" {
-            return Err(StatusCode::BAD_REQUEST);
+            return Err(AppError::ValidationError {
+                message: format!("Invalid phase: {}. Must be 'pre' or 'post'", phase),
+            });
         }
     }
 
@@ -258,7 +213,7 @@ pub async fn update_policy(
     if let Some(ref rules) = payload.rules {
         if let Err(e) = validate_routing_actions(rules) {
             tracing::warn!("update_policy: invalid routing action: {}", e);
-            return Err(StatusCode::BAD_REQUEST);
+            return Err(AppError::ValidationError { message: e });
         }
     }
 
@@ -271,14 +226,7 @@ pub async fn update_policy(
 
     if needs_existing_policy {
         // Fetch existing policy to determine effective values
-        let existing = state
-            .db
-            .get_policy_by_id(id, project_id)
-            .await
-            .map_err(|e| {
-                tracing::error!("update_policy: failed to fetch existing policy: {}", e);
-                StatusCode::INTERNAL_SERVER_ERROR
-            })?;
+        let existing = state.db.get_policy_by_id(id, project_id).await?;
 
         match existing {
             Some(existing_policy) => {
@@ -293,6 +241,42 @@ pub async fn update_policy(
                     .clone()
                     .unwrap_or_else(|| existing_policy.rules.clone());
 
+                // Validate scope against token if rules are being changed
+                if payload.rules.is_some() && !existing_policy.token_id.is_empty() {
+                    // Fetch the token to get allowed scope
+                    let token = state.db.get_token(&existing_policy.token_id).await?;
+
+                    if let Some(token) = token {
+                        // Extract routing models from the new rules
+                        let routing_models = crate::middleware::policy_scope::extract_routing_models_from_json(&effective_rules);
+
+                        if !routing_models.is_empty() {
+                            // Validate against token's allowed scope
+                            if let Err(violations) = crate::middleware::policy_scope::validate_policy_scope_detailed(
+                                &routing_models,
+                                token.allowed_providers.as_deref(),
+                                token.allowed_models.as_ref(),
+                            ) {
+                                tracing::warn!(
+                                    "update_policy: scope validation failed for policy {}: {:?}",
+                                    id,
+                                    violations
+                                );
+                                let violation_strs: Vec<String> = violations
+                                    .iter()
+                                    .map(|v| format!("{} (provider: {})", v.model, v.detected_provider))
+                                    .collect();
+                                return Err(AppError::ValidationError {
+                                    message: format!(
+                                        "Policy routing targets exceed token's allowed scope: {}",
+                                        violation_strs.join(", ")
+                                    ),
+                                });
+                            }
+                        }
+                    }
+                }
+
                 match validate_phase_actions(&effective_phase, &effective_rules) {
                     Ok(warnings) => {
                         for warning in &warnings {
@@ -304,12 +288,17 @@ pub async fn update_policy(
                             "update_policy: phase-action validation failed: {:?}",
                             errors
                         );
-                        return Err(StatusCode::BAD_REQUEST);
+                        return Err(AppError::ValidationError {
+                            message: format!(
+                                "Policy contains actions incompatible with selected phase: {}",
+                                errors.join(", ")
+                            ),
+                        });
                     }
                 }
             }
             None => {
-                return Err(StatusCode::NOT_FOUND);
+                return Err(AppError::NotFound(format!("Policy {}", id)));
             }
         }
     }
@@ -326,23 +315,28 @@ pub async fn update_policy(
             payload.name.as_deref(),
             None, // No optimistic locking for this API endpoint
         )
-        .await
-        .map_err(|e| {
-            tracing::error!("update_policy failed: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+        .await?;
 
     match updated {
         Ok(true) => {}
-        Ok(false) => return Err(StatusCode::NOT_FOUND),
-        Err(()) => return Err(StatusCode::CONFLICT), // Version mismatch
+        Ok(false) => {
+            return Err(AppError::NotFound(format!("Policy {}", id)));
+        }
+        Err(()) => {
+            return Err(AppError::ValidationError {
+                message: "Version conflict - policy was modified by another request".to_string(),
+            });
+        }
     }
 
-    Ok(Json(PolicyResponse {
-        id,
-        name: payload.name.unwrap_or_default(),
-        message: "Policy updated".to_string(),
-    }))
+    Ok((
+        StatusCode::OK,
+        Json(PolicyResponse {
+            id,
+            name: payload.name.unwrap_or_default(),
+            message: "Policy updated".to_string(),
+        }),
+    ))
 }
 
 /// DELETE /api/v1/policies/:id — soft-delete a policy
@@ -351,21 +345,21 @@ pub async fn delete_policy(
     Extension(auth): Extension<AuthContext>,
     Path(id_str): Path<String>,
     Query(params): Query<PaginationParams>,
-) -> Result<Json<DeleteResponse>, StatusCode> {
-    auth.require_role("admin")?;
+) -> Result<Json<DeleteResponse>, AppError> {
+    auth.require_role("admin")
+        .map_err(|_| AppError::Forbidden("admin role required".to_string()))?;
     auth.require_scope("policies:write")
-        .map_err(|_| StatusCode::FORBIDDEN)?;
-    let id = Uuid::parse_str(&id_str).map_err(|_| StatusCode::BAD_REQUEST)?;
+        .map_err(|_| AppError::Forbidden("policies:write scope required".to_string()))?;
+    let id = Uuid::parse_str(&id_str).map_err(|_| AppError::ValidationError {
+        message: "Invalid policy ID format".to_string(),
+    })?;
     // HIGH-3: Accept explicit project_id from query params
     let project_id = params
         .project_id
         .unwrap_or_else(|| auth.default_project_id());
     verify_project_ownership(&state, auth.org_id, project_id).await?;
 
-    let deleted = state.db.delete_policy(id, project_id).await.map_err(|e| {
-        tracing::error!("delete_policy failed: {}", e);
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+    let deleted = state.db.delete_policy(id, project_id).await?;
 
     if !deleted {
         tracing::warn!(
@@ -383,23 +377,18 @@ pub async fn list_policy_versions(
     State(state): State<Arc<AppState>>,
     Extension(auth): Extension<AuthContext>,
     Path(id_str): Path<String>,
-) -> Result<Json<Vec<crate::store::postgres::PolicyVersionRow>>, StatusCode> {
+) -> Result<Json<Vec<crate::store::postgres::PolicyVersionRow>>, AppError> {
     auth.require_scope("policies:read")
-        .map_err(|_| StatusCode::FORBIDDEN)?;
-    let id = Uuid::parse_str(&id_str).map_err(|_| StatusCode::BAD_REQUEST)?;
+        .map_err(|_| AppError::Forbidden("policies:read scope required".to_string()))?;
+    let id = Uuid::parse_str(&id_str).map_err(|_| AppError::ValidationError {
+        message: "Invalid policy ID format".to_string(),
+    })?;
 
     // SEC-03: Enforce project isolation
     let project_id = auth.default_project_id();
     verify_project_ownership(&state, auth.org_id, project_id).await?;
 
-    let versions = state
-        .db
-        .list_policy_versions(id, project_id)
-        .await
-        .map_err(|e| {
-            tracing::error!("list_policy_versions failed: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+    let versions = state.db.list_policy_versions(id, project_id).await?;
 
     Ok(Json(versions))
 }

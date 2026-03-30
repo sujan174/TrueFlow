@@ -12,6 +12,7 @@ use super::dtos::{
 };
 use super::helpers::verify_project_ownership;
 use crate::api::AuthContext;
+use crate::errors::AppError;
 use crate::store::postgres::CredentialMeta;
 use crate::vault::VaultBackend;
 use crate::AppState;
@@ -20,18 +21,15 @@ pub async fn list_credentials(
     State(state): State<Arc<AppState>>,
     Extension(auth): Extension<AuthContext>,
     Query(params): Query<PaginationParams>,
-) -> Result<Json<Vec<CredentialMeta>>, StatusCode> {
+) -> Result<Json<Vec<CredentialMeta>>, AppError> {
     auth.require_scope("credentials:read")
-        .map_err(|_| StatusCode::FORBIDDEN)?;
+        .map_err(|_| AppError::Forbidden("credentials:read scope required".to_string()))?;
     let project_id = params
         .project_id
         .unwrap_or_else(|| auth.default_project_id());
     verify_project_ownership(&state, auth.org_id, project_id).await?;
 
-    let creds = state.db.list_credentials(project_id).await.map_err(|e| {
-        tracing::error!("list_credentials failed: {}", e);
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+    let creds = state.db.list_credentials(project_id).await?;
 
     Ok(Json(creds))
 }
@@ -45,10 +43,11 @@ pub async fn create_credential(
     State(state): State<Arc<AppState>>,
     Extension(auth): Extension<AuthContext>,
     Json(payload): Json<CreateCredentialRequest>,
-) -> Result<(StatusCode, Json<CreateCredentialResponse>), StatusCode> {
-    auth.require_role("admin")?;
+) -> Result<(StatusCode, Json<CreateCredentialResponse>), AppError> {
+    auth.require_role("admin")
+        .map_err(|_| AppError::Forbidden("admin role required".to_string()))?;
     auth.require_scope("credentials:write")
-        .map_err(|_| StatusCode::FORBIDDEN)?;
+        .map_err(|_| AppError::Forbidden("credentials:write scope required".to_string()))?;
     let project_id = payload
         .project_id
         .unwrap_or_else(|| auth.default_project_id());
@@ -58,7 +57,9 @@ pub async fn create_credential(
     let vault_backend = match &payload.vault_backend {
         Some(backend_str) => backend_str.parse::<VaultBackend>().map_err(|e| {
             tracing::warn!("create_credential: invalid vault_backend: {}", e);
-            StatusCode::BAD_REQUEST
+            AppError::ValidationError {
+                message: format!("Invalid vault_backend: {}", e),
+            }
         })?,
         None => VaultBackend::Builtin,
     };
@@ -80,7 +81,9 @@ pub async fn create_credential(
                 "create_credential: invalid injection_mode: {}",
                 injection_mode
             );
-            return Err(StatusCode::BAD_REQUEST);
+            return Err(AppError::ValidationError {
+                message: format!("Invalid injection_mode: {}. Must be one of: bearer, basic, header, query, sigv4", injection_mode),
+            });
         }
     }
 
@@ -90,7 +93,9 @@ pub async fn create_credential(
             "create_credential: invalid injection_header: {}",
             injection_header
         );
-        return Err(StatusCode::BAD_REQUEST);
+        return Err(AppError::ValidationError {
+            message: format!("Invalid injection_header: {}", injection_header),
+        });
     }
 
     // Handle credential creation based on vault backend
@@ -100,14 +105,13 @@ pub async fn create_credential(
                 // Builtin vault: encrypt the plaintext secret
                 let secret = payload.secret.as_ref().ok_or_else(|| {
                     tracing::warn!("create_credential: secret required for builtin vault");
-                    StatusCode::BAD_REQUEST
+                    AppError::ValidationError {
+                        message: "secret is required for builtin vault".to_string(),
+                    }
                 })?;
 
                 let (enc_dek, dek_nonce, enc_secret, secret_nonce) =
-                    state.vault.encrypt_string(secret).map_err(|e| {
-                        tracing::error!("credential encryption failed: {}", e);
-                        StatusCode::INTERNAL_SERVER_ERROR
-                    })?;
+                    state.vault.encrypt_string(secret)?;
 
                 (
                     Some(enc_dek),
@@ -123,7 +127,9 @@ pub async fn create_credential(
                     tracing::warn!(
                         "create_credential: encrypted_secret_ref required for external vault"
                     );
-                    StatusCode::BAD_REQUEST
+                    AppError::ValidationError {
+                        message: "encrypted_secret_ref is required for external vault".to_string(),
+                    }
                 })?;
 
                 // Warn if secret is also provided (shouldn't be for external vault)
@@ -141,24 +147,30 @@ pub async fn create_credential(
                     tracing::warn!(
                         "create_credential: secret_arn required for AWS Secrets Manager"
                     );
-                    StatusCode::BAD_REQUEST
+                    AppError::ValidationError {
+                        message: "secret_arn is required for AWS Secrets Manager".to_string(),
+                    }
                 })?;
 
                 // Validate ARN format
                 if !secret_arn.starts_with("arn:aws:secretsmanager:") {
                     tracing::warn!("create_credential: invalid Secrets Manager ARN format");
-                    return Err(StatusCode::BAD_REQUEST);
+                    return Err(AppError::ValidationError {
+                        message: "Invalid Secrets Manager ARN format".to_string(),
+                    });
                 }
 
                 (None, None, None, None, Some(secret_arn.clone()))
             }
-            VaultBackend::HashicorpVaultKv | VaultBackend::AzureKeyVault => {
+            VaultBackend::HashicorpVaultKv | VaultBackend::AzureKeyVault | VaultBackend::GcpSecretManager => {
                 // Future backends: not yet implemented
                 tracing::warn!(
                     "create_credential: vault backend {:?} not yet implemented",
                     vault_backend
                 );
-                return Err(StatusCode::BAD_REQUEST);
+                return Err(AppError::ValidationError {
+                    message: format!("Vault backend {:?} not yet implemented", vault_backend),
+                });
             }
         };
 
@@ -176,10 +188,7 @@ pub async fn create_credential(
         injection_header,
     };
 
-    let id = state.db.insert_credential(&new_cred).await.map_err(|e| {
-        tracing::error!("create_credential failed: {}", e);
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+    let id = state.db.insert_credential(&new_cred).await?;
 
     let message = match vault_backend {
         VaultBackend::Builtin => "Credential encrypted and stored".to_string(),
@@ -190,7 +199,7 @@ pub async fn create_credential(
         VaultBackend::HashicorpVault => {
             "Credential stored with HashiCorp Vault reference".to_string()
         }
-        VaultBackend::HashicorpVaultKv | VaultBackend::AzureKeyVault => {
+        VaultBackend::HashicorpVaultKv | VaultBackend::AzureKeyVault | VaultBackend::GcpSecretManager => {
             "Credential stored with external vault reference".to_string()
         }
     };
@@ -211,25 +220,21 @@ pub async fn delete_credential(
     Extension(auth): Extension<AuthContext>,
     Path(id_str): Path<String>,
     Query(params): Query<PaginationParams>,
-) -> Result<Json<DeleteResponse>, StatusCode> {
-    auth.require_role("admin")?;
+) -> Result<Json<DeleteResponse>, AppError> {
+    auth.require_role("admin")
+        .map_err(|_| AppError::Forbidden("admin role required".to_string()))?;
     auth.require_scope("credentials:write")
-        .map_err(|_| StatusCode::FORBIDDEN)?;
-    let id = Uuid::parse_str(&id_str).map_err(|_| StatusCode::BAD_REQUEST)?;
+        .map_err(|_| AppError::Forbidden("credentials:write scope required".to_string()))?;
+    let id = Uuid::parse_str(&id_str).map_err(|_| AppError::ValidationError {
+        message: format!("Invalid credential ID: {}", id_str),
+    })?;
     let project_id = params
         .project_id
         .unwrap_or_else(|| auth.default_project_id());
     // HIGH-2: Verify project ownership for explicit isolation
     verify_project_ownership(&state, auth.org_id, project_id).await?;
 
-    let deleted = state
-        .db
-        .delete_credential(id, project_id)
-        .await
-        .map_err(|e| {
-            tracing::error!("delete_credential failed: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+    let deleted = state.db.delete_credential(id, project_id).await?;
 
     // HIGH-11: Invalidate credential cache on delete
     if deleted {

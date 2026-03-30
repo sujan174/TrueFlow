@@ -65,6 +65,19 @@ pub enum AppError {
     #[error("validation error: {message}")]
     ValidationError { message: String },
 
+    /// Token creation/validation errors
+    #[error("provider required for BYOK token")]
+    ProviderRequired { message: String },
+
+    #[error("custom URL required for provider: {provider}")]
+    CustomUrlRequired { provider: String, message: String },
+
+    #[error("upstream provider mismatch")]
+    UpstreamProviderMismatch { upstream_provider: String, allowed_providers: Vec<String> },
+
+    #[error("not found: {0}")]
+    NotFound(String),
+
     #[error("upstream error: {0}")]
     Upstream(String),
 
@@ -195,6 +208,40 @@ impl AppError {
                 message.clone(),
                 None,
             ),
+            AppError::ProviderRequired { message } => (
+                StatusCode::BAD_REQUEST,
+                "invalid_request_error",
+                "provider_required",
+                message.clone(),
+                Some(json!({ "hint": "BYOK tokens require a 'provider' field when credential_id is not provided" })),
+            ),
+            AppError::CustomUrlRequired { provider, message } => (
+                StatusCode::BAD_REQUEST,
+                "invalid_request_error",
+                "custom_url_required",
+                message.clone(),
+                Some(json!({
+                    "provider": provider,
+                    "providers_requiring_custom_url": ["azure", "bedrock", "custom"]
+                })),
+            ),
+            AppError::UpstreamProviderMismatch { upstream_provider, allowed_providers } => (
+                StatusCode::BAD_REQUEST,
+                "invalid_request_error",
+                "upstream_provider_mismatch",
+                format!("Upstream provider '{}' is not in allowed_providers: {:?}", upstream_provider, allowed_providers),
+                Some(json!({
+                    "upstream_provider": upstream_provider,
+                    "allowed_providers": allowed_providers
+                })),
+            ),
+            AppError::NotFound(resource) => (
+                StatusCode::NOT_FOUND,
+                "invalid_request_error",
+                "not_found",
+                format!("{} not found", resource),
+                None,
+            ),
             AppError::Upstream(e) => {
                 tracing::error!(error = %e, "Upstream error");
                 (
@@ -280,6 +327,35 @@ impl From<&str> for AppError {
     fn from(msg: &str) -> Self {
         AppError::SpendCapReached {
             message: msg.to_string(),
+        }
+    }
+}
+
+impl From<AppError> for StatusCode {
+    fn from(err: AppError) -> Self {
+        match err {
+            AppError::TokenNotFound | AppError::TokenRevoked => StatusCode::UNAUTHORIZED,
+            AppError::CredentialMissing => StatusCode::BAD_GATEWAY,
+            AppError::PolicyDenied { .. } | AppError::Forbidden(_) | AppError::ApprovalRejected => {
+                StatusCode::FORBIDDEN
+            }
+            AppError::ApprovalTimeout => StatusCode::REQUEST_TIMEOUT,
+            AppError::RateLimitExceeded { .. } => StatusCode::TOO_MANY_REQUESTS,
+            AppError::SpendCapReached { .. } => StatusCode::PAYMENT_REQUIRED,
+            AppError::PayloadTooLarge => StatusCode::PAYLOAD_TOO_LARGE,
+            AppError::ContentBlocked { .. } => StatusCode::FORBIDDEN,
+            AppError::AllUpstreamsExhausted { .. } => StatusCode::SERVICE_UNAVAILABLE,
+            AppError::InvalidConfig { .. } | AppError::ValidationError { .. } => {
+                StatusCode::UNPROCESSABLE_ENTITY
+            }
+            AppError::ProviderRequired { .. }
+            | AppError::CustomUrlRequired { .. }
+            | AppError::UpstreamProviderMismatch { .. } => StatusCode::BAD_REQUEST,
+            AppError::NotFound(_) => StatusCode::NOT_FOUND,
+            AppError::Upstream(_) => StatusCode::BAD_GATEWAY,
+            AppError::Database(_) | AppError::Redis(_) | AppError::Internal(_) => {
+                StatusCode::INTERNAL_SERVER_ERROR
+            }
         }
     }
 }
